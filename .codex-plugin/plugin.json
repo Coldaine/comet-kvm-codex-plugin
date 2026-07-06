@@ -1,0 +1,41 @@
+{
+  "name": "comet-kvm",
+  "version": "0.1.0",
+  "description": "Codex plugin for GL.iNet Comet KVM control and BIOS/HWiNFO triage workflows.",
+  "author": {
+    "name": "Coldaine",
+    "url": "https://github.com/Coldaine"
+  },
+  "homepage": "https://github.com/Coldaine/comet-kvm-codex-plugin",
+  "repository": "https://github.com/Coldaine/comet-kvm-codex-plugin",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "mcp",
+    "glkvm",
+    "comet",
+    "pikvm",
+    "bios",
+    "hwinfo"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Comet KVM",
+    "shortDescription": "Drive GL.iNet Comet KVM workflows from Codex",
+    "longDescription": "Use a GL.iNet Comet or GLKVM-compatible device through MCP tools for screenshots, OCR, keyboard, mouse, and safe BIOS/HWiNFO triage workflows.",
+    "developerName": "Coldaine",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/Coldaine/comet-kvm-codex-plugin",
+    "defaultPrompt": [
+      "Run a Comet KVM preflight",
+      "Drive an MSI BIOS triage step",
+      "Create a HWiNFO experiment run"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

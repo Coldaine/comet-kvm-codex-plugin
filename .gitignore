@@ -23,6 +23,9 @@ Thumbs.db
 *.key
 *.pem
 config.yaml
+state/*.json
+runs/*
+!runs/.gitkeep
 
 # Screenshots (temp files)
 *.jpg
