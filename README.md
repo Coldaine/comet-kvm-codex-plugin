@@ -1,4 +1,20 @@
-# GLKVM MCP Server
+# Comet KVM Codex Plugin
+
+This repository is a Codex plugin fork of [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp). The upstream MCP server remains the direct GL.iNet Comet/GLKVM control layer; this fork adds Codex plugin metadata, a BIOS/HWiNFO triage skill, and stateful workflow scaffolding.
+
+Immediate target workflow:
+
+1. Connect Codex to a GL.iNet Comet KVM through MCP.
+2. Capture screenshots and OCR before taking action.
+3. Drive MSI Z690 BIOS changes one setting at a time.
+4. Boot Windows and collect HWiNFO logs.
+5. Analyze thermal, voltage, power, throttling, and WHEA results before continuing.
+
+See [`docs/plans/comet-kvm-codex-plugin.md`](docs/plans/comet-kvm-codex-plugin.md) for the implementation plan.
+
+---
+
+# Upstream GLKVM MCP Server
 
 An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that exposes a [GL.iNet GLKVM](https://www.gl-inet.com/products/gl-sg24/) / PiKVM-fork device's keyboard, mouse, and **OCR-enhanced screenshot** capabilities as AI agent tools.
 
