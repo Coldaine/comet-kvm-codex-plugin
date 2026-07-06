@@ -1,8 +1,21 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
+
+
+def configured_tesseract() -> tuple[str, str]:
+    for name in ("TESSERACT_PATH", "TESSERACT_CMD"):
+        value = os.environ.get(name)
+        if value:
+            return name, value
+
+    value = shutil.which("tesseract")
+    if value:
+        return "PATH", value
+    return "", ""
 
 
 def main() -> int:
@@ -14,12 +27,12 @@ def main() -> int:
     print(f"Comet target: {args.host}")
     print("Live device actions are intentionally not performed by this script.")
 
-    tesseract = shutil.which("tesseract")
-    if args.expect_tesseract and not tesseract:
-        print("FAIL: tesseract is not on PATH. Install it or set TESSERACT_PATH for the MCP server.")
+    tesseract_source, tesseract_value = configured_tesseract()
+    if args.expect_tesseract and not tesseract_value:
+        print("FAIL: tesseract was not found. Install it or set TESSERACT_PATH/TESSERACT_CMD for the MCP server.")
         return 2
-    if tesseract:
-        print(f"Tesseract: {tesseract}")
+    if tesseract_value:
+        print(f"Tesseract: {tesseract_source}={tesseract_value}")
     else:
         print("Tesseract: not found")
 

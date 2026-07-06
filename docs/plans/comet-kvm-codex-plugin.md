@@ -10,18 +10,7 @@ Use this fork of `kennypeh85/glkvm-mcp` as the direct Comet control layer. The M
 
 ## Stateful Workflow
 
-Allowed phases:
-
-- `preflight`
-- `bios-entry`
-- `bios-read`
-- `bios-edit`
-- `save-confirm`
-- `windows-boot`
-- `hwinfo-log`
-- `analysis`
-- `done`
-- `blocked`
+The allowed phases and transition rules are defined in `skills/comet-bios-triage/references/stateful-control-model.md`.
 
 Each BIOS experiment must record:
 
@@ -51,13 +40,4 @@ Each BIOS experiment must record:
 
 ## First Live-Safe Sequence
 
-Use only after credentials are supplied through the MCP client:
-
-1. `kvm_connect`
-2. `kvm_status`
-3. `kvm_screenshot`
-4. `kvm_ocr_screenshot`
-5. `kvm_release_all`
-6. `kvm_disconnect`
-
-This sequence should not intentionally change the target machine.
+The first live-safe MCP sequence is defined in `skills/comet-bios-triage/references/stateful-control-model.md` and should remain the single source of truth for smoke-test ordering.

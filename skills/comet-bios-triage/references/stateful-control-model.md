@@ -4,6 +4,7 @@ The MCP server is stateless transport. The workflow is stateful.
 
 Allowed phases:
 
+- `planned`
 - `preflight`
 - `bios-entry`
 - `bios-read`
