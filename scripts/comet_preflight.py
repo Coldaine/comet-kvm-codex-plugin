@@ -9,12 +9,20 @@ import sys
 def configured_tesseract() -> tuple[str, str]:
     for name in ("TESSERACT_PATH", "TESSERACT_CMD"):
         value = os.environ.get(name)
-        if value:
+        if value and os.path.isfile(value):
             return name, value
 
     value = shutil.which("tesseract")
     if value:
         return "PATH", value
+
+    if os.name == "nt":
+        for candidate in (
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ):
+            if os.path.isfile(candidate):
+                return "Windows default path", candidate
     return "", ""
 
 
