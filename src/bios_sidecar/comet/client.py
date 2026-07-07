@@ -135,14 +135,16 @@ class CometClient:
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
         ws_url = f"{ws_scheme}://{parsed.netloc}/api/ws?auth_token={token}&stream=false"
 
-        sslctx = _ssl.create_default_context()
-        sslctx.check_hostname = False
-        sslctx.verify_mode = _ssl.CERT_NONE
+        sslctx = None
+        if ws_scheme == "wss" and not self.verify_ssl:
+            sslctx = _ssl.create_default_context()
+            sslctx.check_hostname = False
+            sslctx.verify_mode = _ssl.CERT_NONE
 
         try:
             self.ws = await websockets.connect(
                 ws_url,
-                ssl=sslctx if ws_scheme == "wss" else None,
+                ssl=sslctx,
                 max_size=8 * 1024 * 1024,
                 open_timeout=10.0,
                 ping_interval=None,

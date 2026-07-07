@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import datetime
 import logging
 import hashlib
@@ -54,7 +55,12 @@ class StateObserver:
 
         # 3. Call VLM perception client (with OCR context & previous state hint)
         prev_dict = previous_state.to_dict() if previous_state else None
-        vlm_res = self.vlm_client.parse_screenshot(img_bytes, previous_state=prev_dict, last_action=last_action)
+        vlm_res = await asyncio.to_thread(
+            self.vlm_client.parse_screenshot,
+            img_bytes,
+            previous_state=prev_dict,
+            last_action=last_action,
+        )
 
         # 4. Normalize raw outputs to canonical BiosState
         now_str = datetime.datetime.now().isoformat()
@@ -62,7 +68,6 @@ class StateObserver:
             run_id=run_id,
             device_id=device_id,
             vlm_data=vlm_res,
-            frame_bytes=img_bytes,
             screenshot_id=screenshot_id,
             sha256=sha,
             perceptual_hash=phash,

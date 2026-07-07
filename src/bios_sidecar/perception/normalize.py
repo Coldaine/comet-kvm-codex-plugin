@@ -43,7 +43,6 @@ def normalize_bios_state(
     run_id: str,
     device_id: str,
     vlm_data: Dict[str, Any],
-    frame_bytes: bytes,
     screenshot_id: str,
     sha256: str,
     perceptual_hash: str,
@@ -125,6 +124,7 @@ def normalize_bios_state(
         if is_selected:
             selection_label = label
             selection_val = val
+            selection_bbox = e.get("bbox")
 
         controls.append(ControlEntry(
             control_id=cid,

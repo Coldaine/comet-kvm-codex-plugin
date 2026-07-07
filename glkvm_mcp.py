@@ -23,9 +23,9 @@ Run: `uv run glkvm_mcp.py`
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from mcp.server.fastmcp import Image
 from src.bios_sidecar.mcp.server import mcp, get_runtime
-from src.bios_sidecar.comet.client import resolve_key_name
 
 LOG = logging.getLogger("glkvm_mcp")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -36,6 +36,17 @@ def _require_client():
     if r.client is None or not r.client.is_connected():
         raise RuntimeError("Not connected. Call kvm_connect or bios_connect first.")
     return r.client
+
+def _safe_screenshot_path(requested_path: str) -> Path:
+    requested = Path(requested_path)
+    if requested.is_absolute() or ".." in requested.parts:
+        raise ValueError("path must be a filename or relative path under the screenshot cache directory")
+    root = Path(get_runtime().capture_mgr.cache_dir).resolve()
+    destination = (root / requested).resolve()
+    if root != destination and root not in destination.parents:
+        raise ValueError("path escapes the screenshot cache directory")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    return destination
 
 @mcp.tool(name="kvm_connect", annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
 async def kvm_connect(host: str, password: str, username: str = "admin") -> dict:
@@ -110,12 +121,13 @@ async def kvm_screenshot(preview: bool = True, max_width: int = 1024, quality: i
 
 @mcp.tool(name="kvm_screenshot_to_file", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
 async def kvm_screenshot_to_file(path: str, preview: bool = False, max_width: int = 1920, quality: int = 80) -> dict:
-    """Capture snapshot and store on local file system."""
+    """Capture snapshot and store under the screenshot cache directory."""
     client = _require_client()
     data = await client.get_screenshot(preview, max_width, quality)
-    with open(path, "wb") as f:
+    destination = _safe_screenshot_path(path)
+    with open(destination, "wb") as f:
         f.write(data)
-    return {"path": path, "bytes": len(data), "mime_type": "image/jpeg"}
+    return {"path": str(destination), "bytes": len(data), "mime_type": "image/jpeg"}
 
 @mcp.tool(name="kvm_ocr_screenshot", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
 async def kvm_ocr_screenshot(search_text: str = "", preview: bool = False) -> dict:

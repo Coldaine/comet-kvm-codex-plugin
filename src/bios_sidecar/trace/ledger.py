@@ -14,7 +14,7 @@ class TraceLedger:
         self.run_directory = run_directory
         os.makedirs(run_directory, exist_ok=True)
 
-    def log_event(
+    async def log_event(
         self,
         run_id: str,
         event_type: EventClass,
@@ -26,7 +26,7 @@ class TraceLedger:
     ) -> TraceEvent:
         """Saves trace event to persistent SQLite database."""
         event_id = f"evt_{uuid.uuid4().hex[:12]}"
-        timestamp = datetime.datetime.now().isoformat()
+        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         evt = TraceEvent(
             event_id=event_id,

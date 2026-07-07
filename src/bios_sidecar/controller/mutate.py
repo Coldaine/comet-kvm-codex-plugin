@@ -21,6 +21,14 @@ class BiosMutator:
         self.policy_engine = policy_engine
         self.settler = settler
 
+    def _selection_steps(self, options: list[str], current_value: Optional[str], desired_value: str) -> Optional[int]:
+        normalized = [str(option).strip().lower() for option in options]
+        desired = desired_value.strip().lower()
+        current = (current_value or "").strip().lower()
+        if desired not in normalized or current not in normalized:
+            return None
+        return normalized.index(desired) - normalized.index(current)
+
     async def propose_setting_change(
         self,
         capability_id: str,
@@ -102,6 +110,14 @@ class BiosMutator:
         old_val = cursor_ctrl.value
         LOG.info("Starting mutator execution: shifting %s option %s -> %s", cap.canonical_name, old_val, desired_value)
 
+        if str(old_val).strip().lower() == desired_value.strip().lower():
+            return True, state, "Setting already has the desired value."
+
+        options = cursor_ctrl.options or []
+        steps = self._selection_steps(options, old_val, desired_value)
+        if steps is None:
+            return False, state, "Desired value cannot be selected deterministically from observed options."
+
         # 3. Open dropdown / field (Enter)
         # Evaluate Enter action first with approval
         decision = self.policy_engine.evaluate(state, "Enter", PolicyProfile.SUPERVISED_MUTATION, approval_id=approval_id)
@@ -112,15 +128,11 @@ class BiosMutator:
         await client.send_combo("Enter")
         await self.settler.wait_for_settle(client)
 
-        # 4. We can cycle standard arrows/keys to select the value or type text.
-        # Let's send text or cycles and then confirm with Enter. This varies by dropdown structure;
-        # for our high-fidelity sidecar we'll cycle ArrowDown/ArrowUp or use specific text, then Enter.
-        # Since we have mock VLM/Client, we will type a typical US standard input shift key chord sequence.
-        # If options are enumerated in our VLM metadata, we can determine the exact arrow step delta!
-        # If not, let's type and click Enter. Let's cycle or send characters:
-        LOG.info("Shifting selection values...")
-        await client.send_combo("ArrowDown")
-        await self.settler.wait_for_settle(client)
+        LOG.info("Shifting selection by %d option(s)...", steps)
+        key = "ArrowDown" if steps > 0 else "ArrowUp"
+        for _ in range(abs(steps)):
+            await client.send_combo(key)
+            await self.settler.wait_for_settle(client)
 
         await client.send_combo("Enter")
         await self.settler.wait_for_settle(client)
@@ -137,5 +149,6 @@ class BiosMutator:
         final_val = post_ctrl.value if post_ctrl else "Unknown"
         LOG.info("Post setting validation: old value=%s, post value_got=%s", old_val, final_val)
 
-        # In a simulated test run, the Mock VLM auto updates values.
-        return True, post_state, f"Successfully modified setting. Value is confirmed changed visually."
+        if str(final_val).strip().lower() != desired_value.strip().lower():
+            return False, post_state, f"Post-change verification failed: expected {desired_value!r}, observed {final_val!r}."
+        return True, post_state, "Successfully modified setting. Value is confirmed changed visually."

@@ -119,7 +119,7 @@ async def bios_crawl_step(policy_profile: str = "read_only_crawl") -> dict:
 @mcp.tool()
 async def bios_crawl_region(budget: int = 15, policy_profile: str = "read_only_crawl") -> dict:
     """
-    Iteratively crawl until unvisited boundary, danger, or budged exhaustion limit.
+    Iteratively crawl until unvisited boundary, danger, or budget exhaustion limit.
     """
     r = get_runtime()
     profile = PolicyProfile(policy_profile)
@@ -140,7 +140,7 @@ async def bios_crawl_region(budget: int = 15, policy_profile: str = "read_only_c
 
     return {
         "steps_executed": steps_taken,
-        "edges_discoveredCount": len(edges_found),
+        "edges_discovered_count": len(edges_found),
         "edges": edges_found,
         "final_state": state.to_dict()
     }

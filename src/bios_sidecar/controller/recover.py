@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-from src.bios_sidecar.domain.models import BiosState
 from src.bios_sidecar.comet.client import CometClient
 from src.bios_sidecar.controller.settle import ScreenSettler
 
@@ -30,4 +29,4 @@ class BiosRecoveryHandler:
             await self.settler.wait_fixed(0.25)
 
         LOG.info("Safety recovery sequence completed successfully. Settle and return.")
-        return "recovers_completed"
+        return "recovery_completed"

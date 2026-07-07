@@ -2,7 +2,8 @@ from __future__ import annotations
 import os
 import hashlib
 import time
-from typing import Optional, Tuple
+import uuid
+from typing import Tuple
 from src.bios_sidecar.comet.client import CometClient
 
 class CaptureManager:
@@ -21,7 +22,7 @@ class CaptureManager:
         data = await client.get_screenshot(preview=preview, max_width=max_width, quality=quality)
 
         sha = hashlib.sha256(data).hexdigest()
-        screenshot_id = f"shot_{sha[:16]}_{int(time.time())}"
+        screenshot_id = f"shot_{sha[:16]}_{time.time_ns()}_{uuid.uuid4().hex[:8]}"
 
         file_path = os.path.join(self.cache_dir, f"{screenshot_id}.jpg")
         with open(file_path, "wb") as f:

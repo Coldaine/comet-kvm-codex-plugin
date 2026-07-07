@@ -25,7 +25,7 @@ class BiosNavigator:
         device_id: str,
         target_node_id: str,
         policy_profile: PolicyProfile = PolicyProfile.READ_ONLY_CRAWL
-    ) -> Tuple[bool, BiosState, str]:
+    ) -> Tuple[bool, Optional[BiosState], str]:
         """
         Uses graph shortest path routing to reach target_node_id.
         Verifies and asserts alignment during intermediate hops.
