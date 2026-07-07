@@ -37,8 +37,7 @@ def calculate_visual_phash(image_bytes: bytes) -> str:
                 decimal_val = 0
         return "".join(hex_string)
     except Exception:
-        # Fallback if image cannot be parsed
-        return "f" * 16
+        return hashlib.sha256(image_bytes).hexdigest()[:16]
 
 def calculate_ocr_hash(ocr_elements: list[dict]) -> str:
     """

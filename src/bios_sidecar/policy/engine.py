@@ -14,15 +14,18 @@ class PolicyEngine:
         self.approval_tracker = approval_tracker
         self.hazard_detector = HazardDetector()
 
-        # Load matrix dictionary
+        if matrix_path is None:
+            matrix_path = os.path.join(os.path.dirname(__file__), "matrix.yaml")
         self.matrix = self._load_default_matrix()
-        if matrix_path and os.path.exists(matrix_path):
+        if os.path.exists(matrix_path):
             try:
-                import yaml
-                with open(matrix_path, "r", encoding="utf-8") as f:
-                    self.matrix = yaml.safe_load(f)
-            except ImportError:
-                LOG.warning("YAML library not available; using default hardcoded action matrix.")
+                loaded = self._load_matrix_file(matrix_path)
+                if self._is_valid_matrix(loaded):
+                    self.matrix = loaded
+                else:
+                    LOG.warning("Policy matrix %s is invalid; using hardcoded default.", matrix_path)
+            except OSError as exc:
+                LOG.warning("Could not load policy matrix %s: %s", matrix_path, exc)
 
     def _load_default_matrix(self) -> Dict[str, Any]:
         return {
@@ -52,6 +55,57 @@ class PolicyEngine:
             }
         }
 
+    def _load_matrix_file(self, matrix_path: str) -> Any:
+        with open(matrix_path, "r", encoding="utf-8") as f:
+            text = f.read()
+        try:
+            import yaml
+            return yaml.safe_load(text)
+        except ImportError:
+            return self._load_simple_matrix_yaml(text)
+
+    def _load_simple_matrix_yaml(self, text: str) -> Dict[str, Any]:
+        matrix: Dict[str, Any] = {}
+        current_profile: Optional[str] = None
+        current_list_key: Optional[str] = None
+        for raw_line in text.splitlines():
+            line_without_comment = raw_line.split("#", 1)[0].rstrip()
+            if not line_without_comment.strip():
+                continue
+            indent = len(line_without_comment) - len(line_without_comment.lstrip(" "))
+            stripped = line_without_comment.strip()
+            if indent == 0 and stripped.endswith(":"):
+                current_profile = stripped[:-1]
+                matrix[current_profile] = {}
+                current_list_key = None
+            elif current_profile and stripped.startswith("-") and current_list_key:
+                matrix[current_profile][current_list_key].append(stripped[1:].strip())
+            elif current_profile and ":" in stripped:
+                key, value = [part.strip() for part in stripped.split(":", 1)]
+                if value == "":
+                    matrix[current_profile][key] = []
+                    current_list_key = key
+                elif value == "[]":
+                    matrix[current_profile][key] = []
+                    current_list_key = None
+                else:
+                    matrix[current_profile][key] = value.lower() == "true" if value.lower() in {"true", "false"} else value
+                    current_list_key = None
+        return matrix
+
+    def _is_valid_matrix(self, matrix: Any) -> bool:
+        if not isinstance(matrix, dict):
+            return False
+        required_profiles = {profile.value for profile in PolicyProfile}
+        required_fields = {"allowed_keys", "enter_allowed", "save_allowed", "all_hid_allowed"}
+        for profile in required_profiles:
+            rules = matrix.get(profile)
+            if not isinstance(rules, dict) or not required_fields.issubset(rules):
+                return False
+            if not isinstance(rules["allowed_keys"], list):
+                return False
+        return True
+
     def evaluate(
         self,
         state: BiosState,
@@ -70,7 +124,7 @@ class PolicyEngine:
         hazards = self.hazard_detector.analyze_hazards(state)
         if hazards:
             # Hard block on everything except emergency back-out (Escape)
-            if requested_action == "Escape" or requested_action == "Escape":
+            if requested_action == "Escape":
                 return PolicyDecision(
                     decision="allowed",
                     reason="EMERGENCY_BACKOUT_PERMITTED",

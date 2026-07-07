@@ -1,8 +1,9 @@
 from __future__ import annotations
 import logging
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Tuple
 from src.bios_sidecar.domain.models import BiosState, StateNode
 from src.bios_sidecar.state.matcher import StateMatcher
+from src.bios_sidecar.state.hashing import calculate_ocr_hash, calculate_state_semantic_hash
 
 LOG = logging.getLogger("bios_sidecar.state.sync")
 
@@ -19,10 +20,13 @@ class StateSyncer:
         and align the tracker with that node.
         """
         phash = live_state.frame.perceptual_hash
-
-        # We can construct mock ocr hash for indexing
-        from src.bios_sidecar.state.hashing import calculate_state_semantic_hash
-        ocr_hash = live_state.frame.sha256[:16] # quick dummy shorthand
+        ocr_elements = [
+            {"text": text}
+            for ctrl in live_state.controls
+            for text in (ctrl.label, ctrl.value)
+            if text
+        ]
+        ocr_hash = calculate_ocr_hash(ocr_elements)
         v = live_state.bios.vendor
         b = live_state.bios.board_hint
         t = live_state.location.screen_title or "unknown"

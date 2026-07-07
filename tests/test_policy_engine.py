@@ -1,4 +1,6 @@
 import unittest
+import os
+import tempfile
 from src.bios_sidecar.domain.models import BiosState, FrameMetadata, BiosMetadata, LocationMetadata, SelectionMetadata, ControlEntry, ModalMetadata, RiskStatus, ActionPolicies, ConfidenceMetrics, TraceEvent
 from src.bios_sidecar.domain.enums import StateKind, ControlRole, RiskClass, PolicyProfile, EventClass
 from src.bios_sidecar.policy.engine import PolicyEngine
@@ -47,6 +49,9 @@ class TestPolicyEngine(unittest.TestCase):
             actions=ActionPolicies(),
             confidence=ConfidenceMetrics(1.0, 1.0, 1.0)
         )
+
+    def tearDown(self):
+        self.store.close()
 
     def test_navigation_is_allowed(self):
         decision = self.engine.evaluate(self.safe_state, "ArrowDown", PolicyProfile.READ_ONLY_CRAWL)
@@ -102,6 +107,37 @@ class TestPolicyEngine(unittest.TestCase):
         decision = self.engine.evaluate(self.hazard_state, "Enter", PolicyProfile.READ_ONLY_CRAWL)
         self.assertEqual(decision.decision, "blocked")
         self.assertTrue("HAZARDS_DETECTED" in decision.reason)
+
+    def test_breadcrumb_hazard_is_blocked(self):
+        state = BiosState(
+            state_id="state_boot_order",
+            run_id="run_123",
+            device_id="comet_123",
+            frame=FrameMetadata("shot_1", "sha_1", "hash_1", [1024, 768], "now"),
+            bios=BiosMetadata("msi", "z690", "click_bios", "advanced"),
+            location=LocationMetadata(StateKind.SETTING_LIST, "SETTINGS", ["SETTINGS", "Boot Order"], "Boot"),
+            selection=SelectionMetadata(0, "Boot Option #1", "UEFI Disk"),
+            controls=[ControlEntry("ctrl_0", "Boot Option #1", "UEFI Disk", ControlRole.SETTING, True, RiskClass.MEDIUM)],
+            modal=ModalMetadata(False),
+            risk=RiskStatus(False),
+            actions=ActionPolicies(),
+            confidence=ConfidenceMetrics(1.0, 1.0, 1.0),
+        )
+
+        decision = self.engine.evaluate(state, "Enter", PolicyProfile.READ_ONLY_CRAWL)
+        self.assertEqual(decision.decision, "blocked")
+        self.assertIn("blocklist_keyword_in_breadcrumb:Boot Order", decision.reason)
+
+    def test_invalid_matrix_file_falls_back_to_default(self):
+        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as f:
+            f.write("null\n")
+            path = f.name
+        try:
+            engine = PolicyEngine(approval_tracker=self.tracker, matrix_path=path)
+            decision = engine.evaluate(self.safe_state, "ArrowDown", PolicyProfile.READ_ONLY_CRAWL)
+            self.assertEqual(decision.decision, "allowed")
+        finally:
+            os.unlink(path)
 
     def test_bios_state_default_actions_serializes(self):
         state = BiosState(

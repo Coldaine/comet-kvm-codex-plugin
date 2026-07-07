@@ -3,21 +3,9 @@ import logging
 from typing import Optional, Tuple, List
 from src.bios_sidecar.domain.models import StateNode
 from src.bios_sidecar.state.graph import BiosGraph
+from src.bios_sidecar.state.hashing import hamming_distance
 
 LOG = logging.getLogger("bios_sidecar.state.matcher")
-
-def hamming_distance(hex1: str, hex2: str) -> int:
-    """Computes the bitwise Hamming distance between two hex hashes of equal length."""
-    if len(hex1) != len(hex2):
-        return 999
-    try:
-        val1 = int(hex1, 16)
-        val2 = int(hex2, 16)
-        diff = val1 ^ val2
-        # Count set bits
-        return bin(diff).count("1")
-    except ValueError:
-        return 999
 
 class StateMatcher:
     def __init__(self, graph: BiosGraph):

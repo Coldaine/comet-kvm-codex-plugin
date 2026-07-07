@@ -6,6 +6,9 @@ class TestVLMContract(unittest.TestCase):
         # Instantiate VLM Client in mock mode
         self.vlm = VLMClient(provider="mock")
 
+    def tearDown(self):
+        self.vlm.close()
+
     def test_mock_screens_are_stable(self):
         # Giving identical image bytes always yields the exact same mock screen title
         image1 = b"some_stable_image_bytes_here"

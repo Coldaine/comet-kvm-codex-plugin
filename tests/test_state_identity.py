@@ -10,7 +10,7 @@ def create_mock_jpeg(add_diff: bool = False) -> bytes:
             if add_diff:
                 img.putpixel((x, y), (x * 2, y, (x + y) % 256))
             else:
-                img.putpixel((x, y), (x, y * 3, (x - y) % 256))
+                img.putpixel((x, y), (x, (y * 3) % 256, (x - y) % 256))
     buf = io.BytesIO()
     img.save(buf, format="JPEG")
     return buf.getvalue()
@@ -46,6 +46,12 @@ class TestStateIdentity(unittest.TestCase):
         sem1 = calculate_state_semantic_hash("msi", "z690", "Main Settings", ["SETTINGS", "Advanced"])
         sem2 = calculate_state_semantic_hash("MSI", "Z690", "Main Settings", ["SETTINGS", "Advanced"]) # case difference
         self.assertEqual(sem1, sem2)
+
+    def test_invalid_image_fallback_is_input_specific(self):
+        hash1 = calculate_visual_phash(b"not an image")
+        hash2 = calculate_visual_phash(b"also not an image")
+        self.assertEqual(hash1, calculate_visual_phash(b"not an image"))
+        self.assertNotEqual(hash1, hash2)
 
 if __name__ == "__main__":
     unittest.main()

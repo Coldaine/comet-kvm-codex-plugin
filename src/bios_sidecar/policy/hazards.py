@@ -20,11 +20,15 @@ class HazardDetector:
         if state.location.screen_kind in (StateKind.FLASH_UTILITY, StateKind.SECURE_ERASE, StateKind.PASSWORD_PROMPT):
             hazards.append(f"destructive_screen_kind:{state.location.screen_kind.value}")
 
-        # 2. Blocklist keyword matches (on titles or breadcrumbs)
+        # 2. Blocklist keyword matches on titles or breadcrumbs
         title = (state.location.screen_title or "").lower()
+        breadcrumb = " ".join(state.location.breadcrumb).lower()
         for kw in self.blocklist_keywords:
-            if kw.lower() in title:
+            kw_lower = kw.lower()
+            if kw_lower in title:
                 hazards.append(f"blocklist_keyword_in_title:{kw}")
+            if kw_lower in breadcrumb:
+                hazards.append(f"blocklist_keyword_in_breadcrumb:{kw}")
 
         # 3. Control entry dangers (selected blocked control or active options)
         for ctrl in state.controls:

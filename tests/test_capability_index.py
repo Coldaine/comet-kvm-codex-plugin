@@ -7,6 +7,9 @@ class TestCapabilityIndex(unittest.TestCase):
         self.store = SQLiteStore(db_path=":memory:")
         self.index = CapabilityIndex(self.store)
 
+    def tearDown(self):
+        self.store.close()
+
     def test_priors_loaded_automatically(self):
         # Priors are pre-populated on empty creation
         cpu_lite = self.index.resolve_capability_by_handle("cpu_lite_load_mode")

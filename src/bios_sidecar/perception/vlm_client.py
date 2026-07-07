@@ -15,6 +15,15 @@ class VLMClient:
         self.provider = provider
         self.client = httpx.Client(timeout=30.0)
 
+    def close(self) -> None:
+        self.client.close()
+
+    def __enter__(self) -> VLMClient:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.close()
+
     def parse_screenshot(self, image_bytes: bytes, previous_state: Optional[Dict[str, Any]] = None, last_action: Optional[str] = None) -> Dict[str, Any]:
         """
         Parses screenshot using chosen VLM provider.
