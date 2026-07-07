@@ -1,6 +1,6 @@
-# BIOS Cartography (Design Draft)
+# BIOS Cartography (Superseded Design Draft)
 
-> **Status:** Draft from prior design session (2026-07-07). Partially reconciled with `docs/decisions.md` (D3, D4, D7, D8) and `docs/NORTH_STAR.md` cartography spike scope. Remaining areas to update: state engine integration and VLM prompting pattern.
+> **Status:** SUPERSEDED. This was a prior agent's take on the cartographer design. It proposed bounded enumeration with allowlisting (only OC/CPU/DRAM tabs) and lazy expansion. The chosen approach is **near-exhaustive crawl with blocklisted zones** instead — see `docs/architecture.md` §5 for the current design and rationale. This draft is retained for historical context; its bounded/lazy approach was rejected as overly conservative.
 
 ## Mission Statement
 **To autonomously map the safe, tunable surface area of an unknown BIOS via KVM, generating a semantic UI index that enables deterministic hardware tuning without risking destructive state changes.**

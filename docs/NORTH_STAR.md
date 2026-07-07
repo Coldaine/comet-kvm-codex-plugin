@@ -8,7 +8,7 @@
 
 **First spike — BIOS cartography:**
 
-- Build a tool that enumerates the complete UI tree of a target board's BIOS deterministically — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing.
+- Build a tool that near-exhaustively enumerates the UI tree of a target board's BIOS — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing. Blocklisted zones (Flash, Secure Erase, RAID, Boot Order, Password) are off-limits to the crawler; everything else is visited.
 - Persist BIOS maps as labeled, reusable artifacts (board model, BIOS version, date) so they can be recalled when reconnecting to the same computer or matched against a similar board.
 - Run a stateful screen-level position tracker during live BIOS sessions that validates expected transitions against a stored map, without relying on the main LLM to hold screen position.
 
@@ -25,8 +25,10 @@
 
 1. `docs/NORTH_STAR.md`
 2. `docs/decisions.md`
-3. `skills/comet-bios-triage/SKILL.md`
-4. `skills/comet-bios-triage/references/stateful-control-model.md`
-5. `docs/reference/comet-hardware.md`
-6. `docs/reference/comet-api.md`
-7. `AGENTS.md`
+3. `docs/architecture.md`
+4. `docs/vlm-prompt-contract.md`
+5. `skills/comet-bios-triage/SKILL.md`
+6. `skills/comet-bios-triage/references/stateful-control-model.md`
+7. `docs/reference/comet-hardware.md`
+8. `docs/reference/comet-api.md`
+9. `AGENTS.md`

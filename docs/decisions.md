@@ -1,7 +1,7 @@
 # Implementation Decisions
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
-> **Authority:** #2 in the [Authority Order](NORTH_STAR.md#authority-order). These are decisions about *how* we build the thing, not *what* the thing is (that's NORTH_STAR.md) or *how to behave* in the repo (that's AGENTS.md).
+> **Authority:** #2 in the [Authority Order](NORTH_STAR.md#authority-order). These are decisions about *how* we build the thing, not *what* the thing is (that's NORTH_STAR.md) or *how to behave* in the repo (that's AGENTS.md). See `docs/architecture.md` for the full justification of each decision.
 
 ## D1 — Screenshot retention: TTL, not permanent
 
@@ -43,3 +43,12 @@ The project operates at two distinct granularity levels that complement, not rep
 - **Screen level** (state engine): which BIOS menu node are we on right now, matched against a stored map. Background-maintained, ephemeral per session. Asks "are we on the Overclocking submenu row 3, and did that Enter press land where the map predicted?"
 
 Neither subsumes the other. The workflow phase model governs the experiment lifecycle; the screen-level state engine governs live navigation safety within a phase.
+
+## D9 — Output format: Semantic Capability Index + screen-node graph
+
+The crawler produces two views of the same crawl data:
+
+- **Semantic Capability Index** (for the driver agent): a JSON file keyed by setting name, containing the navigation path, UI type, available options, and interaction keys. The driver reads this to navigate deterministically without calling the VLM.
+- **Screen-node graph** (for the state engine): a network of screen nodes keyed by perceptual hash + OCR fingerprint, with edges labeled by the keystroke that transitions between them. The state engine matches live screenshots against these nodes for transition validation.
+
+The crawler produces the graph (raw crawl data). A post-processing step derives the index from the graph. Both are persisted. See `docs/architecture.md` §9 for the full rationale.

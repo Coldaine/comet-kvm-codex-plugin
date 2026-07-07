@@ -9,10 +9,13 @@ Use the Comet MCP tools as hands and eyes, not as a blind macro engine.
 
 Before changing BIOS settings, read:
 
+- `../../docs/architecture.md` — current BIOS cartography and state-engine design
+- `../../docs/vlm-prompt-contract.md` — current VLM perception contract
 - `references/stateful-control-model.md`
-- `references/bios-cartography.md` — design draft for the BIOS map-building tool (first spike)
 - `references/msi-z690-bios-workflow.md`
 - `references/hwinfo-run-loop.md`
+
+`references/bios-cartography.md` is retained only as a superseded historical draft; do not use it as current operating guidance.
 
 Rules:
 

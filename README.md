@@ -30,9 +30,11 @@ comet-kvm-codex-plugin/
 │       ├── SKILL.md
 │       └── references/
 ├── scripts/                 # Local tooling (preflight, run ledger)
-├── docs/                    # Project authority docs + reference material
+├── docs/                    # Project authority docs + design docs
 │   ├── NORTH_STAR.md
 │   ├── decisions.md
+│   ├── architecture.md
+│   ├── vlm-prompt-contract.md
 │   └── reference/
 ├── extras/                  # Upstream utilities (calibration, click helper, userscript)
 ├── runs/                    # Experiment records (gitignored content)
@@ -74,13 +76,15 @@ This pattern was validated by real-world multi-target plugins (e.g. [InventorLab
 
 ## Current Scope
 
-**First spike — BIOS cartography:** A tool that enumerates the complete UI tree of a target board's BIOS deterministically — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing. Maps are persisted as labeled, reusable artifacts.
+**First spike — BIOS cartography:** A tool that near-exhaustively crawls the non-blocklisted zones of a target board's BIOS — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing, and explicit blocklisting for destructive screens. Maps are persisted as labeled, reusable artifacts.
 
 **Immediate workflow — MSI Z690 tuning:** Drive BIOS changes one setting at a time against stored maps, then validate in Windows via HWiNFO.
 
 See:
 - [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — project goals
+- [`docs/architecture.md`](docs/architecture.md) — how the repo is laid out, how `glkvm_mcp.py` works, and why every architectural choice was made
 - [`docs/decisions.md`](docs/decisions.md) — implementation decisions
+- [`docs/vlm-prompt-contract.md`](docs/vlm-prompt-contract.md) — VLM prompt draft + justification
 - [`docs/reference/comet-hardware.md`](docs/reference/comet-hardware.md) — verified Comet hardware/platform facts
 - [`docs/reference/comet-api.md`](docs/reference/comet-api.md) — verified Comet API/software surface
 
