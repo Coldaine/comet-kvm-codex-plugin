@@ -1,0 +1,42 @@
+# Safety Action Matrix
+# Configures permitted actions across different Policy Profiles
+
+observe_only:
+  allowed_keys: []
+  enter_allowed: false
+  save_allowed: false
+  all_hid_allowed: false
+
+read_only_crawl:
+  allowed_keys:
+    - ArrowUp
+    - ArrowDown
+    - ArrowLeft
+    - ArrowRight
+    - Escape
+    - F11
+    - F7
+  enter_allowed: true      # Gated by context check (only on submenus)
+  save_allowed: false
+  all_hid_allowed: false
+
+supervised_mutation:
+  allowed_keys:
+    - ArrowUp
+    - ArrowDown
+    - ArrowLeft
+    - ArrowRight
+    - Escape
+    - Enter
+    - F10
+    - F11
+    - F7
+  enter_allowed: true      # Context check gated
+  save_allowed: true       # Human approval required before sending F10
+  all_hid_allowed: false
+
+admin_debug:
+  allowed_keys: []         # Denotes unrestricted keys
+  enter_allowed: true
+  save_allowed: true
+  all_hid_allowed: true

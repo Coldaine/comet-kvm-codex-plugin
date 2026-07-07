@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CapabilityEntry",
+  "type": "object",
+  "required": [
+    "capability_id",
+    "canonical_name",
+    "aliases",
+    "vendor",
+    "board_family",
+    "paths",
+    "risk",
+    "mutation_policy"
+  ],
+  "properties": {
+    "capability_id": { "type": "string" },
+    "canonical_name": { "type": "string" },
+    "aliases": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "vendor": { "type": "string" },
+    "board_family": { "type": "string" },
+    "paths": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["breadcrumb", "label", "last_seen_value", "node_id", "control_id"],
+        "properties": {
+          "breadcrumb": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "label": { "type": "string" },
+          "last_seen_value": { "type": ["string", "null"] },
+          "node_id": { "type": "string" },
+          "control_id": { "type": "string" },
+          "confidence": { "type": "number" }
+        }
+      }
+    },
+    "risk": { "type": "string" },
+    "mutation_policy": { "type": "string" },
+    "validation": { "type": "object" }
+  }
+}

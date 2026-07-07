@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BiosState",
+  "type": "object",
+  "required": [
+    "state_id",
+    "run_id",
+    "device_id",
+    "frame",
+    "bios",
+    "location",
+    "selection"
+  ],
+  "properties": {
+    "state_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "device_id": { "type": "string" },
+    "frame": {
+      "type": "object",
+      "required": ["screenshot_id", "sha256", "perceptual_hash", "resolution", "captured_at"],
+      "properties": {
+        "screenshot_id": { "type": "string" },
+        "sha256": { "type": "string" },
+        "perceptual_hash": { "type": "string" },
+        "resolution": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "integer" }
+        },
+        "captured_at": { "type": "string" }
+      }
+    },
+    "bios": {
+      "type": "object",
+      "required": ["vendor", "board_hint", "family", "mode"],
+      "properties": {
+        "vendor": { "type": "string" },
+        "board_hint": { "type": "string" },
+        "family": { "type": "string" },
+        "mode": { "type": "string" }
+      }
+    },
+    "location": {
+      "type": "object",
+      "required": ["screen_kind", "top_module", "breadcrumb"],
+      "properties": {
+        "screen_kind": { "type": "string" },
+        "top_module": { "type": "string" },
+        "breadcrumb": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "screen_title": { "type": ["string", "null"] }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "required": ["selected_index", "label", "value"],
+      "properties": {
+        "selected_index": { "type": ["integer", "null"] },
+        "label": { "type": ["string", "null"] },
+        "value": { "type": ["string", "null"] },
+        "bbox": {
+          "type": ["array", "null"],
+          "items": { "type": "integer" }
+        },
+        "confidence": { "type": "number" }
+      }
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["control_id", "label", "value", "role", "selected", "risk"],
+        "properties": {
+          "control_id": { "type": "string" },
+          "label": { "type": "string" },
+          "value": { "type": ["string", "null"] },
+          "role": { "type": "string" },
+          "selected": { "type": "boolean" },
+          "risk": { "type": "string" },
+          "bbox": {
+            "type": ["array", "null"],
+            "items": { "type": "integer" }
+          },
+          "options": {
+            "type": ["array", "null"],
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "modal": {
+      "type": "object",
+      "required": ["present"],
+      "properties": {
+        "present": { "type": "boolean" },
+        "type": { "type": ["string", "null"] },
+        "message": { "type": ["string", "null"] },
+        "options": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["blocklist_flag"],
+      "properties": {
+        "blocklist_flag": { "type": "boolean" },
+        "blocklist_keywords": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hazards": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "policy_class": { "type": "string" }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "properties": {
+        "safe": { "type": "array", "items": { "type": "string" } },
+        "context_gated": { "type": "array", "items": { "type": "string" } },
+        "approval_required": { "type": "array", "items": { "type": "string" } },
+        "blocked": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "required": ["ocr", "vlm", "state"],
+      "properties": {
+        "ocr": { "type": "number" },
+        "vlm": { "type": "number" },
+        "state": { "type": "number" }
+      }
+    }
+  }
+}
