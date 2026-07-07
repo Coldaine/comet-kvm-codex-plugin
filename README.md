@@ -1,8 +1,12 @@
 # Comet KVM Plugin
 
-A packaged plugin for GL.iNet Comet KVM-driven hardware triage workflows — BIOS configuration, pre-OS operations, and Windows-side validation on physical machines. Not VM orchestration or general-purpose remote desktop.
+| | |
+|---|---|
+| **This repo** | [`Coldaine/comet-kvm-codex-plugin`](https://github.com/Coldaine/comet-kvm-codex-plugin) |
+| **Forked from** | [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp) (upstream MCP server) |
+| **Relationship** | Selective fork — occasionally review upstream for bug fixes, but this repo diverges strongly and is its own project |
 
-Forked from [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp) (upstream MCP server) and packaged as a Codex plugin with a BIOS/HWiNFO triage skill and stateful workflow scaffolding.
+A packaged plugin for GL.iNet Comet KVM-driven hardware triage workflows — BIOS configuration, pre-OS operations, and Windows-side validation on physical machines. Not VM orchestration or general-purpose remote desktop.
 
 **Primary target: Codex.** Cross-tool compatibility (Claude Code, Cursor, VS Code/Copilot) is designed in but deferred until the Codex plugin is proven. See [`docs/NORTHSTAR.md`](docs/NORTHSTAR.md) for goals.
 
@@ -197,9 +201,16 @@ This server includes fixes for known GLKVM/PiKVM firmware bugs:
 
 ---
 
-## Upstream
+## Upstream Relationship
 
-This is a fork of [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp). The `upstream` remote is kept for manual review of upstream updates. Upstream helper utilities (screenshot calibration, click helper) are preserved in [`extras/`](extras/).
+This repo is a fork of [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp), but the two projects have diverged in purpose:
+
+- **Upstream** (`kennypeh85/glkvm-mcp`) is a standalone MCP server for GLKVM/Comet keyboard/mouse/screenshot/OCR control.
+- **This repo** (`Coldaine/comet-kvm-codex-plugin`) is a packaged plugin with skills, workflow scaffolding, reference docs, and planned tooling (BIOS cartography, state engine) that upstream does not have and is not expected to adopt.
+
+**Stance on upstream sync:** The `upstream` git remote is kept fetch-only (push disabled) so upstream changes can be reviewed manually. We selectively cherry-pick bug fixes or API improvements from upstream when relevant — but this repo is not a mirror, not a PR target for upstream, and does not track upstream's release cadence. The shared code (`glkvm_mcp.py`) may diverge as this project adds the state engine and other capabilities upstream doesn't need.
+
+Upstream helper utilities (screenshot calibration, click helper) that were in the repo root have been preserved in [`extras/`](extras/) — they are not part of the plugin core.
 
 ## License
 

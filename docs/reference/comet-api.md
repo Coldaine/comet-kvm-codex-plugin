@@ -1,5 +1,6 @@
 # Comet KVM API & Software Surface Reference
 
+> **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
 > **Status:** Verified from `glkvm_mcp.py` source code, GL.iNet docs, and GitHub issues.
 > **Compiled:** 2026-07-07
 > **Purpose:** Document the API surface the Comet exposes, what this project currently exercises, known firmware bugs and workarounds, and the boundary between transport and stateful logic.

@@ -1,5 +1,6 @@
 # Comet KVM Hardware & Platform Reference
 
+> **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
 > **Status:** Verified from public datasheets, GL.iNet docs, and GitHub issues.
 > **Compiled:** 2026-07-07
 > **Purpose:** Ground design decisions about on-device map storage, state-engine deployment, and plugin packaging in verified hardware facts rather than assumptions.
