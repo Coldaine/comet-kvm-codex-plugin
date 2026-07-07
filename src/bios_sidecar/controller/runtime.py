@@ -1,8 +1,9 @@
 from __future__ import annotations
+import os
 import logging
 import datetime
 from typing import Optional, Dict, Any, Tuple
-from src.bios_sidecar.domain.enums import RuntimeState, PolicyProfile
+from src.bios_sidecar.domain.enums import RuntimeState, PolicyProfile, EventClass
 from src.bios_sidecar.domain.models import BiosState
 from src.bios_sidecar.comet.client import CometClient
 from src.bios_sidecar.comet.capture import CaptureManager
@@ -20,6 +21,7 @@ from src.bios_sidecar.controller.crawl import BiosCrawler
 from src.bios_sidecar.controller.navigate import BiosNavigator
 from src.bios_sidecar.controller.mutate import BiosMutator
 from src.bios_sidecar.controller.recover import BiosRecoveryHandler
+from src.bios_sidecar.trace.ledger import TraceLedger
 
 LOG = logging.getLogger("bios_sidecar.controller.runtime")
 
@@ -42,9 +44,15 @@ class StatefulBiosRuntime:
 
         # 4. Approvals and safety policy
         self.approval_tracker = ApprovalTracker(store=self.store)
-        self.policy_engine = PolicyEngine(approval_tracker=self.approval_tracker)
+        self.policy_engine = PolicyEngine(
+            approval_tracker=self.approval_tracker,
+            matrix_path=os.path.join(os.path.dirname(__file__), "..", "policy", "matrix.yaml")
+        )
 
-        # 5. Core execution logic helpers
+        # 5. Trace ledger (event-sourced audit + replay)
+        self.trace = TraceLedger(store=self.store)
+
+        # 6. Core execution logic helpers
         self.settler = ScreenSettler()
         self.observer = StateObserver(
             capture_mgr=self.capture_mgr,
@@ -96,6 +104,11 @@ class StatefulBiosRuntime:
 
         self.state = RuntimeState.CONNECTED
         LOG.info("Stateful runtime connection established. State=CONNECTED.")
+        await self.trace.log_event(
+            run_id=self.run_id,
+            event_type=EventClass.SESSION_CONNECTED,
+            artifacts={"host": host, "device_id": self.device_id}
+        )
         return True
 
     async def disconnect_comet(self):
@@ -106,9 +119,8 @@ class StatefulBiosRuntime:
         LOG.info("Stateful runtime disconnected. State=DISCONNECTED.")
 
     async def observe_state(self) -> BiosState:
-        if self.state not in (RuntimeState.CONNECTED, RuntimeState.SYNCED, RuntimeState.OBSERVING):
-            # Tolerate observing in active crawlers
-            pass
+        if self.client is None or not self.client.is_connected():
+            raise RuntimeError("Not connected. Call bios_connect or kvm_connect first.")
 
         old_state = self.state
         self.state = RuntimeState.OBSERVING
@@ -119,6 +131,12 @@ class StatefulBiosRuntime:
             )
             self.current_state_rec = res
             self.state = RuntimeState.SYNCED if self.syncer.is_synced else RuntimeState.DEGRADED
+            await self.trace.log_event(
+                run_id=self.run_id,
+                event_type=EventClass.STATE_NORMALIZED,
+                state_after=res.state_id,
+                artifacts={"screenshot_id": res.frame.screenshot_id, "state_kind": res.bios.screen_kind}
+            )
             return res
         except Exception as e:
             self.state = RuntimeState.DEGRADED
@@ -137,13 +155,21 @@ class StatefulBiosRuntime:
             )
             self.current_state_rec = state
             self.state = RuntimeState.SYNCED
+            await self.trace.log_event(
+                run_id=self.run_id,
+                event_type=EventClass.ACTION_EXECUTED,
+                state_before=self.current_state_rec.state_id if self.current_state_rec else None,
+                state_after=state.state_id,
+                requested_action={"type": "crawl_step", "policy_profile": policy_profile.value},
+                artifacts={"rec": rec}
+            )
             return state, edge, rec
         except Exception as e:
             self.state = RuntimeState.DEGRADED
             LOG.error("Crawler crashed: %s", e)
             raise e
 
-    async def navigate_to(self, target_node_id: str, policy_profile: PolicyProfile = PolicyProfile.READ_ONLY_CRAWL) -> Tuple[bool, BiosState, str]:
+    async def navigate_to(self, target_node_id: str, policy_profile: PolicyProfile = PolicyProfile.READ_ONLY_CRAWL) -> Tuple[bool, Optional[BiosState], str]:
         if self.state != RuntimeState.SYNCED:
             await self.observe_state()
 
@@ -166,6 +192,8 @@ class StatefulBiosRuntime:
     async def apply_setting_change(
         self, plan_id: str, approval_id: str, capability_id: str, desired_value: str
     ) -> Tuple[bool, Optional[BiosState], str]:
+        if self.client is None or not self.client.is_connected():
+            raise RuntimeError("Not connected. Call bios_connect or kvm_connect first.")
         self.state = RuntimeState.MUTATING
         try:
             ok, final, msg = await self.mutator.apply_setting_change(
@@ -173,6 +201,13 @@ class StatefulBiosRuntime:
             )
             self.current_state_rec = final
             self.state = RuntimeState.SYNCED if ok else RuntimeState.DEGRADED
+            await self.trace.log_event(
+                run_id=self.run_id,
+                event_type=EventClass.APPROVAL_GRANTED,
+                requested_action={"type": "mutate", "capability_id": capability_id, "desired_value": desired_value},
+                policy_decision={"plan_id": plan_id, "approval_id": approval_id, "success": ok},
+                state_after=final.state_id if final else None
+            )
             return ok, final, msg
         except Exception as e:
             self.state = RuntimeState.DEGRADED
@@ -180,6 +215,8 @@ class StatefulBiosRuntime:
             raise e
 
     async def abort_and_recover(self) -> str:
+        if self.client is None or not self.client.is_connected():
+            raise RuntimeError("Not connected. Call bios_connect or kvm_connect first.")
         self.state = RuntimeState.RECOVERING
         res = await self.recovery.abort_and_recover(self.client)
         # Recapture state to sync point
