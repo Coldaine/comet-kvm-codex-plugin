@@ -30,9 +30,11 @@ comet-kvm-codex-plugin/
 │       ├── SKILL.md
 │       └── references/
 ├── scripts/                 # Local tooling (preflight, run ledger)
-├── docs/                    # Project authority docs + reference material
+├── docs/                    # Project authority docs + design docs
 │   ├── NORTH_STAR.md
 │   ├── decisions.md
+│   ├── architecture.md
+│   ├── vlm-prompt-contract.md
 │   └── reference/
 ├── extras/                  # Upstream utilities (calibration, click helper, userscript)
 ├── runs/                    # Experiment records (gitignored content)
@@ -80,7 +82,9 @@ This pattern was validated by real-world multi-target plugins (e.g. [InventorLab
 
 See:
 - [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — project goals
+- [`docs/architecture.md`](docs/architecture.md) — how the repo is laid out, how `glkvm_mcp.py` works, and why every architectural choice was made
 - [`docs/decisions.md`](docs/decisions.md) — implementation decisions
+- [`docs/vlm-prompt-contract.md`](docs/vlm-prompt-contract.md) — VLM prompt draft + justification
 - [`docs/reference/comet-hardware.md`](docs/reference/comet-hardware.md) — verified Comet hardware/platform facts
 - [`docs/reference/comet-api.md`](docs/reference/comet-api.md) — verified Comet API/software surface
 
