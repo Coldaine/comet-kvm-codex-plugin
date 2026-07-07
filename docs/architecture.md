@@ -226,7 +226,7 @@ Each responsibility is placed in the layer that can execute it deterministically
 The Comet (GL-RM1) has a quad-core ARM Cortex-A7 @ 1.5GHz with no GPU. VLM inference requires GPU acceleration for practical latency. Running a 7B+ parameter VLM on a Cortex-A7 would take minutes per screen, making a 150-400 screen crawl take hours.
 
 - The VLM runs on the **host machine** (or a network-accessible GPU server).
-- The Comet is transport (screenshots, keystrokes) and storage (map files) only.
+- The Comet is transport (screenshots, keystrokes) and preferred storage for map files if on-device writability is verified; otherwise maps fall back to the host-side plugin data directory per `docs/decisions.md` D4.
 - The state engine runs on the host inside `glkvm_mcp.py` (an asyncio loop).
 
 This is a hard constraint. See `docs/reference/comet-hardware.md` for verified hardware specs.

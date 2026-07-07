@@ -76,7 +76,7 @@ This pattern was validated by real-world multi-target plugins (e.g. [InventorLab
 
 ## Current Scope
 
-**First spike — BIOS cartography:** A tool that enumerates the complete UI tree of a target board's BIOS deterministically — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing. Maps are persisted as labeled, reusable artifacts.
+**First spike — BIOS cartography:** A tool that near-exhaustively crawls the non-blocklisted zones of a target board's BIOS — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing, and explicit blocklisting for destructive screens. Maps are persisted as labeled, reusable artifacts.
 
 **Immediate workflow — MSI Z690 tuning:** Drive BIOS changes one setting at a time against stored maps, then validate in Windows via HWiNFO.
 

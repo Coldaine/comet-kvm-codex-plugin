@@ -37,7 +37,7 @@ If you cannot read a value or identify an element type, use null or "unknown" �
 | "You do NOT navigate / decide / reason" | Explicitly forbids action selection and reasoning. This is the core architectural boundary — the VLM perceives, the Python driver navigates. See `docs/architecture.md`. |
 | "Return ONLY a JSON object" | Enforces the strict schema contract. No prose means no parsing ambiguity. The driver code does `json.loads(response)` directly. |
 | "No chain-of-thought" | Chain-of-thought adds latency, output tokens, and non-determinism even at temperature 0. If the VLM supports NOTHINK mode, this is reinforced by the mode. See `docs/architecture.md`. |
-| "If you cannot read a value, use null" | Prevents hallucination. A null/unknown value is a gap in the map; a guessed value is a silently wrong map. Gaps are recoverable (lazy expansion can re-probe); wrong values are dangerous (the driver navigates to a setting that doesn't exist or misreads its type). |
+| "If you cannot read a value, use null" | Prevents hallucination. A null/unknown value is a gap in the map; a guessed value is a silently wrong map. Gaps are recoverable through targeted re-probes or manual review; wrong values are dangerous because the driver may navigate to a setting that doesn't exist or misread its type. |
 
 ### User Prompt (per screenshot)
 
@@ -102,7 +102,7 @@ Return only the JSON object. No other text.
 
 The list is intentionally small and explicit. It's not "things we don't care about" — it's "things where Enter could trigger an irreversible action." Settings tabs (OC, CPU, DRAM, Advanced) are NOT on the list because Enter navigates or opens an edit dialog, both of which are safe to back out of.
 
-If a keyword appears on a screen that also contains safe settings (e.g., a "Security" tab that has both Password and TPM settings), the driver backs out of the entire screen. The crawler errs on the side of caution — a missing setting in the map is recoverable via lazy expansion; a triggered destructive action is not.
+If a keyword appears on a screen that also contains safe settings (e.g., a "Security" tab that has both Password and TPM settings), the driver backs out of the entire screen. The crawler errs on the side of caution — a missing setting in the map is recoverable through targeted follow-up; a triggered destructive action is not.
 
 ## Calling Convention
 
@@ -123,7 +123,7 @@ If the VLM returns malformed JSON or missing required fields:
 2. **Second retry:** Re-send with the original prompt (fresh attempt).
 3. **After two failures:** Log the screen as `unparseable`, record the screenshot path for manual review, and continue the crawl. The map has a gap at this node, but the crawl doesn't abort.
 
-This ensures a single unparseable screen doesn't block the entire crawl. Gaps are recoverable — the driver agent can re-probe specific screens later via lazy expansion.
+This ensures a single unparseable screen doesn't block the entire crawl. Gaps are recoverable — the driver agent can re-probe specific screens later with a targeted crawl or manual review flow.
 
 ## Open Questions (Not Yet Resolved)
 
