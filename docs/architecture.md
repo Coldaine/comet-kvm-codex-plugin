@@ -66,7 +66,7 @@ See `README.md` § Plugin Architecture for the thin-manifest pattern rationale a
 
 ### Single-file PEP 723 MCP server
 
-`glkvm_mcp.py` is a 904-line self-contained Python file that serves as the entire MCP server. It uses PEP 723 inline script metadata to declare dependencies, so it can be run with `uv run --script ./glkvm_mcp.py` without a separate `requirements.txt` or virtual environment setup. Dependencies (`mcp[cli]`, `websockets`, `httpx`, `Pillow`, `pytesseract`) are auto-installed by `uv` on first run.
+`glkvm_mcp.py` is a self-contained Python file that serves as the entire MCP server. It uses PEP 723 inline script metadata to declare dependencies, so it can be run with `uv run --script ./glkvm_mcp.py` without a separate `requirements.txt` or virtual environment setup. Dependencies (`mcp[cli]`, `websockets`, `httpx`, `Pillow`, `pytesseract`) are auto-installed by `uv` on first run.
 
 The server uses `FastMCP` from the `mcp.server.fastmcp` module — a high-level MCP server framework that lets tools be defined as decorated async Python functions.
 

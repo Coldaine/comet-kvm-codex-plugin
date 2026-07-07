@@ -13,7 +13,7 @@ This is why the prompt does not go in `skills/` — skills are for agents that r
 
 ## Why This Is Not in docs/reference/
 
-`docs/reference/` contains verified facts about external systems (Comet hardware, Comet API). This document is a design artifact about our own choices — the prompt we will send to the VLM and the justification for its contents. It goes in `docs/` alongside `architecture-rationale.md` and `decisions.md`.
+`docs/reference/` contains verified facts about external systems (Comet hardware, Comet API). This document is a design artifact about our own choices — the prompt we will send to the VLM and the justification for its contents. It goes in `docs/` alongside `architecture.md` and `decisions.md`.
 
 ## The Prompt
 
@@ -34,9 +34,9 @@ If you cannot read a value or identify an element type, use null or "unknown" �
 | Element | Why it's there |
 |---------|---------------|
 | "You are a BIOS screen parser" | Frames the task as perception, not action. Prevents the VLM from drifting into navigation suggestions or BIOS tuning advice. |
-| "You do NOT navigate / decide / reason" | Explicitly forbids action selection and reasoning. This is the core architectural boundary — the VLM perceives, the Python driver navigates. See `docs/architecture-rationale.md` §2. |
+| "You do NOT navigate / decide / reason" | Explicitly forbids action selection and reasoning. This is the core architectural boundary — the VLM perceives, the Python driver navigates. See `docs/architecture.md`. |
 | "Return ONLY a JSON object" | Enforces the strict schema contract. No prose means no parsing ambiguity. The driver code does `json.loads(response)` directly. |
-| "No chain-of-thought" | Chain-of-thought adds latency, output tokens, and non-determinism even at temperature 0. If the VLM supports NOTHINK mode, this is reinforced by the mode. See `docs/architecture-rationale.md` §6. |
+| "No chain-of-thought" | Chain-of-thought adds latency, output tokens, and non-determinism even at temperature 0. If the VLM supports NOTHINK mode, this is reinforced by the mode. See `docs/architecture.md`. |
 | "If you cannot read a value, use null" | Prevents hallucination. A null/unknown value is a gap in the map; a guessed value is a silently wrong map. Gaps are recoverable (lazy expansion can re-probe); wrong values are dangerous (the driver navigates to a setting that doesn't exist or misreads its type). |
 
 ### User Prompt (per screenshot)
@@ -87,7 +87,7 @@ Return only the JSON object. No other text.
 | `entries[].value` | Current value of the setting. For toggles: "Enabled"/"Disabled". For numerics: the number. For enums: the selected option string. For submenus: null. This is what the driver reads to confirm a setting's current state before changing it. |
 | `entries[].options` | For leaf-enum only: the list of available options. This lets the Semantic Capability Index record "CPU Lite Load has options Mode 1-4 and Auto" without the driver needing to open the dropdown during a crawl. For other types: null. |
 | `entries[].key_to_enter` | The keystroke that activates this entry. Almost always "Enter" in BIOS, but some BIOSes use different keys for different entry types. Making it explicit (rather than hardcoding "Enter" in the driver) handles edge cases without driver changes. |
-| `blocklist_flag` | Boolean: did the VLM detect any dangerous keyword on this screen? The driver checks this before sending Enter. If true, the driver backs out (Esc) and marks this zone as blocked in the map. See `docs/architecture-rationale.md` §3. |
+| `blocklist_flag` | Boolean: did the VLM detect any dangerous keyword on this screen? The driver checks this before sending Enter. If true, the driver backs out (Esc) and marks this zone as blocked in the map. See `docs/architecture.md`. |
 | `blocklist_keywords` | Which keywords were detected. Logged for debugging and map annotation. The driver doesn't act differently based on which keyword — any true flag means back out. But knowing which keyword was detected helps a human review the map later. |
 
 ### Justification of the dangerous keyword list
@@ -110,10 +110,10 @@ If a keyword appears on a screen that also contains safe settings (e.g., a "Secu
 
 | Parameter | Value | Justification |
 |-----------|-------|---------------|
-| `temperature` | 0 | Reproducibility. Two parses of the same screenshot must produce identical JSON. See `docs/architecture-rationale.md` §6. |
+| `temperature` | 0 | Reproducibility. Two parses of the same screenshot must produce identical JSON. See `docs/architecture.md`. |
 | `max_tokens` | 2048 | BIOS screens have at most ~20-30 entries. The JSON schema is compact. 2048 tokens is generous headroom while preventing runaway output. |
 | `response_format` | JSON (if the API supports it) | Some VLM APIs (OpenAI, vLLM with guided decoding) support forced JSON output mode. Use it if available — it guarantees valid JSON. |
-| `NOTHINK mode` | Enabled (if available) | Skips chain-of-thought for faster, more consistent structured output. See `docs/architecture-rationale.md` §6. |
+| `NOTHINK mode` | Enabled (if available) | Skips chain-of-thought for faster, more consistent structured output. See `docs/architecture.md`. |
 
 ### Retry behavior
 

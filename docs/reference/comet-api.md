@@ -156,7 +156,8 @@ OCR runs **on the host**, not on the Comet:
 - `kvm_ocr_screenshot` captures a frame, passes it to Tesseract, and returns structured JSON:
   ```json
   {
-    "width": 1920, "height": 1080,
+    "width": 1920,
+    "height": 1080,
     "elements": [
       {"text": "File", "confidence": 96.3, "x_pct": 5.2, "y_pct": 3.1},
       {"text": "Edit", "confidence": 95.8, "x_pct": 8.7, "y_pct": 3.1}

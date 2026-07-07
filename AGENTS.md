@@ -23,7 +23,7 @@ When filling the developer role, do not put driver-agent instructions or VLM-age
 ## Operating Rules
 
 - Follow `docs/NORTH_STAR.md` as the top-level project authority and `docs/decisions.md` for implementation decisions.
-- The `comet-bios-triage` skill instructs the driver agent, not you. Read it for context, but do not put driver-agent operational rules here.
+- When working as the developer agent, read the `comet-bios-triage` skill for context, but do not put driver-agent operational rules here.
 - Do not commit Comet credentials, screenshots, HWiNFO logs, or live state files.
 - Use `scripts/comet_preflight.py` for local host checks that do not send KVM actions.
 - Use `scripts/run_ledger.py` to create or update experiment records.
