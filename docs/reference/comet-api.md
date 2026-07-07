@@ -18,9 +18,9 @@
                                        screenshot text)
 ```
 
-The MCP server (`glkvm_mcp.py`) is a **single 904-line Python file** using PEP 723 inline script metadata. It is launched via `uv run --script ./glkvm_mcp.py` and runs as a stdio MCP server. It maintains a persistent WebSocket connection to the Comet for low-latency input, and uses HTTP for screenshots and authentication.
+The MCP server (`glkvm_mcp.py`) is a **single-file Python MCP server** using PEP 723 inline script metadata. It is launched via `uv run --script ./glkvm_mcp.py` and runs as a stdio MCP server. It maintains a persistent WebSocket connection to the Comet for low-latency input, and uses HTTP for screenshots and authentication.
 
-> **Source:** `glkvm_mcp.py` lines 1-11 (PEP 723 metadata), lines 47 (FastMCP import), README.md lines 159-171 (architecture diagram). Verified 2026-07-07.
+> **Source:** `glkvm_mcp.py` lines 1-11 (PEP 723 metadata), line 47 (FastMCP import), and `README.md#architecture`. Verified 2026-07-07.
 
 ## API Endpoints (PiKVM-Fork)
 
@@ -68,14 +68,14 @@ Response: JPEG image bytes
 
 The PiKVM API surface is broader than what `glkvm_mcp.py` currently touches. Based on PiKVM documentation and the GL.iNet issue tracker, additional endpoints likely include:
 
-- **Mass Storage / Virtual Media:** `POST /api/msd/*` — mount ISOs/images to the target machine via USB emulation. Referenced in `gl-inet/glkvm#14` via `/etc/kvmd/override.yaml` config. **Deferred scope** (see `docs/NORTH_STAR.md` future extensions).
-- **ATX Power Control:** `POST /api/atx/*` — power on/off/reset the target. Requires the ATX add-on board. **Deferred scope** (see `docs/NORTH_STAR.md` future extensions).
+- **Mass Storage / Virtual Media:** `POST /api/msd/*` — mount ISOs/images to the target machine via USB emulation. Referenced in `gl-inet/glkvm#14` via `/etc/kvmd/override.yaml` config. **Deferred scope** (outside the current BIOS cartography + MSI Z690 tuning scope in `docs/NORTH_STAR.md`).
+- **ATX Power Control:** `POST /api/atx/*` — power on/off/reset the target. Requires the ATX add-on board. **Deferred scope** (outside the current BIOS cartography + MSI Z690 tuning scope in `docs/NORTH_STAR.md`).
 - **System Info:** likely `GET /api/sysinfo` or similar — device status, storage info. **Not yet probed.**
 - **GPIO:** `POST /api/gpio/*` — for ATX board control. **Deferred scope.**
 
 > **Sources:**
 > - GitHub issue `gl-inet/glkvm#14`: references `/etc/kvmd/override.yaml` for MSD config, ATX board coexistence with USB storage. Accessed 2026-07-07.
-> - `docs/NORTH_STAR.md` — future extensions explicitly defer ATX controls and MSD/ISO mounting. Verified 2026-07-07.
+> - `docs/NORTH_STAR.md` — current scope is BIOS cartography and MSI Z690 tuning; ATX/MSD are not included in the first spike. Verified 2026-07-07.
 
 ## MCP Tools Exposed by `glkvm_mcp.py`
 
@@ -146,7 +146,7 @@ The PiKVM API surface is broader than what `glkvm_mcp.py` currently touches. Bas
 
 > **Sources:**
 > - `glkvm_mcp.py` docstring lines 18-26, tunables lines 52-56. Verified 2026-07-07.
-> - README.md lines 179-184 (bug fixes section). Verified 2026-07-07.
+> - `README.md#firmware-bug-fixes`. Verified 2026-07-07.
 
 ## OCR Integration (Tesseract)
 
@@ -159,13 +159,13 @@ OCR runs **on the host**, not on the Comet:
     "width": 1920, "height": 1080,
     "elements": [
       {"text": "File", "confidence": 96.3, "x_pct": 5.2, "y_pct": 3.1},
-      ...
+      {"text": "Edit", "confidence": 95.8, "x_pct": 8.7, "y_pct": 3.1}
     ]
   }
   ```
 - `kvm_ocr_click` finds text by name and clicks its exact coordinates — eliminates the "vision model estimates pixel position" unreliability
 
-> **Source:** `glkvm_mcp.py` lines 650-674 (Tesseract binary lookup), lines 686-749 (OCR implementation), README.md lines 28-45 (OCR rationale). Verified 2026-07-07.
+> **Source:** `glkvm_mcp.py` lines 650-674 (Tesseract binary lookup), lines 686-749 (OCR implementation), and `README.md#mcp-tools`. Verified 2026-07-07.
 
 ## Security Model
 
@@ -175,11 +175,11 @@ OCR runs **on the host**, not on the Comet:
 - **stdio exposure warning** — do not expose the MCP server's stdio to a remote agent without confirming the target host is on a trusted network
 - **Remote access options:** Tailscale (native integration on Comet Pro), GL.iNet cloud service (`glkvm.com`), or VPN
 
-> **Source:** `glkvm_mcp.py` docstring lines 27-29. README.md lines 173-178. Verified 2026-07-07.
+> **Source:** `glkvm_mcp.py` docstring lines 27-29 and `README.md#security`. Verified 2026-07-07.
 
 ## Single-File Architecture Assessment
 
-`glkvm_mcp.py` is a **single 904-line file** that contains:
+`glkvm_mcp.py` is a **single-file MCP server** that contains:
 
 - PEP 723 inline dependency metadata (no separate `requirements.txt` or `pyproject.toml` needed for the server itself)
 - The `FastMCP` server definition and all 15 tool functions
@@ -192,4 +192,4 @@ OCR runs **on the host**, not on the Comet:
 
 **Growth pressure:** Adding a state engine (3rd asyncio loop + screen-polling + map-matching) and potentially crawler-driving hooks will push this file past the point where a single file remains maintainable. The file structure is not a hard constraint — if it splits, it would separate transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) into modules within the same package, not into separate MCP servers. See `docs/decisions.md` D6.
 
-> **Source:** `glkvm_mcp.py` full file (904 lines). Verified 2026-07-07.
+> **Source:** `glkvm_mcp.py` full file. Verified 2026-07-07.

@@ -29,7 +29,7 @@ The ability to match a live screen against stored maps from *similar* boards (no
 
 ## D6 — glkvm_mcp.py file structure: not a hard constraint
 
-`glkvm_mcp.py` is currently a single 904-line file. It already runs two background asyncio loops (watchdog + pinger) and holds session state. The planned state engine will join as a third background loop in the same file. This is not a hard constraint — if the file's complexity grows past the point where a single file is maintainable (e.g. after adding the state engine and crawler-driving hooks), it may be split into modules within the same package. That split, if it comes, separates transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) — not into separate MCP servers.
+`glkvm_mcp.py` is currently a single-file MCP server. It already runs two background asyncio loops (watchdog + pinger) and holds session state. The planned state engine will join as a third background loop in the same file. This is not a hard constraint — if the file's complexity grows past the point where a single file is maintainable (e.g. after adding the state engine and crawler-driving hooks), it may be split into modules within the same package. That split, if it comes, separates transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) — not into separate MCP servers.
 
 ## D7 — State engine deployment: internal asyncio loop
 

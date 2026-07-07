@@ -42,7 +42,7 @@ comet-kvm-codex-plugin/
 
 ### The three portable layers
 
-1. **MCP server** (`glkvm_mcp.py` + `.mcp.json`) — the universal tool-integration layer. MCP (Model Context Protocol) is supported by every major AI coding tool. The server is a single 904-line Python file using PEP 723 inline dependencies, launched via `uv run --script`. It works identically in Codex, Claude Code, Cursor, Kilo, or any MCP-compatible client without modification.
+1. **MCP server** (`glkvm_mcp.py` + `.mcp.json`) — the universal tool-integration layer. MCP (Model Context Protocol) is supported by every major AI coding tool. The server is a single-file Python MCP server using PEP 723 inline dependencies, launched via `uv run --script`. It works identically in Codex, Claude Code, Cursor, Kilo, or any MCP-compatible client without modification.
 
 2. **Agent Skills** (`skills/*/SKILL.md`) — the universal instructions layer, following the [agentskills.io](https://agentskills.io) open standard. Skills are auto-discovered by Codex, Claude Code, Cursor, Kilo, OpenCode, Gemini CLI, and Cline. The `SKILL.md` format is the lowest common denominator across tools.
 
@@ -55,8 +55,7 @@ comet-kvm-codex-plugin/
 ```json
 {
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
-  ...
+  "mcpServers": "./.mcp.json"
 }
 ```
 
