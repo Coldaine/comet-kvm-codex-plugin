@@ -8,7 +8,7 @@
 
 A packaged plugin for GL.iNet Comet KVM-driven hardware triage workflows — BIOS configuration, pre-OS operations, and Windows-side validation on physical machines. Not VM orchestration or general-purpose remote desktop.
 
-**Primary target: Codex.** Cross-tool compatibility (Claude Code, Cursor, VS Code/Copilot) is designed in but deferred until the Codex plugin is proven. See [`docs/NORTHSTAR.md`](docs/NORTHSTAR.md) for goals.
+**Primary target: Codex.** Cross-tool compatibility (Claude Code, Cursor, VS Code/Copilot) is designed in but deferred until the Codex plugin is proven. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
 
 ---
 
@@ -31,8 +31,8 @@ comet-kvm-codex-plugin/
 │       └── references/
 ├── scripts/                 # Local tooling (preflight, run ledger)
 ├── docs/                    # Project authority docs + reference material
-│   ├── NORTHSTAR.md
-│   ├── plans/
+│   ├── NORTH_STAR.md
+│   ├── decisions.md
 │   └── reference/
 ├── extras/                  # Upstream utilities (calibration, click helper, userscript)
 ├── runs/                    # Experiment records (gitignored content)
@@ -80,8 +80,8 @@ This pattern was validated by real-world multi-target plugins (e.g. [InventorLab
 **Immediate workflow — MSI Z690 tuning:** Drive BIOS changes one setting at a time against stored maps, then validate in Windows via HWiNFO.
 
 See:
-- [`docs/NORTHSTAR.md`](docs/NORTHSTAR.md) — project goals
-- [`docs/plans/comet-kvm-codex-plugin.md`](docs/plans/comet-kvm-codex-plugin.md) — implementation plan
+- [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — project goals
+- [`docs/decisions.md`](docs/decisions.md) — implementation decisions
 - [`docs/reference/comet-hardware.md`](docs/reference/comet-hardware.md) — verified Comet hardware/platform facts
 - [`docs/reference/comet-api.md`](docs/reference/comet-api.md) — verified Comet API/software surface
 

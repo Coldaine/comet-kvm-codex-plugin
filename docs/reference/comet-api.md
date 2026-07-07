@@ -68,14 +68,14 @@ Response: JPEG image bytes
 
 The PiKVM API surface is broader than what `glkvm_mcp.py` currently touches. Based on PiKVM documentation and the GL.iNet issue tracker, additional endpoints likely include:
 
-- **Mass Storage / Virtual Media:** `POST /api/msd/*` — mount ISOs/images to the target machine via USB emulation. Referenced in `gl-inet/glkvm#14` via `/etc/kvmd/override.yaml` config. **Deferred scope** per NORTHSTAR.
-- **ATX Power Control:** `POST /api/atx/*` — power on/off/reset the target. Requires the ATX add-on board. **Deferred scope** per NORTHSTAR.
+- **Mass Storage / Virtual Media:** `POST /api/msd/*` — mount ISOs/images to the target machine via USB emulation. Referenced in `gl-inet/glkvm#14` via `/etc/kvmd/override.yaml` config. **Deferred scope** (see `docs/NORTH_STAR.md` future extensions).
+- **ATX Power Control:** `POST /api/atx/*` — power on/off/reset the target. Requires the ATX add-on board. **Deferred scope** (see `docs/NORTH_STAR.md` future extensions).
 - **System Info:** likely `GET /api/sysinfo` or similar — device status, storage info. **Not yet probed.**
 - **GPIO:** `POST /api/gpio/*` — for ATX board control. **Deferred scope.**
 
 > **Sources:**
 > - GitHub issue `gl-inet/glkvm#14`: references `/etc/kvmd/override.yaml` for MSD config, ATX board coexistence with USB storage. Accessed 2026-07-07.
-> - `docs/plans/comet-kvm-codex-plugin.md` lines 35-39: deferred scope explicitly lists ATX controls and MSD/ISO mounting. Verified 2026-07-07.
+> - `docs/NORTH_STAR.md` — future extensions explicitly defer ATX controls and MSD/ISO mounting. Verified 2026-07-07.
 
 ## MCP Tools Exposed by `glkvm_mcp.py`
 
@@ -127,7 +127,7 @@ The PiKVM API surface is broader than what `glkvm_mcp.py` currently touches. Bas
 
 > **Source:** `glkvm_mcp.py` lines 180-197 (watchdog), lines 199-213 (pinger). Verified 2026-07-07.
 
-**Design implication:** A state-engine screen-poller would join these as a third background loop (e.g. `_screen_poll_loop`). This is the existing architectural pattern, not a new one. The MCP server already holds session state (the `Connection` dataclass at line 159) and runs background tasks — it is not, and has never been, purely stateless in the process sense. NORTHSTAR's "stateless transport" framing refers to the API contract (no tool call depends on prior tool-call state), not the process internals.
+**Design implication:** A state-engine screen-poller would join these as a third background loop (e.g. `_screen_poll_loop`). This is the existing architectural pattern, not a new one. The MCP server already holds session state (the `Connection` dataclass at line 159) and runs background tasks — it is not, and has never been, purely stateless in the process sense. The "stateless transport" framing refers to the API contract (no tool call depends on prior tool-call state), not the process internals. See `docs/decisions.md` D7.
 
 ## Known Firmware Bugs & Workarounds
 
@@ -190,6 +190,6 @@ OCR runs **on the host**, not on the Comet:
 
 **Current state:** This is a collapsed single-file MCP server — transport, session management, OCR, and bug workarounds all in one file. It works for the bootstrap scope (connect, screenshot, OCR, input, release).
 
-**Growth pressure:** Adding a state engine (3rd asyncio loop + screen-polling + map-matching) and potentially crawler-driving hooks will push this file past the point where a single file remains maintainable. The NORTHSTAR decision to keep `glkvm_mcp.py` as the active transport "until a split is justified" anticipates this — the split, if it comes, would separate transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) into modules within the same package, not into separate MCP servers.
+**Growth pressure:** Adding a state engine (3rd asyncio loop + screen-polling + map-matching) and potentially crawler-driving hooks will push this file past the point where a single file remains maintainable. The file structure is not a hard constraint — if it splits, it would separate transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) into modules within the same package, not into separate MCP servers. See `docs/decisions.md` D6.
 
-> **Source:** `glkvm_mcp.py` full file (904 lines). `docs/NORTHSTAR.md` line 9. Verified 2026-07-07.
+> **Source:** `glkvm_mcp.py` full file (904 lines). Verified 2026-07-07.

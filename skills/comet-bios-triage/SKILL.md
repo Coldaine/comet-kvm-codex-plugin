@@ -10,6 +10,7 @@ Use the Comet MCP tools as hands and eyes, not as a blind macro engine.
 Before changing BIOS settings, read:
 
 - `references/stateful-control-model.md`
+- `references/bios-cartography.md` — design draft for the BIOS map-building tool (first spike)
 - `references/msi-z690-bios-workflow.md`
 - `references/hwinfo-run-loop.md`
 
