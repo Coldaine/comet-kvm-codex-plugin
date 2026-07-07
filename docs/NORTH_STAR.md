@@ -23,10 +23,10 @@
 
 ## Authority Order
 
-1. `docs/NORTHSTAR.md`
-2. `skills/comet-bios-triage/SKILL.md`
-3. `skills/comet-bios-triage/references/stateful-control-model.md`
-4. `docs/reference/comet-hardware.md`
-5. `docs/reference/comet-api.md`
-6. `docs/plans/comet-kvm-codex-plugin.md`
+1. `docs/NORTH_STAR.md`
+2. `docs/decisions.md`
+3. `skills/comet-bios-triage/SKILL.md`
+4. `skills/comet-bios-triage/references/stateful-control-model.md`
+5. `docs/reference/comet-hardware.md`
+6. `docs/reference/comet-api.md`
 7. `AGENTS.md`
