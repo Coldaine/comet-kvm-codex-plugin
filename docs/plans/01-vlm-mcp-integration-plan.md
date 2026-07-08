@@ -1,77 +1,66 @@
-# Plan 01: VLM-MCP Boundary Integration & Safety Plan
+# Plan 01: VLM-MCP Integration & Safe Agent-Driven Architecture
 
 ## 1. Context and Goals
-Currently, the Vision-Language Model (VLM) perception client is called as an out-of-band side-channel (via direct Python imports) inside the sidecar runtime. This creates a disconnect: the MCP server cannot see, log, or audit what the VLM receives or returns. Furthermore, a critical async threading bug makes this flow unusable in production.
+The original implementation had an architectural contradiction: it defined a "Three-Agent Topology" but buried the VLM client inside a monolithic Python state machine (`StatefulBiosRuntime`), executing direct API calls out-of-band of the MCP protocol. 
 
-This plan establishes the correct architecture by:
-1. **Refactoring the VLM into a formal MCP Tool** (`kvm_vlm_parse` / `bios_vlm_parse`).
-2. **Integrating VLM transaction auditing** directly into the unified MCP command and log streams.
-3. **Fixing the critical async threading bug** in the observation pipeline.
-4. **Implementing VLM-bypass caching** via local OCR and perceptual hashing to minimize API usage.
+This plan establishes the correct, decoupled architecture:
+1. **Stateless MCP Tools**: The MCP server exposes modular tools for hardware actions, VLM perception, and local matching.
+2. **LLM Driver as the Orchestrator**: The Driver Agent (the orchestrating LLM) manages the stateful crawl stack, path navigation, and policy verification loops.
+3. **Transparent VLM Integration**: The VLM is invoked strictly via an MCP tool call (`kvm_vlm_parse`), ensuring all screenshots, prompts, and output JSON parses are recorded in the MCP server's transaction log.
+4. **Direct Value Mutation**: We do not parse or enumerate dropdown options. For target BIOS tuning (MSI Z690), settings are mutated by navigating to the row and typing the numeric value (e.g. PL1, CPU Lite Load Mode number) directly.
 
 ---
 
-## 2. Refactoring the VLM to an MCP Tool
+## 2. Exposing the VLM Perception Tool
 
-We will expose the VLM perception service as a formal tool on the FastMCP server in `glkvm_mcp.py`.
+We will register the VLM client as a formal MCP tool in `glkvm_mcp.py`.
 
 ### Tool Signature
 ```python
 @mcp.tool(name="kvm_vlm_parse", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
 async def kvm_vlm_parse(screenshot_path: str, previous_state_id: Optional[str] = None, last_action: Optional[str] = None) -> dict:
     """
-    Parse a BIOS screenshot using the VLM (GPT-4o) and return a structured JSON description.
-    Supports token tracking, auditing, and corrective retries.
+    Parse a saved BIOS screenshot using the VLM (GPT-4o/Gemini) and return a structured JSON description.
+    Accepts a local screenshot cache path to optimize stdio payload sizes.
     """
 ```
 
-### Benefits of the Tool Boundary
-* **Visibility**: Every VLM request and response is visible to the orchestrating agent and fully recorded in the MCP server's transaction logs.
-* **Separation of Concerns**: The VLM tool retrieves the screenshot file from the local cache and runs the parsing, isolating the API transport layer from the core state/navigation engine.
-* **Swappability**: The VLM backend can be easily updated or routed to different APIs without editing the core sidecar logic.
-
----
-
-## 3. Resolving Implementation Bugs & Limitations
-
-### Fix the Async Threading Bug
-In `src/bios_sidecar/controller/observe.py` lines 58–63:
-```diff
--        vlm_res = await asyncio.to_thread(
--            self.vlm_client.parse_screenshot,
--            img_bytes,
--            previous_state=prev_dict,
--            last_action=last_action,
--        )
-+        vlm_res = await self.vlm_client.parse_screenshot(
-+            img_bytes,
-+            previous_state=prev_dict,
-+            last_action=last_action,
-+        )
+### Local Verification Tool (VLM-Bypass)
+To prevent latency and token waste during intermediate navigation hops, we expose a local verification tool:
+```python
+@mcp.tool(name="kvm_match_screen", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def kvm_match_screen(screenshot_path: str, expected_node_id: str) -> dict:
+    """
+    Verify if the captured screenshot matches a known node in the state graph
+    using local perceptual hashing and OCR fingerprinting (no VLM API call).
+    """
 ```
-* **Why**: `parse_screenshot` is an `async def` function. Passing it to `asyncio.to_thread` is a syntax error that returns a coroutine object without executing it, crashing the pipeline.
-
-### Redesigning Mutation Options Selection
-To fix the issue where `BiosMutator` cannot find option lists because they are hidden inside popup modals:
-1. **Interactive Options Probing**: If `cursor_ctrl.options` is empty, the mutator will:
-   * Press `Enter` to open the dropdown modal.
-   * Call `observe_state` (which captures the screenshot and invokes the VLM parser).
-   * The VLM will parse the modal options visible on the screen.
-   * The mutator calculates the `ArrowDown`/`ArrowUp` steps from the modal options.
-   * Send the target selections, then press `Enter` to confirm.
 
 ---
 
-## 4. Implementation Phase Order
+## 3. Safe Setting Mutation Workflow
 
-### Phase 1: Documentation and Cleaning (This PR)
-* Delete the superseded `bios-cartography.md` design draft.
-* Update `skills/comet-bios-triage/SKILL.md` and `docs/architecture.md` to remove historical references.
-* Commit the VLM-MCP integration plan in `docs/plans/`.
+Instead of granular tools like `bios_navigate_to` and `bios_apply_setting_change`, we consolidate mutation into a single stateful, policy-gated entry point:
 
-### Phase 2: Bug Fixes & Tool Registration
-* Patch the async threading bug in `observe.py`.
-* Implement and register the `kvm_vlm_parse` tool in `glkvm_mcp.py`.
+```python
+@mcp.tool(name="bios_set_setting", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def bios_set_setting(capability_id: str, desired_value: str, approval_id: Optional[str] = None) -> dict:
+    """
+    Propose or apply a setting modification. Navigates, mutates, and verifies internally.
+    If called without a verified approval_id for protected settings, returns a human-approval token.
+    """
+```
 
-### Phase 3: local OCR/Phash Bypass
-* Refactor `StateObserver.observe_state` to call `StateMatcher` using OCR/visual hashes *before* calling the VLM tool. If matched, skip the VLM call and load the cached state node.
+### Mutation Execution Details
+1. **Navigate**: The sidecar uses the stored graph to navigate to the target setting row.
+2. **Direct Typing**: It presses `"Enter"` or clears the field, types the `desired_value` directly using text input (e.g. typing `"125"` for PL1 or `"9"` for CPU Lite Load), and presses `"Enter"`. No option list enumeration is performed.
+3. **Grounding Verification**: It captures a post-mutation screenshot and calls `kvm_vlm_parse` to confirm the value next to the label matches `desired_value`.
+
+---
+
+## 4. Implementation Steps
+
+* **Phase 1: Cleanup (Completed)**: Remove superseded drafts and update references.
+* **Phase 2: Bug Fixes**: Correct the async threading crash in `observe.py` where `asyncio.to_thread` wraps the async `parse_screenshot` method.
+* **Phase 3: Tool Implementation**: Expose the namespaced raw tools (`comet.raw.*`), the `kvm_vlm_parse` tool, the local `kvm_match_screen` tool, and the unified `bios_set_setting` tool.
+* **Phase 4: Test Expansion**: Add tests in `tests/` validating VLM JSON payloads and the `bios_set_setting` execution paths.
