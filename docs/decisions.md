@@ -13,7 +13,7 @@ This project's end state is a packaged plugin distributed for installation, not 
 
 ## D3 — Cartography skill placement: reference under comet-bios-triage
 
-BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It will be documented as a reference file under `skills/comet-bios-triage/references/` (e.g. `bios-cartography.md`). The existing skill's trigger surface already covers BIOS workflows; cartography is a prerequisite step within that workflow, not a separate capability.
+BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It is documented under `docs/architecture.md` and active plans (e.g. `docs/plans/01-vlm-mcp-integration-plan.md`). The existing skill's trigger surface already covers BIOS workflows; cartography is a prerequisite step within that workflow, not a separate capability.
 
 ## D4 — Map store runtime location: on-Comet preferred, pending verification
 

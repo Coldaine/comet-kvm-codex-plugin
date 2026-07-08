@@ -18,13 +18,14 @@ comet-kvm-codex-plugin/
 │       ├── SKILL.md
 │       └── references/
 │           ├── stateful-control-model.md
-│           ├── bios-cartography.md       # Prior design draft (superseded by this doc)
 │           ├── msi-z690-bios-workflow.md
 │           └── hwinfo-run-loop.md
 ├── scripts/                 # Local tooling
 │   ├── comet_preflight.py   # Host checks (local-only, no KVM actions)
 │   └── run_ledger.py        # Experiment record creation/update
 ├── docs/                    # Project authority docs + design docs
+│   ├── plans/               # Migration and integration plans
+│   │   └── 01-vlm-mcp-integration-plan.md
 │   ├── NORTH_STAR.md        # Goals (top-level authority)
 │   ├── decisions.md         # Implementation decisions
 │   ├── architecture.md      # This document
