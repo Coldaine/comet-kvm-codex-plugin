@@ -24,7 +24,15 @@ When filling the developer role, do not put driver-agent instructions or VLM-age
 
 - Follow `docs/NORTH_STAR.md` as the top-level project authority and `docs/decisions.md` for implementation decisions.
 - When working as the developer agent, read the `comet-bios-triage` skill for context, but do not put driver-agent operational rules here.
-- Do not commit Comet credentials, screenshots, HWiNFO logs, or live state files.
+- **Do not commit credentials.** The only secret is `COMET_PASSWORD`, managed via Doppler (`doppler.yaml`). Host (`192.168.0.126`) and username (`admin`) are non-sensitive and safe in code/config. See `docs/reference/comet-api.md#security-model`.
+- Do not commit screenshots, HWiNFO logs, or live state files.
 - Use `scripts/comet_preflight.py` for local host checks that do not send KVM actions.
 - Use `scripts/run_ledger.py` to create or update experiment records.
 - Keep `upstream` pointing at `kennypeh85/glkvm-mcp` (fetch-only, push disabled). Selectively cherry-pick bug fixes or API improvements when relevant — this repo is not a mirror and does not track upstream releases.
+
+## Live Hardware Constraints
+
+- **Target:** Comet KVM (GL-RM1) at `192.168.0.126` on LAN
+- **ATX power control:** Not available. The Comet requires the ATX add-on board to physically power cycle the target. Without it, reboots and BIOS entry require manual power-button press. The `/api/atx/*` endpoints exist on the device but are not wrapped in MCP tools yet.
+- **BIOS entry workflow (without ATX):** Manually power on the target → agent polls screenshots until POST detected → agent sends BIOS entry key (`Delete`, `F2`, `Escape`, etc.) → agent enters BIOS navigation mode.
+- **Credentials:** `doppler run -- uv run glkvm_mcp.py` injects `COMET_PASSWORD`. Run `doppler setup` first if not already configured.

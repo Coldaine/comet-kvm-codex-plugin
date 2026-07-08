@@ -4,9 +4,10 @@ import unittest
 import glkvm_mcp
 from glkvm_mcp import _safe_screenshot_path, get_runtime
 from src.bios_sidecar.comet.capture import CaptureManager
+from src.bios_sidecar.controller.crawl import BiosCrawler
 from src.bios_sidecar.controller.mutate import BiosMutator
 from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
-from src.bios_sidecar.domain.enums import ControlRole, RiskClass, StateKind
+from src.bios_sidecar.domain.enums import ControlRole, RiskClass, RuntimeState, StateKind
 from src.bios_sidecar.domain.models import (
     ActionPolicies,
     BiosMetadata,
@@ -33,6 +34,9 @@ class FakeClient:
     async def get_screenshot(self, preview=False, max_width=1920, quality=80):
         return b"same frame bytes"
 
+    def is_connected(self):
+        return True
+
     async def send_combo(self, combo):
         self.sent.append(combo)
 
@@ -51,9 +55,17 @@ class FakeObserver:
         return self.state
 
 
-def _state(options=None, value="Mode 9"):
+class FakeCrawler:
+    def __init__(self, state):
+        self.state = state
+
+    async def execute_crawl_step(self, client, run_id, device_id, current_state, policy_profile):
+        return self.state, None, "continue"
+
+
+def _state(options=None, value="Mode 9", state_id="state_safe"):
     return BiosState(
-        state_id="state_safe",
+        state_id=state_id,
         run_id="run_123",
         device_id="comet_123",
         frame=FrameMetadata("shot_1", "sha_1", "hash_1", [1024, 768], "now"),
@@ -110,6 +122,40 @@ class RuntimeReviewFixesTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(ok)
             self.assertIn("deterministically", message)
             self.assertEqual(client.sent, [])
+        finally:
+            store.close()
+
+    async def test_crawl_step_logs_original_state_before(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = StatefulBiosRuntime(db_path=f"{tmp}/state.db", screenshot_cache=f"{tmp}/screens")
+            try:
+                runtime.client = FakeClient()
+                runtime.state = RuntimeState.SYNCED
+                runtime.run_id = "run_123"
+                runtime.device_id = "device_123"
+                runtime.current_state_rec = _state(state_id="state_before")
+                runtime.crawler = FakeCrawler(_state(value="Mode 8", state_id="state_after"))
+
+                state, _, _ = await runtime.crawl_step()
+
+                event = runtime.store.list_trace_events("run_123")[-1]
+                self.assertEqual(state.state_id, "state_after")
+                self.assertEqual(event.state_before, "state_before")
+                self.assertEqual(event.state_after, "state_after")
+            finally:
+                runtime.vlm_client.close()
+                runtime.store.close()
+
+    async def test_crawler_registers_discovered_setting_capability(self):
+        store = SQLiteStore(db_path=":memory:")
+        try:
+            observer = FakeObserver(store, _state())
+            crawler = BiosCrawler(observer=observer, policy_engine=None, settler=FakeSettler())
+            crawler._register_setting_capabilities(_state(), "node_1")
+
+            cap = CapabilityIndex(store).resolve_capability_by_handle("cpu_lite_load_mode")
+            self.assertIsNotNone(cap)
+            self.assertTrue(any(path.node_id == "node_1" for path in cap.paths))
         finally:
             store.close()
 

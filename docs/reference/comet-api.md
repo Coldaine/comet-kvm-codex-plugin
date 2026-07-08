@@ -68,10 +68,12 @@ Response: JPEG image bytes
 
 The PiKVM API surface is broader than what `glkvm_mcp.py` currently touches. Based on PiKVM documentation and the GL.iNet issue tracker, additional endpoints likely include:
 
-- **Mass Storage / Virtual Media:** `POST /api/msd/*` — mount ISOs/images to the target machine via USB emulation. Referenced in `gl-inet/glkvm#14` via `/etc/kvmd/override.yaml` config. **Deferred scope** (outside the current BIOS cartography + MSI Z690 tuning scope in `docs/NORTH_STAR.md`).
-- **ATX Power Control:** `POST /api/atx/*` — power on/off/reset the target. Requires the ATX add-on board. **Deferred scope** (outside the current BIOS cartography + MSI Z690 tuning scope in `docs/NORTH_STAR.md`).
+- **Mass Storage / Virtual Media:** `POST /api/msd/*` — mount ISOs/images to the target machine via USB emulation. Referenced in `gl-inet/glkvm#14` via `/etc/kvmd/override.yaml` config. **Deferred scope.**
+- **ATX Power Control:** `POST /api/atx/*` — power on/off/reset the target. **Requires the ATX add-on board** (separate hardware accessory that wires to the motherboard's power/reset headers). Without this board, the Comet cannot physically power cycle the target machine. The API endpoints exist on the device but will return errors if no ATX board is connected. **Not yet wrapped in MCP tools.**
 - **System Info:** likely `GET /api/sysinfo` or similar — device status, storage info. **Not yet probed.**
 - **GPIO:** `POST /api/gpio/*` — for ATX board control. **Deferred scope.**
+
+> **Key limitation for BIOS workflows:** Without the ATX board, rebooting the target and entering BIOS requires manual intervention (physically pressing the power button). The MCP server can send keystrokes (`kvm_send_keys("Delete")`, `kvm_hold_key("F2", 500)` etc.) during POST, but cannot trigger the reboot itself. A practical workflow: manually power on → agent polls screenshots until POST screen detected → agent mashes BIOS entry key.
 
 > **Sources:**
 > - GitHub issue `gl-inet/glkvm#14`: references `/etc/kvmd/override.yaml` for MSD config, ATX board coexistence with USB storage. Accessed 2026-07-07.
@@ -172,7 +174,8 @@ OCR runs **on the host**, not on the Comet:
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — device ships with self-signed certificate; `verify=False` in httpx client
-- **No credentials stored** — password is passed per-session via `kvm_connect` tool call
+- **Credentials via Doppler** — the only secret is `COMET_PASSWORD`, injected at runtime via `doppler run`. Host (`192.168.0.126`) and username (`admin`) are non-sensitive defaults stored in code/config. See `doppler.yaml`.
+- **No credentials in repo** — password is never committed, logged, or stored in files. Doppler injects it as an environment variable at process start.
 - **stdio exposure warning** — do not expose the MCP server's stdio to a remote agent without confirming the target host is on a trusted network
 - **Remote access options:** Tailscale (native integration on Comet Pro), GL.iNet cloud service (`glkvm.com`), or VPN
 
