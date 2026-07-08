@@ -70,7 +70,7 @@ We do **not** roll our own VLM transport or JSON-repair logic. See `docs/decisio
 
 Provider is selected by env:
 
-```
+```text
 VLM_PROVIDER=openrouter | ollama | mock
 VLM_MODEL=openrouter/qwen/qwen-2-vl-72b-instruct   # or ollama/llama3.2-vision
 OPENROUTER_API_KEY=<doppler-injected, OpenRouter only>
@@ -99,7 +99,7 @@ async def kvm_vlm_parse(screenshot_ref: str, previous_state_id: str | None = Non
 
 `bios_observe_state` and navigation hops follow a **local-match-first** pipeline to avoid VLM cost/latency on known screens:
 
-```
+```text
 capture screenshot
   → compute phash + local OCR fingerprint
   → kvm_match_screen against known graph nodes

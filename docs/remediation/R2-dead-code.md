@@ -1,7 +1,7 @@
 # R2 — Dead Code Wired to Nothing
 
 **Severity:** 🟡 High
-**Filed against:** PR #12 (`feat/bios-sidecar-runtime`)
+**Filed against:** PR #12 (`feat/mcp-tool-surface`)
 
 ---
 
@@ -75,7 +75,7 @@ self.policy_engine = PolicyEngine(
 
 ---
 
-## Order of remediation (PR #13)
+## Order of remediation (deferred to follow-up work)
 
 1. R2a (trace ledger) — highest value, enables operational observability
 2. R2d (matrix.yaml) — quick wiring, enables config-driven policy changes

@@ -176,14 +176,13 @@ The crawler produces two views of the same crawl data:
 
 1. **Driver Agent** calls `bios_connect()`.
 2. **Driver Agent** calls `bios_observe_state()`.
-   * The stateful tracker captures the screen and first attempts a local `kvm_match_screen` (perceptual hash + OCR fingerprint). It calls `kvm_vlm_parse` to ground itself **only when local matching is insufficient** (unknown screen or low confidence).
-   * Once parsed/matched, the tracker aligns the session (e.g. to `"EZ Mode"`).
+   * The stateful tracker captures the screen, tries `kvm_match_screen` first, and only calls `kvm_vlm_parse` when grounding is needed.
+   * The VLM parses the screen, returns the JSON, and the tracker aligns the session to `"EZ Mode"`.
 3. **Driver Agent** calls `bios_navigate_to("node_oc_settings")`.
    * The stateful tracker replays the keystroke path. It uses fast, local visual hashes and OCR fingerprints (`kvm_match_screen`) to track the cursor at each intermediate step without calling the VLM.
 4. **Driver Agent** calls `bios_propose_setting_change("cpu_lite_load_mode", "Mode 3")` -> generates a plan.
 5. **[Operator grants approval out-of-band]**.
-6. **Driver Agent** calls `bios_apply_setting_change(plan_id, approval_id, capability_id, desired_value)`.
-   * `capability_id` and `desired_value` echo the plan and are re-verified against it before execution.
+6. **Driver Agent** calls `bios_apply_setting_change(plan_id, approval_id)`.
    * The tracker verifies the row, activates input, types the value directly, and hits Enter.
    * The tracker calls `kvm_vlm_parse` to visually verify the change.
 7. **Driver Agent** calls `bios_save_and_reboot(approval_id)`.

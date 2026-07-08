@@ -51,6 +51,7 @@ _TRANSITION_MATRIX = {
         "navigate_to": RuntimeState.NAVIGATING,
         "propose_setting_change": RuntimeState.SYNCED,
         "apply_setting_change": RuntimeState.MUTATING,
+        "save_and_reboot": RuntimeState.MUTATING,
         "disconnect_comet": RuntimeState.DISCONNECTED,
     },
     RuntimeState.CRAWLING: {
@@ -62,6 +63,7 @@ _TRANSITION_MATRIX = {
         "abort_and_recover": RuntimeState.RECOVERING,
     },
     RuntimeState.MUTATING: {
+        "save_and_reboot": RuntimeState.MUTATING,
         "disconnect_comet": RuntimeState.DISCONNECTED,
         "abort_and_recover": RuntimeState.RECOVERING,
     },
@@ -344,6 +346,7 @@ class StatefulBiosRuntime:
     async def save_and_reboot(self, approval_id: str) -> Tuple[bool, Optional[BiosState], str]:
         if self.client is None or not self.client.is_connected():
             raise RuntimeError("Not connected.")
+        self._guard_transition("save_and_reboot")
         self.state = RuntimeState.MUTATING
         try:
             ok, final, msg = await self.mutator.save_and_reboot(

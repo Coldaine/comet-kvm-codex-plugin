@@ -35,4 +35,4 @@ When filling the developer role, do not put driver-agent instructions or VLM-age
 - **Target:** Comet KVM (GL-RM1) at `192.168.0.126` on LAN
 - **ATX power control:** Not available. The Comet requires the ATX add-on board to physically power cycle the target. Without it, reboots and BIOS entry require manual power-button press. The `/api/atx/*` endpoints exist on the device but are not wrapped in MCP tools yet.
 - **BIOS entry workflow (without ATX):** Manually power on the target → agent polls screenshots until POST detected → agent sends BIOS entry key (`Delete`, `F2`, `Escape`, etc.) → agent enters BIOS navigation mode.
-- **Credentials:** `doppler run -- uv run glkvm_mcp.py` injects `COMET_PASSWORD`. Run `doppler setup` first if not already configured.
+- **Credentials:** The only secret is `COMET_PASSWORD`, managed via Doppler (`doppler.yaml`). Host (`192.168.0.126`) and username (`admin`) are non-sensitive and safe in code/config. See `docs/reference/comet-api.md#security-model`.

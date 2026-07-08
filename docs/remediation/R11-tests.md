@@ -1,7 +1,7 @@
 # R11 — Test Suite Is Inadequate
 
 **Severity:** 🔴 Critical
-**Filed against:** PR #11 + #12
+**Filed against:** PR #12 (`feat/mcp-tool-surface`)
 **Design section:** All
 
 ---

@@ -35,7 +35,7 @@ from src.bios_sidecar.comet.client import CometClient  # noqa: E402
 async def main() -> int:
     host = os.environ.get("COMET_HOST", "192.168.0.126")
     username = os.environ.get("COMET_USERNAME", "admin")
-    password = os.environ.get("COMET_PASSWORD")
+    password = os.environ.get("COMET_PASSWORD") or os.environ.get("GLCOMET_ADMIN_PASSWORD")
 
     print(f"[smoke] target host   : {host}")
     print(f"[smoke] username      : {username}")

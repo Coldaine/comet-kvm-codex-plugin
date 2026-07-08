@@ -225,7 +225,7 @@ def _resolve_screenshot_ref(screenshot_ref: str) -> str:
     candidates = [
         os.path.join(cache_dir, screenshot_ref),
         os.path.join(cache_dir, f"{screenshot_ref}.jpg"),
-        screenshot_ref,
+        os.path.join(cache_dir, os.path.basename(screenshot_ref)),
     ]
     for path in candidates:
         if os.path.isfile(path):
