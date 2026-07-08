@@ -52,3 +52,16 @@ The crawler produces two views of the same crawl data:
 - **Screen-node graph** (for the state engine): a network of screen nodes keyed by perceptual hash + OCR fingerprint, with edges labeled by the keystroke that transitions between them. The state engine matches live screenshots against these nodes for transition validation.
 
 The crawler produces the graph (raw crawl data). A post-processing step derives the index from the graph. Both are persisted. See `docs/architecture.md` §9 for the full rationale.
+
+## D10 — VLM framework: `instructor` + `litellm`, not hand-rolled
+
+We do not build our own VLM transport, retry, or JSON-repair logic. We adopt two well-maintained libraries:
+
+- **`litellm`** provides one call interface across providers. A single `model` string selects an OpenRouter vision model (`openrouter/qwen/qwen-2-vl-72b-instruct`, `openrouter/google/gemini-flash-1.5`, etc.) or a locally served small VLM (`ollama/llama3.2-vision`, `ollama/qwen2.5-vl`, or a vLLM OpenAI-compatible endpoint). This satisfies the "OpenRouter vision model OR local small LLM" requirement without provider-specific code.
+- **`instructor`** wraps the call to return a Pydantic-validated object mapping onto `BiosState`. It handles corrective retries on malformed JSON, replacing the hand-rolled 3-attempt retry loop in `perception/vlm_client.py`.
+
+Provider selection is by environment (`VLM_PROVIDER`, `VLM_MODEL`, `VLM_BASE_URL`, `OPENROUTER_API_KEY`). `mock` remains the default for tests and offline development. Only `OPENROUTER_API_KEY` is a secret (Doppler); local serving needs no key. See `docs/plans/01-vlm-mcp-integration-plan.md` §3.
+
+## D11 — Tool surface granularity: phase-preserving, three-tier
+
+The MCP surface exposes a compact but phase-preserving set of stateful, policy-gated `bios_*` tools (Tier 1), inspection resources (Tier 2), and segregated raw/perception primitives (Tier 3). We reject both the collapsed single-tool surface (`bios_set_setting`) — which would hold the KVM session hostage during out-of-band human approval and erase the observe/crawl/navigate/propose/apply/save/recover/trace seams — and the "raw HID everywhere" surface that lets the driver agent bypass policy gating. The driver agent gets semantic tools, not key-by-key tools. Human approval is out-of-band; the driver never self-approves. See `docs/plans/01-vlm-mcp-integration-plan.md` §2.

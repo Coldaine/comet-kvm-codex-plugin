@@ -1,9 +1,14 @@
 # Doppler project config — safe to commit (names only, no secrets)
 #
-# Only ONE secret lives in Doppler: COMET_PASSWORD
-# Everything else is non-sensitive:
-#   COMET_HOST     = 192.168.0.126  (LAN IP, not a secret)
-#   COMET_USERNAME = admin          (default, not a secret)
+# Secrets in Doppler:
+#   COMET_PASSWORD     — Comet KVM admin password (required)
+#   OPENROUTER_API_KEY — only if VLM_PROVIDER=openrouter (not needed for local Ollama/vLLM)
+#
+# Non-sensitive (safe in code/config):
+#   COMET_HOST     = 192.168.0.126  (LAN IP)
+#   COMET_USERNAME = admin          (default)
+#   VLM_PROVIDER   = openrouter | ollama | mock
+#   VLM_MODEL      = e.g. openrouter/qwen/qwen-2-vl-72b-instruct or ollama/llama3.2-vision
 #
 # Run: doppler run -- uv run scripts/comet_smoke_test.py
 # Run: doppler run -- uv run glkvm_mcp.py
