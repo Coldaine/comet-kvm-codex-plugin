@@ -58,7 +58,7 @@ The crawler produces the graph (raw crawl data). A post-processing step derives 
 We do not build our own VLM transport, retry, or JSON-repair logic. We adopt two well-maintained libraries:
 
 - **`litellm`** provides one call interface across providers. A single `model` string selects an OpenRouter vision model (`openrouter/qwen/qwen-2-vl-72b-instruct`, `openrouter/google/gemini-flash-1.5`, etc.) or a locally served small VLM (`ollama/llama3.2-vision`, `ollama/qwen2.5-vl`, or a vLLM OpenAI-compatible endpoint). This satisfies the "OpenRouter vision model OR local small LLM" requirement without provider-specific code.
-- **`instructor`** wraps the call to return a Pydantic-validated object mapping onto `BiosState`. It handles corrective retries on malformed JSON, replacing the hand-rolled 3-attempt retry loop in `perception/vlm_client.py`.
+- **`instructor`** wraps the call to return a Pydantic-validated object mapping onto `BiosState`. It handles corrective retries on malformed JSON, replacing the hand-rolled 3-attempt retry loop in `src/bios_sidecar/perception/vlm_client.py`.
 
 Provider selection is by environment (`VLM_PROVIDER`, `VLM_MODEL`, `VLM_BASE_URL`, `OPENROUTER_API_KEY`). `mock` remains the default for tests and offline development. Only `OPENROUTER_API_KEY` is a secret (Doppler); local serving needs no key. See `docs/plans/01-vlm-mcp-integration-plan.md` §3.
 

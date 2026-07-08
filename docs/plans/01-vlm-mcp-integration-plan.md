@@ -24,12 +24,12 @@ Semantic, stateful, policy-gated. This is the surface the tuning/triage agent us
 
 | Tool | Purpose |
 |------|---------|
-| `bios_connect(host, password, username)` | Open Comet/session/run context. |
+| `bios_connect(host, password, username="admin")` | Open Comet/session/run context. `username` trails because it defaults to `admin` (Python requires defaulted params last). |
 | `bios_observe_state()` | Grounding/sync entry point. Captures screen, local-matches, calls VLM only when unmatched. |
 | `bios_crawl_region(scope, max_depth, stop_on_hazard)` | Supervised BIOS enumeration/cartography (DFS). |
 | `bios_navigate_to(target)` | Deterministic path replay to a node/capability, with local hash verification per hop. |
 | `bios_propose_setting_change(capability_id, desired_value)` | Register plan, return approval requirement. Machine stays idle/safe. |
-| `bios_apply_setting_change(plan_id, approval_id)` | Execute a pre-approved staged mutation. Stages the value; does not commit to NVRAM. |
+| `bios_apply_setting_change(plan_id, approval_id, capability_id, desired_value)` | Execute a pre-approved staged mutation. `capability_id`/`desired_value` echo the plan and are re-verified against it. Stages the value; does not commit to NVRAM. |
 | `bios_save_and_reboot(approval_id)` | Policy-gated F10 → VLM-verify confirm dialog → commit → track reboot. |
 | `bios_abort_and_recover()` | Safety escape hatch (release keys, Escape back-out). |
 | `bios_export_trace()` | Evidence and replay as first-class output. |
@@ -49,7 +49,7 @@ Raw HID and perception primitives. Not part of the normal BIOS automation surfac
 | Tool | Purpose |
 |------|---------|
 | `kvm_vlm_parse(screenshot_ref, previous_state_id?, last_action?)` | Audited VLM perception. Called by the sidecar; optionally callable for debug. |
-| `kvm_match_screen(screenshot_ref, expected_node_id)` | Local phash/OCR match (no VLM). VLM-bypass optimization. |
+| `kvm_match_screen(screenshot_ref, expected_node_id?)` | Local phash/OCR match (no VLM). Returns the best-matching graph node and confidence. `expected_node_id` is optional; when supplied, the result also reports whether the best match equals it. |
 | `comet_raw_send_keys`, `comet_raw_screenshot`, `comet_raw_mouse_*`, `comet_raw_status` | Raw HID/capture. Debug/admin only. Legacy `kvm_*` names are aliases pending migration. |
 | `comet_atx_power`, `comet_atx_click` | Power/reset via ATX board. |
 | `comet_msd_upload` | On-device persistence to `/userdata/media/`. |
@@ -66,7 +66,7 @@ Raw HID and perception primitives. Not part of the normal BIOS automation surfac
 We do **not** roll our own VLM transport or JSON-repair logic. See `docs/decisions.md` D10.
 
 - **`litellm`** — one interface across providers. Lets us route to **OpenRouter vision models** (e.g. `openrouter/qwen/qwen-2-vl-72b-instruct`, `openrouter/google/gemini-flash-1.5`) **or a locally served small VLM** (e.g. `ollama/llama3.2-vision`, `ollama/qwen2.5-vl`, or a vLLM endpoint) by changing one `model` string.
-- **`instructor`** — wraps the LLM call to return a **Pydantic-validated** object, mapping directly onto our `BiosState` schema. It handles corrective retries on malformed JSON, replacing the hand-rolled 3-attempt retry loop in `vlm_client.py`.
+- **`instructor`** — wraps the LLM call to return a **Pydantic-validated** object, mapping directly onto our `BiosState` schema. It handles corrective retries on malformed JSON, replacing the hand-rolled 3-attempt retry loop in `src/bios_sidecar/perception/vlm_client.py`.
 
 Provider is selected by env:
 

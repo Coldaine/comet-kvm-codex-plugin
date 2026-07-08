@@ -35,6 +35,22 @@ EXPECTED_TOOLS = {
     "kvm_screenshot",
     "kvm_screenshot_to_file",
     "kvm_status",
+    # Tier 1 stateful BIOS tools
+    "bios_connect",
+    "bios_observe_state",
+    "bios_crawl_region",
+    "bios_navigate_to",
+    "bios_propose_setting_change",
+    "bios_apply_setting_change",
+    "bios_save_and_reboot",
+    "bios_abort_and_recover",
+    "bios_export_trace",
+    "bios_disconnect",
+    # Tier 3 perception + raw namespace
+    "kvm_vlm_parse",
+    "kvm_match_screen",
+    "comet_raw_send_keys",
+    "comet_raw_screenshot",
 }
 
 
