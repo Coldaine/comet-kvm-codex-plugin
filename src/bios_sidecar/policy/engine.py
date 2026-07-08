@@ -10,9 +10,14 @@ from src.bios_sidecar.policy.approvals import ApprovalTracker
 LOG = logging.getLogger("bios_sidecar.policy.engine")
 
 class PolicyEngine:
-    def __init__(self, approval_tracker: ApprovalTracker, matrix_path: Optional[str] = None):
+    def __init__(
+        self,
+        approval_tracker: ApprovalTracker,
+        matrix_path: Optional[str] = None,
+        blocklist_keywords: Optional[List[str]] = None,
+    ):
         self.approval_tracker = approval_tracker
-        self.hazard_detector = HazardDetector()
+        self.hazard_detector = HazardDetector(blocklist_keywords=blocklist_keywords)
 
         if matrix_path is None:
             matrix_path = os.path.join(os.path.dirname(__file__), "matrix.yaml")

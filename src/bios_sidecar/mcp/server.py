@@ -117,32 +117,19 @@ async def bios_crawl_step(policy_profile: str = "read_only_crawl") -> dict:
     }
 
 @mcp.tool()
-async def bios_crawl_region(budget: int = 15, policy_profile: str = "read_only_crawl") -> dict:
+async def bios_crawl_region(max_depth: int = 8, policy_profile: str = "read_only_crawl") -> dict:
     """
-    Iteratively crawl until unvisited boundary, danger, or budget exhaustion limit.
+    Full DFS crawl with frontier queue, backtrack stack, depth enforcement,
+    and cycle detection. Explores the current BIOS region exhaustively.
     """
     r = get_runtime()
     profile = PolicyProfile(policy_profile)
-    steps_taken = 0
-    edges_found = []
-
-    # Observe home point
-    state = await r.observe_state()
-
-    while steps_taken < budget:
-        state, edge, rec = await r.crawl_step(profile)
-        steps_taken += 1
-        if edge:
-            edges_found.append(edge.to_dict())
-        if rec == "backtrack" or rec == "stop":
-            LOG.warning("Crawl region boundary hit, stopping automated crawl sequence")
-            break
-
+    final_state, edges, status = await r.crawl_region(profile, max_depth)
     return {
-        "steps_executed": steps_taken,
-        "edges_discovered_count": len(edges_found),
-        "edges": edges_found,
-        "final_state": state.to_dict()
+        "status": status,
+        "edges_discovered_count": len(edges),
+        "edges": [e.to_dict() for e in edges],
+        "final_state": final_state.to_dict()
     }
 
 @mcp.tool()

@@ -1,0 +1,18 @@
+# Doppler project config — safe to commit (names only, no secrets)
+#
+# Only ONE secret lives in Doppler: COMET_PASSWORD
+# Everything else is non-sensitive:
+#   COMET_HOST     = 192.168.0.126  (LAN IP, not a secret)
+#   COMET_USERNAME = admin          (default, not a secret)
+#
+# Run: doppler run -- uv run scripts/comet_smoke_test.py
+# Run: doppler run -- uv run glkvm_mcp.py
+
+setup:
+  project: comet-kvm-codex-plugin
+  config: dev
+
+flags:
+  analytics: false
+  env-warning: false
+  update-check: false
