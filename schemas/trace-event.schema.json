@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TraceEvent",
+  "type": "object",
+  "required": [
+    "event_id",
+    "run_id",
+    "timestamp",
+    "event_type"
+  ],
+  "properties": {
+    "event_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "event_type": { "type": "string" },
+    "state_before": { "type": ["string", "null"] },
+    "requested_action": { "type": ["object", "null"] },
+    "policy_decision": { "type": ["object", "null"] },
+    "state_after": { "type": ["string", "null"] },
+    "artifacts": { "type": "object" }
+  }
+}

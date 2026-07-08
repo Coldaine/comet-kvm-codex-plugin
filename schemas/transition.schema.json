@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TransitionEdge",
+  "type": "object",
+  "required": [
+    "edge_id",
+    "from_node",
+    "action",
+    "to_node",
+    "transition_type",
+    "evidence"
+  ],
+  "properties": {
+    "edge_id": { "type": "string" },
+    "from_node": { "type": "string" },
+    "action": {
+      "type": "object",
+      "required": ["type", "key"],
+      "properties": {
+        "type": { "type": "string" },
+        "key": { "type": "string" },
+        "policy_decision": { "type": "string" },
+        "policy_profile": { "type": "string" }
+      }
+    },
+    "to_node": { "type": "string" },
+    "transition_type": { "type": "string" },
+    "evidence": {
+      "type": "object",
+      "required": ["before_screenshot", "after_screenshot", "before_state", "after_state"],
+      "properties": {
+        "before_screenshot": { "type": "string" },
+        "after_screenshot": { "type": "string" },
+        "before_state": { "type": "string" },
+        "after_state": { "type": "string" }
+      }
+    }
+  }
+}

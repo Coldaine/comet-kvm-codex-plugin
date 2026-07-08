@@ -1,0 +1,71 @@
+from enum import Enum
+
+class StateKind(str, Enum):
+    NO_SIGNAL = "no_signal"
+    POST_SCREEN = "post_screen"
+    BOOT_MENU = "boot_menu"
+    EZ_MODE = "ez_mode"
+    ADVANCED_HOME = "advanced_home"
+    MENU_LIST = "menu_list"
+    SETTING_LIST = "setting_list"
+    ENUM_DROPDOWN = "enum_dropdown"
+    CONFIRMATION_MODAL = "confirmation_modal"
+    SAVE_CHANGES_MODAL = "save_changes_modal"
+    SEARCH_PAGE = "search_page"
+    HARDWARE_MONITOR = "hardware_monitor"
+    BOARD_EXPLORER = "board_explorer"
+    FLASH_UTILITY = "flash_utility"
+    SECURE_ERASE = "secure_erase"
+    PASSWORD_PROMPT = "password_prompt"
+    OS_BOOTED = "os_booted"
+    UNKNOWN = "unknown"
+
+class ControlRole(str, Enum):
+    SUBMENU = "submenu"
+    SETTING = "setting"
+    ACTION = "action"
+    INFO = "info"
+    UNKNOWN = "unknown"
+
+class RiskClass(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    EXTREME = "extreme"
+    BLOCKED = "blocked"
+
+class PolicyProfile(str, Enum):
+    OBSERVE_ONLY = "observe_only"
+    READ_ONLY_CRAWL = "read_only_crawl"
+    SUPERVISED_MUTATION = "supervised_mutation"
+    ADMIN_DEBUG = "admin_debug"
+
+class RuntimeState(str, Enum):
+    UNCONFIGURED = "UNCONFIGURED"
+    DISCONNECTED = "DISCONNECTED"
+    CONNECTED = "CONNECTED"
+    OBSERVING = "OBSERVING"
+    SYNCED = "SYNCED"
+    CRAWLING = "CRAWLING"
+    NAVIGATING = "NAVIGATING"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    MUTATING = "MUTATING"
+    VERIFYING = "VERIFYING"
+    RECOVERING = "RECOVERING"
+    BLOCKED = "BLOCKED"
+    DEGRADED = "DEGRADED"
+
+class EventClass(str, Enum):
+    SESSION_CONNECTED = "SESSION_CONNECTED"
+    FRAME_CAPTURED = "FRAME_CAPTURED"
+    OCR_COMPLETED = "OCR_COMPLETED"
+    VLM_PARSED = "VLM_PARSED"
+    STATE_NORMALIZED = "STATE_NORMALIZED"
+    POLICY_DECIDED = "POLICY_DECIDED"
+    ACTION_EXECUTED = "ACTION_EXECUTED"
+    TRANSITION_OBSERVED = "TRANSITION_OBSERVED"
+    HAZARD_DETECTED = "HAZARD_DETECTED"
+    APPROVAL_REQUESTED = "APPROVAL_REQUESTED"
+    APPROVAL_GRANTED = "APPROVAL_GRANTED"
+    RECOVERY_EXECUTED = "RECOVERY_EXECUTED"
+    RUN_ABORTED = "RUN_ABORTED"
