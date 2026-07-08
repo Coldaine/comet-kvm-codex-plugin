@@ -32,7 +32,7 @@ async def kvm_connect(host: str, password: str, username: str = "admin") -> dict
     """Connect to a GLKVM device on LAN and authenticate."""
     r = get_kvm_runtime()
     ok = await r.connect(host=host, username=username, password=password)
-    return {"connected": ok, "host": r.client.base_url if r.client else "", "message": "ok"}
+    return {"connected": ok, "host": r.client.base_url, "message": "ok"}
 
 
 @mcp.tool(name="kvm_disconnect", annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
@@ -45,14 +45,14 @@ async def kvm_disconnect() -> dict:
 
 @mcp.tool(name="kvm_send_text", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def kvm_send_text(text: str, wpm: int = 200) -> dict:
-    """Type a string on the remote machine using atomic press patterns."""
+    """Type a string on the remote machine using the bug-fix atomic press patterns."""
     client = _require_client()
     return await client.send_text(text, wpm)
 
 
 @mcp.tool(name="kvm_send_keys", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def kvm_send_keys(combo: str) -> dict:
-    """Send a single key chord, e.g. Ctrl+Alt+Delete, Escape, ArrowDown."""
+    """Send a single key chord, e.g. "Ctrl+Alt+Delete", "Escape", "ArrowDown"."""
     client = _require_client()
     return await client.send_combo(combo)
 
@@ -142,14 +142,14 @@ async def kvm_ocr_click(text: str, button: str = "left", count: int = 1, search_
     elements = ocr["elements"]
     if search_area:
         area_filters = {
-            "top-left": lambda e: e["x_pct"] < 50 and e["y_pct"] < 50,
-            "top-right": lambda e: e["x_pct"] >= 50 and e["y_pct"] < 50,
-            "bottom-left": lambda e: e["x_pct"] < 50 and e["y_pct"] >= 50,
+            "top-left":     lambda e: e["x_pct"] < 50 and e["y_pct"] < 50,
+            "top-right":    lambda e: e["x_pct"] >= 50 and e["y_pct"] < 50,
+            "bottom-left":  lambda e: e["x_pct"] < 50 and e["y_pct"] >= 50,
             "bottom-right": lambda e: e["x_pct"] >= 50 and e["y_pct"] >= 50,
         }
-        area_filter = area_filters.get(search_area)
-        if area_filter:
-            filtered = [e for e in elements if area_filter(e)]
+        f = area_filters.get(search_area)
+        if f:
+            filtered = [e for e in elements if f(e)]
             if filtered:
                 elements = filtered
 
@@ -163,7 +163,7 @@ async def kvm_ocr_click(text: str, button: str = "left", count: int = 1, search_
         "confidence": best["confidence"],
         "x_pct": best["x_pct"],
         "y_pct": best["y_pct"],
-        "clicked": True,
+        "clicked": True
     }
 
 
@@ -177,20 +177,20 @@ async def kvm_status() -> dict:
         "connected": True,
         "host": r.client.base_url,
         "held_keys": list(r.client.held.keys()),
-        "ws_open": r.client.is_connected(),
+        "ws_open": r.client.is_connected()
     }
 
 
 @mcp.tool(name="comet_atx_power", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def comet_atx_power(action: str) -> dict:
-    """Power on/off/reset the target via ATX board. Action: on, off, reset."""
+    """Power on/off/reset the target via ATX board. Action: 'on', 'off', 'reset'."""
     client = _require_client()
     return await client.atx_power(action)
 
 
 @mcp.tool(name="comet_atx_click", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def comet_atx_click(button: str) -> dict:
-    """Momentary press of power/reset button: power or reset."""
+    """Momentary press of power/reset button ('power' or 'reset', ~200ms pulse)."""
     client = _require_client()
     return await client.atx_click(button)
 
@@ -204,11 +204,11 @@ async def comet_sysinfo() -> dict:
 
 @mcp.tool(name="comet_msd_upload", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def comet_msd_upload(remote_path: str, local_path: str) -> dict:
-    """Upload a local file to the Comet's /userdata/media/ partition."""
+    """Upload a local file to the Comet's /userdata/media/ partition for on-device persistence."""
     client = _require_client()
     try:
         with open(local_path, "rb") as f:
             data = f.read()
     except Exception as e:
-        raise ValueError(f"Failed to read local file {local_path}: {e}") from e
+        raise ValueError(f"Failed to read local file {local_path}: {e}")
     return await client.msd_upload(remote_path, data)
