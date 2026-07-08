@@ -378,7 +378,7 @@ class CometClient:
                 await asyncio.sleep(self.ws_ping_period)
                 if self.ws:
                     try:
-                        await self.ws.send(b"\x00")
+                        await self.ws.send(json.dumps({"event_type": "ping"}))
                     except Exception:
                         return
         except asyncio.CancelledError:
