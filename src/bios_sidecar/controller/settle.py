@@ -13,11 +13,20 @@ class ScreenSettler:
 
     async def wait_for_settle(self, client: CometClient) -> bytes:
         """
-        Polls the frame stream until two consecutive frame captures yield
+        Polls the frame stream until three consecutive frame captures yield
         the identical perceptual hash, indicating visual settle.
+
+        Enforces a mandatory 150ms pre-delay before beginning comparisons to
+        avoid returning the pre-transition frame (which is always static
+        immediately after a keypress, before the BIOS re-renders).
         """
+        # Mandatory pre-delay: give the BIOS time to begin rendering the next
+        # screen before we start comparing hashes.
+        await asyncio.sleep(0.15)
+
         start = asyncio.get_event_loop().time()
         last_hash = ""
+        consec_count = 0
         last_data = b""
 
         while (asyncio.get_event_loop().time() - start) < self.max_wait_s:
@@ -26,19 +35,27 @@ class ScreenSettler:
                 h = calculate_visual_phash(data)
 
                 if last_hash and h == last_hash:
-                    # Settled! Now fetch a full high-fidelity snapshot
-                    LOG.info("Screen settled in %.2f seconds", asyncio.get_event_loop().time() - start)
-                    return await client.get_screenshot(preview=False)
+                    consec_count += 1
+                    if consec_count >= 2:  # 3 total polls matched (first match + 2 more)
+                        elapsed = asyncio.get_event_loop().time() - start
+                        LOG.info(
+                            "Screen settled after %d consecutive matches in %.2f seconds",
+                            consec_count + 1,
+                            elapsed,
+                        )
+                        return await client.get_screenshot(preview=False)
+                else:
+                    consec_count = 0
 
                 last_hash = h
                 last_data = data
             except Exception as e:
                 LOG.warning("Failed capture step in settle loop: %s", e)
+                consec_count = 0
 
             await asyncio.sleep(self.check_interval_s)
 
         LOG.warning("Screen did not settle within budget; returning last frame.")
-        # If timeout, try to get a high quality frame anyway and return
         try:
             return await client.get_screenshot(preview=False)
         except Exception:

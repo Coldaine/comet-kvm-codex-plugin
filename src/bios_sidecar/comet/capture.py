@@ -9,7 +9,10 @@ from src.bios_sidecar.comet.client import CometClient
 class CaptureManager:
     def __init__(self, cache_dir: str = "state/screenshots"):
         self.cache_dir = cache_dir
+        self._capture_count = 0
         os.makedirs(cache_dir, exist_ok=True)
+        # Enforce D1 30-day TTL on startup so stale screenshots never accumulate.
+        self.purge_old_screenshots()
 
     async def capture_frame(
         self, client: CometClient, preview: bool = False, max_width: int = 1920, quality: int = 80
@@ -27,6 +30,11 @@ class CaptureManager:
         file_path = os.path.join(self.cache_dir, f"{screenshot_id}.jpg")
         with open(file_path, "wb") as f:
             f.write(data)
+
+        # Enforce D1 TTL every 100 captures to avoid unbounded growth mid-session.
+        self._capture_count += 1
+        if self._capture_count % 100 == 0:
+            self.purge_old_screenshots()
 
         return data, screenshot_id, file_path
 
