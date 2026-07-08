@@ -24,12 +24,9 @@ class VLMClient:
     ):
         # Provider resolution: explicit arg > env > mock default
         self.provider = provider or os.environ.get("VLM_PROVIDER", "mock")
-        self.api_key = (
-            api_key
-            or os.environ.get("OPENROUTER_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or os.environ.get("VLM_API_KEY")
-        )
+        # One canonical env var for the VLM API key.
+        # Doppler secret: OPENAI_MANAGEMENT_KEY (in secrets_managment/dev).
+        self.api_key = api_key or os.environ.get("OPENAI_MANAGEMENT_KEY")
         # Model string routes litellm to OpenRouter or local (e.g.
         # "openrouter/qwen/qwen-2-vl-72b-instruct" or "ollama/llama3.2-vision").
         self.model = model or os.environ.get("VLM_MODEL")
