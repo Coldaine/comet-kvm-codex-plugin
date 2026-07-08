@@ -1,8 +1,8 @@
 from __future__ import annotations
 import logging
-from src.bios_sidecar.comet.client import CometClient
+from src.kvm_core.comet.client import CometClient
 
-LOG = logging.getLogger("bios_sidecar.comet.hid")
+LOG = logging.getLogger("kvm_core.comet.hid")
 
 class HIDController:
     def __init__(self, client: CometClient):

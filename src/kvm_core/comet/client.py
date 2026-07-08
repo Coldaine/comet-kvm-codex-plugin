@@ -10,7 +10,7 @@ import httpx
 import websockets
 import ssl as _ssl
 
-LOG = logging.getLogger("bios_sidecar.comet")
+LOG = logging.getLogger("kvm_core.comet")
 
 # US key mapping
 CHAR_TO_KEY: dict[str, tuple[str, bool]] = {}

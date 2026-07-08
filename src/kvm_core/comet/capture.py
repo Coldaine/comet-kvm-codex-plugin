@@ -4,7 +4,7 @@ import hashlib
 import time
 import uuid
 from typing import Tuple
-from src.bios_sidecar.comet.client import CometClient
+from src.kvm_core.comet.client import CometClient
 
 class CaptureManager:
     def __init__(self, cache_dir: str = "state/screenshots"):

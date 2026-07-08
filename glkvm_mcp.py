@@ -25,23 +25,26 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from mcp.server.fastmcp import Image
-from src.bios_sidecar.mcp.server import mcp, get_runtime
+from src.kvm_core.server import mcp
+from src.kvm_core.runtime import get_kvm_runtime
+import src.bios_sidecar.mcp.server  # registers bios_* tools on the shared mcp instance
+from src.bios_sidecar.mcp.server import get_runtime as get_bios_runtime
 
 LOG = logging.getLogger("glkvm_mcp")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 # Delegate legacy connection tools to the stateful runtime client
 def _require_client():
-    r = get_runtime()
+    r = get_kvm_runtime()
     if r.client is None or not r.client.is_connected():
-        raise RuntimeError("Not connected. Call kvm_connect or bios_connect first.")
+        raise RuntimeError("Not connected. Call kvm_connect first.")
     return r.client
 
 def _safe_screenshot_path(requested_path: str) -> Path:
     requested = Path(requested_path)
     if requested.is_absolute() or ".." in requested.parts:
         raise ValueError("path must be a filename or relative path under the screenshot cache directory")
-    root = Path(get_runtime().capture_mgr.cache_dir).resolve()
+    root = Path(get_kvm_runtime().capture_mgr.cache_dir).resolve()
     destination = (root / requested).resolve()
     if root != destination and root not in destination.parents:
         raise ValueError("path escapes the screenshot cache directory")
@@ -51,14 +54,14 @@ def _safe_screenshot_path(requested_path: str) -> Path:
 @mcp.tool(name="kvm_connect", annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
 async def kvm_connect(host: str, password: str, username: str = "admin") -> dict:
     """Connect to a GLKVM device on LAN and authenticate."""
-    r = get_runtime()
+    r = get_bios_runtime()
     ok = await r.connect_comet(host, password, username)
     return {"connected": ok, "host": r.client.base_url, "message": "ok"}
 
 @mcp.tool(name="kvm_disconnect", annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
 async def kvm_disconnect() -> dict:
     """Close the WebSocket and HTTP session."""
-    r = get_runtime()
+    r = get_bios_runtime()
     await r.disconnect_comet()
     return {"connected": False, "message": "disconnected"}
 
@@ -68,21 +71,9 @@ async def kvm_send_text(text: str, wpm: int = 200) -> dict:
     client = _require_client()
     return await client.send_text(text, wpm)
 
-@mcp.tool(name="comet_raw_send_text", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_raw_send_text(text: str, wpm: int = 200) -> dict:
-    """Tier-3 raw namespace alias of kvm_send_text."""
-    client = _require_client()
-    return await client.send_text(text, wpm)
-
 @mcp.tool(name="kvm_send_keys", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def kvm_send_keys(combo: str) -> dict:
     """Send a single key chord, e.g. "Ctrl+Alt+Delete", "Escape", "ArrowDown"."""
-    client = _require_client()
-    return await client.send_combo(combo)
-
-@mcp.tool(name="comet_raw_send_keys", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_raw_send_keys(combo: str) -> dict:
-    """Tier-3 raw namespace alias of kvm_send_keys."""
     client = _require_client()
     return await client.send_combo(combo)
 
@@ -92,21 +83,9 @@ async def kvm_hold_key(key: str, duration_ms: int) -> dict:
     client = _require_client()
     return await client.hold_key(key, duration_ms)
 
-@mcp.tool(name="comet_raw_hold_key", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_raw_hold_key(key: str, duration_ms: int) -> dict:
-    """Tier-3 raw namespace alias of kvm_hold_key."""
-    client = _require_client()
-    return await client.hold_key(key, duration_ms)
-
 @mcp.tool(name="kvm_release_all", annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True})
 async def kvm_release_all() -> dict:
     """Force-release every key currently held. Recovery tool."""
-    client = _require_client()
-    return await client.release_all()
-
-@mcp.tool(name="comet_raw_release_all", annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True})
-async def comet_raw_release_all() -> dict:
-    """Tier-3 raw namespace alias of kvm_release_all."""
     client = _require_client()
     return await client.release_all()
 
@@ -118,23 +97,9 @@ async def kvm_mouse_move(x: int, y: int) -> dict:
     y_pct = (y + 32768) / 65535.0 * 100.0
     return await client.mouse_move_pct(x_pct, y_pct)
 
-@mcp.tool(name="comet_raw_mouse_move", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_raw_mouse_move(x: int, y: int) -> dict:
-    """Tier-3 raw namespace alias of kvm_mouse_move."""
-    client = _require_client()
-    x_pct = (x + 32768) / 65535.0 * 100.0
-    y_pct = (y + 32768) / 65535.0 * 100.0
-    return await client.mouse_move_pct(x_pct, y_pct)
-
 @mcp.tool(name="kvm_mouse_move_pct", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def kvm_mouse_move_pct(x_pct: float, y_pct: float) -> dict:
     """Move cursor to screen percentage coordinates: (0,0)=top-left, (100,100)=bottom-right."""
-    client = _require_client()
-    return await client.mouse_move_pct(x_pct, y_pct)
-
-@mcp.tool(name="comet_raw_mouse_move_pct", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_raw_mouse_move_pct(x_pct: float, y_pct: float) -> dict:
-    """Tier-3 raw namespace alias of kvm_mouse_move_pct."""
     client = _require_client()
     return await client.mouse_move_pct(x_pct, y_pct)
 
@@ -144,34 +109,15 @@ async def kvm_mouse_click(button: str = "left", count: int = 1) -> dict:
     client = _require_client()
     return await client.mouse_click(button, count)
 
-@mcp.tool(name="comet_raw_mouse_click", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_raw_mouse_click(button: str = "left", count: int = 1) -> dict:
-    """Tier-3 raw namespace alias of kvm_mouse_click."""
-    client = _require_client()
-    return await client.mouse_click(button, count)
-
 @mcp.tool(name="kvm_mouse_scroll", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def kvm_mouse_scroll(dx: int = 0, dy: int = 0) -> dict:
     """Scroll mouse wheel delta."""
     client = _require_client()
     return await client.mouse_scroll(dx, dy)
 
-@mcp.tool(name="comet_raw_mouse_scroll", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_raw_mouse_scroll(dx: int = 0, dy: int = 0) -> dict:
-    """Tier-3 raw namespace alias of kvm_mouse_scroll."""
-    client = _require_client()
-    return await client.mouse_scroll(dx, dy)
-
 @mcp.tool(name="kvm_screenshot", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
 async def kvm_screenshot(preview: bool = True, max_width: int = 1024, quality: int = 60) -> Image:
     """Capture snapshot frame."""
-    client = _require_client()
-    data = await client.get_screenshot(preview, max_width, quality)
-    return Image(data=data, format="jpeg")
-
-@mcp.tool(name="comet_raw_screenshot", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
-async def comet_raw_screenshot(preview: bool = True, max_width: int = 1024, quality: int = 60) -> Image:
-    """Tier-3 raw namespace alias of kvm_screenshot."""
     client = _require_client()
     data = await client.get_screenshot(preview, max_width, quality)
     return Image(data=data, format="jpeg")
@@ -190,7 +136,7 @@ async def kvm_screenshot_to_file(path: str, preview: bool = False, max_width: in
 async def kvm_ocr_screenshot(search_text: str = "", preview: bool = False) -> dict:
     """Capture full screenshot and run Tesseract OCR."""
     client = _require_client()
-    r = get_runtime()
+    r = get_kvm_runtime()
     img_bytes = await client.get_screenshot(preview=preview)
     return r.ocr_mgr.run_ocr(img_bytes, search_text)
 
@@ -198,7 +144,7 @@ async def kvm_ocr_screenshot(search_text: str = "", preview: bool = False) -> di
 async def kvm_ocr_click(text: str, button: str = "left", count: int = 1, search_area: str = "") -> dict:
     """Find text coordinates on screen and mouse click."""
     client = _require_client()
-    r = get_runtime()
+    r = get_kvm_runtime()
     img_bytes = await client.get_screenshot(preview=False)
     ocr = r.ocr_mgr.run_ocr(img_bytes, text)
     if not ocr["elements"]:
@@ -234,7 +180,7 @@ async def kvm_ocr_click(text: str, button: str = "left", count: int = 1, search_
 @mcp.tool(name="kvm_status", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
 async def kvm_status() -> dict:
     """Report current active connection status."""
-    r = get_runtime()
+    r = get_kvm_runtime()
     if r.client is None or not r.client.is_connected():
         return {"connected": False, "host": "", "held_keys": [], "ws_open": False}
     return {
@@ -244,18 +190,6 @@ async def kvm_status() -> dict:
         "ws_open": r.client.is_connected()
     }
 
-@mcp.tool(name="comet_raw_status", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
-async def comet_raw_status() -> dict:
-    """Tier-3 raw namespace alias of kvm_status."""
-    r = get_runtime()
-    if r.client is None or not r.client.is_connected():
-        return {"connected": False, "host": "", "held_keys": [], "ws_open": False}
-    return {
-        "connected": True,
-        "host": r.client.base_url,
-        "held_keys": list(r.client.held.keys()),
-        "ws_open": r.client.is_connected()
-    }
 
 @mcp.tool(name="comet_atx_power", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def comet_atx_power(action: str) -> dict:

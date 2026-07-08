@@ -20,6 +20,10 @@ import unittest
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 SERVER_PATH = os.path.join(REPO_ROOT, "glkvm_mcp.py")
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+_SERVER_MODULE = None
 
 EXPECTED_TOOLS = {
     "kvm_connect",
@@ -36,7 +40,6 @@ EXPECTED_TOOLS = {
     "kvm_screenshot_to_file",
     "kvm_status",
     # Tier 1 stateful BIOS tools
-    "bios_connect",
     "bios_observe_state",
     "bios_crawl_region",
     "bios_navigate_to",
@@ -45,21 +48,22 @@ EXPECTED_TOOLS = {
     "bios_save_and_reboot",
     "bios_abort_and_recover",
     "bios_export_trace",
-    "bios_disconnect",
     # Tier 3 perception + raw namespace
     "kvm_vlm_parse",
     "kvm_match_screen",
-    "comet_raw_send_keys",
-    "comet_raw_screenshot",
 }
 
 
 def _load_module():
+    global _SERVER_MODULE
+    if _SERVER_MODULE is not None:
+        return _SERVER_MODULE
     spec = importlib.util.spec_from_file_location("glkvm_mcp", SERVER_PATH)
     assert spec is not None and spec.loader is not None, "could not load glkvm_mcp.py"
     mod = importlib.util.module_from_spec(spec)
     sys.modules["glkvm_mcp"] = mod
     spec.loader.exec_module(mod)
+    _SERVER_MODULE = mod
     return mod
 
 

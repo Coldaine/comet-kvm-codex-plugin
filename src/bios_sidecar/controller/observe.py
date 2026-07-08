@@ -5,9 +5,9 @@ import logging
 import hashlib
 from typing import Optional, Dict, Any
 from src.bios_sidecar.domain.models import BiosState, StateNode
-from src.bios_sidecar.comet.client import CometClient
-from src.bios_sidecar.comet.capture import CaptureManager
-from src.bios_sidecar.perception.ocr import OCRManager
+from src.kvm_core.comet.client import CometClient
+from src.kvm_core.comet.capture import CaptureManager
+from src.kvm_core.ocr import OCRManager
 from src.bios_sidecar.perception.vlm_client import VLMClient
 from src.bios_sidecar.perception.normalize import normalize_bios_state
 from src.bios_sidecar.state.hashing import calculate_sha256, calculate_visual_phash, calculate_ocr_hash, calculate_state_semantic_hash

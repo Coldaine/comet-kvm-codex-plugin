@@ -104,18 +104,7 @@ class SQLiteStore:
             )
         """)
 
-        # 6. Approvals table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS approvals (
-                approval_id TEXT PRIMARY KEY,
-                plan_id TEXT,
-                approved_at TEXT,
-                approved_by TEXT,
-                status TEXT
-            )
-        """)
-
-        # 7. Trace events table
+        # 6. Trace events table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS trace_events (
                 event_id TEXT PRIMARY KEY,
@@ -314,25 +303,6 @@ class SQLiteStore:
             })
             for r in rows
         ]
-
-    # --- Approvals persistence ---
-    def save_approval(self, approval_id: str, plan_id: str, approved_at: str, approved_by: str, status: str):
-        with self._lock:
-            cursor = self.conn.cursor()
-            cursor.execute("""
-                INSERT OR REPLACE INTO approvals (approval_id, plan_id, approved_at, approved_by, status)
-                VALUES (?, ?, ?, ?, ?)
-            """, (approval_id, plan_id, approved_at, approved_by, status))
-            self.conn.commit()
-
-    def get_approval(self, approval_id: str) -> Optional[Dict[str, Any]]:
-        with self._lock:
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT * FROM approvals WHERE approval_id = ?", (approval_id,))
-            row = cursor.fetchone()
-        if row:
-            return dict(row)
-        return None
 
     # --- Trace event logs ---
     def save_trace_event(self, event: TraceEvent):

@@ -2,10 +2,10 @@ from __future__ import annotations
 import logging
 from typing import List, Optional, Tuple
 from src.bios_sidecar.domain.models import BiosState, GraphEdge
-from src.bios_sidecar.domain.enums import PolicyProfile
+from src.bios_sidecar.domain.enums import ControlRole
 from src.bios_sidecar.controller.observe import StateObserver
 from src.bios_sidecar.controller.settle import ScreenSettler
-from src.bios_sidecar.comet.client import CometClient
+from src.kvm_core.comet.client import CometClient
 
 LOG = logging.getLogger("bios_sidecar.controller.navigate")
 
@@ -24,7 +24,6 @@ class BiosNavigator:
         run_id: str,
         device_id: str,
         target_node_id: str,
-        policy_profile: PolicyProfile = PolicyProfile.READ_ONLY_CRAWL
     ) -> Tuple[bool, Optional[BiosState], str]:
         """
         Uses graph shortest path routing to reach target_node_id.
