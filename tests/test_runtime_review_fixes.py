@@ -90,7 +90,7 @@ class RuntimeReviewFixesTest(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaisesRegex(RuntimeError, "Not connected"):
                     await runtime.observe_state()
             finally:
-                runtime.vlm_client.close()
+                await runtime.vlm_client.close()
                 runtime.store.close()
 
     async def test_capture_ids_do_not_collide_for_identical_frames(self):

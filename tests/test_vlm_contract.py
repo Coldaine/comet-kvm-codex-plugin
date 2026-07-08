@@ -1,20 +1,20 @@
 import unittest
 from src.bios_sidecar.perception.vlm_client import VLMClient
 
-class TestVLMContract(unittest.TestCase):
-    def setUp(self):
+class TestVLMContract(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
         # Instantiate VLM Client in mock mode
         self.vlm = VLMClient(provider="mock")
 
-    def tearDown(self):
-        self.vlm.close()
+    async def asyncTearDown(self):
+        await self.vlm.close()
 
-    def test_mock_screens_are_stable(self):
+    async def test_mock_screens_are_stable(self):
         # Giving identical image bytes always yields the exact same mock screen title
         image1 = b"some_stable_image_bytes_here"
 
-        res1 = self.vlm.parse_screenshot(image1)
-        res2 = self.vlm.parse_screenshot(image1)
+        res1 = await self.vlm.parse_screenshot(image1)
+        res2 = await self.vlm.parse_screenshot(image1)
 
         self.assertEqual(res1["screen_title"], res2["screen_title"])
         self.assertEqual(res1["blocklist_flag"], res2["blocklist_flag"])
