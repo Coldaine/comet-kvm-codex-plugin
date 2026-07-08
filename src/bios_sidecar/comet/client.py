@@ -390,3 +390,77 @@ class CometClient:
         if hasattr(self.ws, "state"):
             return self.ws.state.name == "OPEN"
         return not self.ws.closed
+
+    # ── ATX Power Control ──────────────────────────────────────────
+
+    async def atx_power(self, action: str) -> dict:
+        """Power on/off/reset the target via ATX board. Requires ATX hardware."""
+        if not self.http:
+            raise RuntimeError("Not connected")
+        valid = {"on", "off", "reset"}
+        if action not in valid:
+            raise ValueError(f"Invalid ATX action '{action}'. Use: {valid}")
+        r = await self.http.post(
+            f"{self.base_url}/api/atx/power",
+            json={"action": action},
+        )
+        if not r.is_success:
+            body = r.text
+            if "ATX" in body or "not connected" in body or "not available" in body:
+                raise RuntimeError(f"ATX board not detected or not connected: {body}")
+            r.raise_for_status()
+        return {"action": action, "status": r.status_code}
+
+    async def atx_click(self, button: str) -> dict:
+        """
+        Momentary press of power/reset button (~200ms pulse).
+        Preferred over atx_power for clean reboots.
+        """
+        if not self.http:
+            raise RuntimeError("Not connected")
+        valid = {"power", "reset"}
+        if button not in valid:
+            raise ValueError(f"Invalid ATX button '{button}'. Use: {valid}")
+        r = await self.http.post(
+            f"{self.base_url}/api/atx/click",
+            json={"button": button},
+        )
+        if not r.is_success:
+            r.raise_for_status()
+        return {"button": button, "status": r.status_code}
+
+    # ── System Info ────────────────────────────────────────────────
+
+    async def get_sysinfo(self) -> dict:
+        """Retrieve device metadata: model, firmware version, capabilities."""
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/info")
+        r.raise_for_status()
+        return r.json()
+
+    # ── Mass Storage (on-device file persistence) ──────────────────
+
+    async def msd_upload(self, remote_path: str, data: bytes) -> dict:
+        """
+        Upload a file to the Comet's /userdata/media/ partition.
+        Used for persisting BIOS maps and state databases on-device.
+
+        remote_path: relative path under /userdata/media/ (e.g. "state/bios_sidecar.db")
+        """
+        if not self.http:
+            raise RuntimeError("Not connected")
+        # Normalize: strip leading slash, prepend userdata/media base
+        remote_path = remote_path.lstrip("/")
+        if not remote_path.startswith("userdata/media/"):
+            remote_path = f"userdata/media/{remote_path}"
+
+        r = await self.http.post(
+            f"{self.base_url}/api/msd/write",
+            data={"path": remote_path},
+            files={"file": ("blob", data, "application/octet-stream")},
+        )
+        if not r.is_success:
+            r.raise_for_status()
+        return {"path": remote_path, "size": len(data), "status": r.status_code}
+
