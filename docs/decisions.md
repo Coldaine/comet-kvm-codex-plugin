@@ -11,7 +11,7 @@ Runtime screenshots are persisted temporarily for retry, debugging, and map-buil
 
 This project's end state is a packaged plugin distributed for installation, not a Git repo that accumulates runtime data forever. The Git repo is the *source* of the package. Runtime artifacts (BIOS maps, screenshots, experiment records) live in the install location at runtime, not in the repo source tree. This is why maps are not committed — they're user data, not project knowledge.
 
-## D3 — Cartography skill placement: reference under comet-bios-triage
+## D3 — Cartography skill placement: reference under active plans
 
 BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It is documented under `docs/architecture.md` and active plans (e.g. `docs/plans/01-vlm-mcp-integration-plan.md`). The existing skill's trigger surface already covers BIOS workflows; cartography is a prerequisite step within that workflow, not a separate capability.
 
@@ -31,9 +31,9 @@ The ability to match a live screen against stored maps from *similar* boards (no
 
 `glkvm_mcp.py` is currently a single-file MCP server. It already runs two background asyncio loops (watchdog + pinger) and holds session state. The planned state engine will join as a third background loop in the same file. This is not a hard constraint — if the file's complexity grows past the point where a single file is maintainable (e.g. after adding the state engine and crawler-driving hooks), it may be split into modules within the same package. That split, if it comes, separates transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) — not into separate MCP servers.
 
-## D7 — State engine deployment: internal asyncio loop
+## D7 — State engine deployment: internal asyncio tracking
 
-The stateful screen-level position tracker runs as an internal asyncio background task inside `glkvm_mcp.py`, joining the existing `_watchdog_loop` (40ms) and `_pinger_loop` (1s). It is exposed via read-only MCP tools (`kvm_current_screen`, `kvm_in_sync`, etc.). It is maintained by deterministic code, not the main LLM. The MCP server already holds session state and runs background tasks — this is the existing pattern, not new architecture.
+The stateful screen-level position tracker runs inside the MCP server process, keeping track of which graph node the session is currently on. Instead of running a background loop that constantly polls (which is slow and expensive), the state tracker is updated on-demand when the Driver Agent calls tools like `bios_observe_state` or `bios_set_setting`. The MCP server matches screens locally using perceptual hashes and OCR fingerprints (`kvm_match_screen`), calling the VLM tool (`kvm_vlm_parse`) only when grounding is needed.
 
 ## D8 — Two granularity levels: workflow phases vs screen position
 
