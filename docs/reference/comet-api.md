@@ -198,10 +198,44 @@ OCR runs **on the host**, not on the Comet:
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — device ships with self-signed certificate; `verify=False` in httpx client
-- **Credentials via Doppler** — the only secret is the Comet admin password, stored in Doppler as `GLCOMET_ADMIN_PASSWORD` in the `secrets_managment` project (`dev` config). The `doppler.yaml` at repo root points to the correct project. Run `doppler run -- uv run glkvm_mcp.py` to inject it. Host (`192.168.0.126`) and username (`admin`) are non-sensitive defaults stored in code/config.
-- **No credentials in repo** — password is never committed, logged, or stored in files. Doppler injects it as an environment variable at process start.
+- **No credentials in repo** — secrets are never committed, logged, or stored in files. They are injected as environment variables at process start, typically through the MCP client config `env` dict.
 - **stdio exposure warning** — do not expose the MCP server's stdio to a remote agent without confirming the target host is on a trusted network
 - **Remote access options:** Tailscale (native integration on Comet Pro), GL.iNet cloud service (`glkvm.com`), or VPN
+
+### Environment Variables
+
+The server reads these from its environment. They can be injected via shell export, `.env`, MCP client config (`env` in `StdioTransport`), or Doppler.
+
+| Variable | Secret? | Required | Default | Description |
+|---|---|---|---|---|
+| `COMET_PASSWORD` | **yes** | yes | — | Comet KVM admin password |
+| `COMET_HOST` | no | no | `192.168.0.126` | LAN IP of the Comet |
+| `COMET_USERNAME` | no | no | `admin` | Comet login username |
+| `VLM_API_KEY` | **yes** | for VLM | — | OpenAI-compatible API key (OpenRouter, OpenAI, or set to any value for local Ollama) |
+| `VLM_PROVIDER` | no | no | `mock` | `openrouter` \| `ollama` \| `vllm` \| `openai` \| `mock` |
+| `VLM_MODEL` | no | no | provider default | Model string routed by litellm (e.g. `openrouter/qwen/qwen-2-vl-72b-instruct`) |
+| `VLM_BASE_URL` | no | no | provider default | Override API endpoint (e.g. `http://localhost:11434/v1` for Ollama) |
+
+#### MCP Client Config Example
+
+```json
+{
+  "mcpServers": {
+    "comet-kvm": {
+      "command": "uv",
+      "args": ["run", "glkvm_mcp.py"],
+      "env": {
+        "COMET_PASSWORD": "your-password-here",
+        "COMET_HOST": "192.168.0.126",
+        "VLM_API_KEY": "sk-or-...",
+        "VLM_PROVIDER": "openrouter"
+      }
+    }
+  }
+}
+```
+
+For local development with Doppler: `doppler run -- uv run glkvm_mcp.py`.
 
 > **Source:** `glkvm_mcp.py` docstring lines 27-29 and `README.md#security`. Verified 2026-07-07.
 
