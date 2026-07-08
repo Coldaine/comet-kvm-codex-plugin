@@ -24,6 +24,7 @@ Thumbs.db
 *.pem
 config.yaml
 state/*.json
+state/*.db
 runs/*
 !runs/.gitkeep
 
