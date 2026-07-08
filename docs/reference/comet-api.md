@@ -64,20 +64,44 @@ Response: JPEG image bytes
 
 > **Source:** `glkvm_mcp.py` lines 608, 632, 789, 821. Verified 2026-07-07.
 
-### Endpoints NOT Exercised (Potential for Future Use)
+### Endpoints Confirmed But Not Yet Exercised
 
-The PiKVM API surface is broader than what `glkvm_mcp.py` currently touches. Based on PiKVM documentation and the GL.iNet issue tracker, additional endpoints likely include:
+The following endpoints were probed on 2026-07-07 against the target Comet at `192.168.0.126`. All return `401 Unauthorized` when unauthenticated — confirming they exist and are active, not `404`:
 
-- **Mass Storage / Virtual Media:** `POST /api/msd/*` — mount ISOs/images to the target machine via USB emulation. Referenced in `gl-inet/glkvm#14` via `/etc/kvmd/override.yaml` config. **Deferred scope.**
-- **ATX Power Control:** `POST /api/atx/*` — power on/off/reset the target. **Requires the ATX add-on board** (separate hardware accessory that wires to the motherboard's power/reset headers). Without this board, the Comet cannot physically power cycle the target machine. The API endpoints exist on the device but will return errors if no ATX board is connected. **Not yet wrapped in MCP tools.**
-- **System Info:** likely `GET /api/sysinfo` or similar — device status, storage info. **Not yet probed.**
-- **GPIO:** `POST /api/gpio/*` — for ATX board control. **Deferred scope.**
+| Endpoint | Response | Purpose |
+|---|---|---|
+| `GET /api/info` | `401` | Device metadata, firmware version, hardware info |
+| `POST /api/atx/*` | `401` | ATX power control — power on/off/reset the target |
+| `POST /api/msd/*` | `401` | Mass Storage Device — upload ISOs/images to `/userdata/media/` |
+| `POST /api/gpio/*` | `401` | GPIO pin control for ATX board |
 
-> **Key limitation for BIOS workflows:** Without the ATX board, rebooting the target and entering BIOS requires manual intervention (physically pressing the power button). The MCP server can send keystrokes (`kvm_send_keys("Delete")`, `kvm_hold_key("F2", 500)` etc.) during POST, but cannot trigger the reboot itself. A practical workflow: manually power on → agent polls screenshots until POST screen detected → agent mashes BIOS entry key.
+### ATX Power Control (`POST /api/atx/*`)
 
-> **Sources:**
-> - GitHub issue `gl-inet/glkvm#14`: references `/etc/kvmd/override.yaml` for MSD config, ATX board coexistence with USB storage. Accessed 2026-07-07.
-> - `docs/NORTH_STAR.md` — current scope is BIOS cartography and MSI Z690 tuning; ATX/MSD are not included in the first spike. Verified 2026-07-07.
+**Requires the ATX add-on board** — a separate hardware accessory that wires to the motherboard's power/reset headers. Without this board, the API will return an error even when authenticated.
+
+The PiKVM ATX API typically supports:
+- `POST /api/atx/power` with `{"action": "on"|"off"|"reset"}`
+- `POST /api/atx/click` with `{"button": "power"|"reset"}` (momentary press, ~200ms)
+
+MCP tools: `comet_atx_power`, `comet_atx_click` (in `glkvm_mcp.py`).
+
+### Mass Storage (`POST /api/msd/*`)
+
+The Comet's `/userdata/media` partition (~5.3GB free on the 8GB model) is the write target for MSD operations. This is where BIOS maps and state databases should be persisted per `docs/decisions.md` D4.
+
+MCP tools: `comet_msd_upload` (in `glkvm_mcp.py`) — uploads a file to `/userdata/media/` for on-device state persistence.
+
+### System Info (`GET /api/info`)
+
+Returns device metadata: model, firmware version, serial, hardware capabilities. Useful for agent self-discovery.
+
+MCP tool: `comet_sysinfo` (in `glkvm_mcp.py`).
+
+### GPIO (`POST /api/gpio/*`)
+
+Low-level GPIO control for the ATX board. Typically not needed directly — the ATX API wraps GPIO operations.
+
+> **Probe date:** 2026-07-07 against `192.168.0.126`. All four endpoints returned `401` (not `404`), confirming they are active on this device.
 
 ## MCP Tools Exposed by `glkvm_mcp.py`
 

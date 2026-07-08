@@ -187,6 +187,35 @@ async def kvm_status() -> dict:
         "ws_open": r.client.is_connected()
     }
 
+@mcp.tool(name="comet_atx_power", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_atx_power(action: str) -> dict:
+    """Power on/off/reset the target via ATX board. Action: 'on', 'off', 'reset'."""
+    client = _require_client()
+    return await client.atx_power(action)
+
+@mcp.tool(name="comet_atx_click", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_atx_click(button: str) -> dict:
+    """Momentary press of power/reset button ('power' or 'reset', ~200ms pulse)."""
+    client = _require_client()
+    return await client.atx_click(button)
+
+@mcp.tool(name="comet_sysinfo", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_sysinfo() -> dict:
+    """Retrieve device metadata: model, firmware version, capabilities."""
+    client = _require_client()
+    return await client.get_sysinfo()
+
+@mcp.tool(name="comet_msd_upload", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_msd_upload(remote_path: str, local_path: str) -> dict:
+    """Upload a local file to the Comet's /userdata/media/ partition for on-device persistence."""
+    client = _require_client()
+    try:
+        with open(local_path, "rb") as f:
+            data = f.read()
+    except Exception as e:
+        raise ValueError(f"Failed to read local file {local_path}: {e}")
+    return await client.msd_upload(remote_path, data)
+
 if __name__ == "__main__":
     import warnings
     warnings.filterwarnings("ignore", message="Unverified HTTPS request")
