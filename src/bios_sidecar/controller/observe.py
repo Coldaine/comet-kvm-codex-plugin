@@ -55,8 +55,7 @@ class StateObserver:
 
         # 3. Call VLM perception client (with OCR context & previous state hint)
         prev_dict = previous_state.to_dict() if previous_state else None
-        vlm_res = await asyncio.to_thread(
-            self.vlm_client.parse_screenshot,
+        vlm_res = await self.vlm_client.parse_screenshot(
             img_bytes,
             previous_state=prev_dict,
             last_action=last_action,

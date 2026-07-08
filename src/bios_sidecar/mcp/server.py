@@ -171,10 +171,31 @@ async def bios_apply_setting_change(plan_id: str, approval_id: str, capability_i
 async def bios_grant_human_approval(approval_id: str, approved_by: str = "operator") -> dict:
     """
     Grants/authorizes a pending mutation approval.
+
+    NOTE: This represents an OUT-OF-BAND operator action, not a driver-agent
+    self-approval. The automated tuning agent must not call this to approve its
+    own proposals; a human operator (or operator UI) invokes it.
     """
     r = get_runtime()
     ok = r.policy_engine.approval_tracker.grant_approval(approval_id, approved_by)
     return {"granted": ok, "approval_id": approval_id}
+
+@mcp.tool()
+async def bios_save_and_reboot(approval_id: str) -> dict:
+    """
+    Commit staged BIOS changes to NVRAM and reboot the target.
+
+    Policy-gated: sends F10, VLM-verifies the save/confirmation dialog is present,
+    and confirms only if the dialog matches expectations. Requires an approved
+    save token (granted out-of-band).
+    """
+    r = get_runtime()
+    ok, final, msg = await r.save_and_reboot(approval_id)
+    return {
+        "success": ok,
+        "state": final.to_dict() if final else None,
+        "message": msg,
+    }
 
 @mcp.tool()
 async def bios_abort_and_recover() -> dict:
@@ -191,3 +212,86 @@ async def bios_export_trace() -> dict:
     ledger = TraceLedger(r.store)
     file_path = ledger.export_run_trace_json(r.run_id)
     return {"trace_file": file_path, "bytes": os.path.getsize(file_path)}
+
+
+# ===========================================================================
+# 3. Tier-3 internal/admin tools — perception primitives
+# ===========================================================================
+
+def _resolve_screenshot_ref(screenshot_ref: str) -> str:
+    """Resolve a screenshot cache id or relative name to an absolute path."""
+    r = get_runtime()
+    cache_dir = r.capture_mgr.cache_dir
+    candidates = [
+        os.path.join(cache_dir, screenshot_ref),
+        os.path.join(cache_dir, f"{screenshot_ref}.jpg"),
+        screenshot_ref,
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    raise FileNotFoundError(f"Screenshot ref not found in cache: {screenshot_ref}")
+
+
+@mcp.tool(name="kvm_vlm_parse", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def kvm_vlm_parse(screenshot_ref: str, previous_state_id: Optional[str] = None, last_action: Optional[str] = None) -> dict:
+    """
+    Tier-3 audited VLM perception. Parse a cached BIOS screenshot with the
+    configured VLM (OpenRouter or local) and return a structured JSON description.
+    Called by the sidecar internally; exposed here for debugging and auditing.
+    """
+    r = get_runtime()
+    path = _resolve_screenshot_ref(screenshot_ref)
+    with open(path, "rb") as f:
+        img_bytes = f.read()
+
+    prev = None
+    if previous_state_id:
+        prev = {"location": {"screen_title": previous_state_id}}
+
+    parsed = await r.vlm_client.parse_screenshot(img_bytes, previous_state=prev, last_action=last_action)
+
+    # Audit: record the perception transaction in the trace ledger.
+    try:
+        from src.bios_sidecar.domain.enums import EventClass
+        await r.trace.log_event(
+            run_id=r.run_id,
+            event_type=EventClass.VLM_PARSED,
+            artifacts={"screenshot_ref": screenshot_ref, "screen_title": parsed.get("screen_title")},
+        )
+    except Exception:
+        LOG.debug("VLM trace logging skipped", exc_info=True)
+
+    return parsed
+
+
+@mcp.tool(name="kvm_match_screen", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def kvm_match_screen(screenshot_ref: str, expected_node_id: Optional[str] = None) -> dict:
+    """
+    Tier-3 local perceptual match (no VLM). Compare a cached screenshot against
+    the state graph via perceptual hash + OCR fingerprint. Used to verify a
+    navigation hop without incurring VLM latency/cost.
+    """
+    r = get_runtime()
+    path = _resolve_screenshot_ref(screenshot_ref)
+    with open(path, "rb") as f:
+        img_bytes = f.read()
+
+    from src.bios_sidecar.state.hashing import calculate_visual_phash, calculate_ocr_hash
+
+    phash = calculate_visual_phash(img_bytes)
+    ocr_res = r.ocr_mgr.run_ocr(img_bytes)
+    ocr_hash = calculate_ocr_hash(ocr_res.get("elements", []))
+
+    node, confidence = r.matcher.match_state(phash, ocr_hash, semantic_hash="")
+    matched_id = node.node_id if node else None
+    result = {
+        "matched": node is not None,
+        "matched_node_id": matched_id,
+        "confidence": round(confidence, 3),
+    }
+    if expected_node_id is not None:
+        result["expected_node_id"] = expected_node_id
+        result["matches_expected"] = matched_id == expected_node_id
+    return result
+

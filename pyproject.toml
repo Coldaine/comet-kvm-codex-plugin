@@ -32,3 +32,8 @@ Issues     = "https://github.com/Coldaine/comet-kvm-codex-plugin/issues"
 Source     = "https://github.com/Coldaine/comet-kvm-codex-plugin"
 UpstreamGLKVMMCP = "https://github.com/kennypeh85/glkvm-mcp"
 UpstreamGLKVM = "https://github.com/gl-inet/glkvm"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
