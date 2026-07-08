@@ -1,7 +1,7 @@
 # R5 — Trace Ledger Never Called
 
 **Severity:** 🔴 Critical
-**Filed against:** PR #12 (`feat/bios-sidecar-runtime`)
+**Filed against:** PR #12 (`feat/mcp-tool-surface`)
 **Design section:** §16 — Trace and evidence design
 
 ---

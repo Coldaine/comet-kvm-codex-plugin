@@ -1,7 +1,7 @@
 # R6 — Adapters Never Wired
 
 **Severity:** 🟡 High
-**Filed against:** PR #12 (`feat/bios-sidecar-runtime`)
+**Filed against:** PR #12 (`feat/mcp-tool-surface`)
 **Design section:** §15 — MSI Z690 adapter
 
 ---

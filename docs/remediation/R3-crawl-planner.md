@@ -1,7 +1,7 @@
 # R3 — Crawl Planner Is Not DFS
 
 **Severity:** 🔴 Critical
-**Filed against:** PR #12 (`feat/bios-sidecar-runtime`)
+**Filed against:** PR #12 (`feat/mcp-tool-surface`)
 **Design section:** §12 — Crawl planner
 
 ---

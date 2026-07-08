@@ -152,3 +152,61 @@ class BiosMutator:
         if str(final_val).strip().lower() != desired_value.strip().lower():
             return False, post_state, f"Post-change verification failed: expected {desired_value!r}, observed {final_val!r}."
         return True, post_state, "Successfully modified setting. Value is confirmed changed visually."
+
+    async def save_and_reboot(
+        self,
+        client: CometClient,
+        run_id: str,
+        device_id: str,
+        approval_id: str,
+    ) -> Tuple[bool, Optional[BiosState], str]:
+        """
+        Commit staged BIOS changes to NVRAM and reboot.
+
+        Flow:
+            1. Validate save approval.
+            2. Observe current state.
+            3. Policy-gate the F10 save chord.
+            4. Send F10, capture the confirmation modal.
+            5. VLM-verify a save/confirmation dialog is on screen.
+            6. Confirm with Enter only if the dialog matches expectations.
+        """
+        # 1. Approval gate — save must be explicitly authorized.
+        if not self.policy_engine.approval_tracker.is_approved(approval_id):
+            return False, None, f"Unauthorized save. Approval {approval_id} must be granted first."
+
+        # 2. Ground current state.
+        state = await self.observer.observe_state(client, run_id, device_id)
+
+        # 3. Policy-gate F10 (save) under supervised mutation.
+        decision = self.policy_engine.evaluate(
+            state, "F10", PolicyProfile.SUPERVISED_MUTATION, approval_id=approval_id
+        )
+        if decision.decision != "allowed":
+            return False, state, f"Save (F10) blocked by policy: {decision.reason}"
+
+        # 4. Send F10 and wait for the confirmation modal.
+        await client.send_combo("F10")
+        await self.settler.wait_for_settle(client)
+        modal_state = await self.observer.observe_state(client, run_id, device_id)
+
+        # 5. Verify a save/confirmation dialog is actually present before confirming.
+        title = (modal_state.location.screen_title or "").lower()
+        modal_present = getattr(modal_state.modal, "present", False)
+        looks_like_save = any(
+            kw in title for kw in ("save", "confirm", "reset", "reboot", "exit")
+        )
+        if not (modal_present or looks_like_save):
+            return (
+                False,
+                modal_state,
+                "Save confirmation dialog not detected after F10; aborting without confirm.",
+            )
+
+        # 6. Confirm the save.
+        await client.send_combo("Enter")
+        await self.settler.wait_for_settle(client)
+
+        LOG.info("Save confirmed for run %s; target is rebooting.", run_id)
+        return True, modal_state, "Save confirmed. Target committing changes and rebooting."
+

@@ -1,9 +1,11 @@
 # Remediation Index
 
+> **Note:** These documents are historical reference artifacts from a past audit pass. The issue catalog and analysis remain useful context, but statuses and PR references may be stale. See `docs/plans/01-vlm-mcp-integration-plan.md` for current work.
+
 **Generated:** 2026-07-07
 **Updated:** 2026-07-07 (post-fix pass)
 **Context:** Post-implementation review of the BIOS KVM sidecar runtime against the original system design plan.
-**Branch:** `feat/bios-sidecar-runtime`
+**Branch:** `feat/mcp-tool-surface`
 
 ---
 

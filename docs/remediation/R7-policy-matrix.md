@@ -1,7 +1,7 @@
 # R7 — Policy Matrix YAML Is Dead Config
 
 **Severity:** 🟡 High
-**Filed against:** PR #12 (`feat/bios-sidecar-runtime`)
+**Filed against:** PR #12 (`feat/mcp-tool-surface`)
 **Design section:** §9 — Safety policy design
 
 ---

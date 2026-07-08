@@ -9,11 +9,34 @@ from src.bios_sidecar.perception.contract import SYSTEM_PROMPT, USER_PROMPT_TEMP
 
 LOG = logging.getLogger("bios_sidecar.perception.vlm")
 
+# Providers that require an API key. Local providers (ollama/vllm) do not.
+_KEY_REQUIRED_PROVIDERS = {"openrouter", "openai"}
+
+
 class VLMClient:
-    def __init__(self, api_key: Optional[str] = None, provider: str = "mock"):
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("VLM_API_KEY")
-        self.provider = provider
-        self.client = httpx.AsyncClient(timeout=30.0)
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ):
+        # Provider resolution: explicit arg > env > mock default
+        self.provider = provider or os.environ.get("VLM_PROVIDER", "mock")
+        self.api_key = (
+            api_key
+            or os.environ.get("OPENROUTER_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or os.environ.get("VLM_API_KEY")
+        )
+        # Model string routes litellm to OpenRouter or local (e.g.
+        # "openrouter/qwen/qwen-2-vl-72b-instruct" or "ollama/llama3.2-vision").
+        self.model = model or os.environ.get("VLM_MODEL")
+        self.base_url = base_url or os.environ.get("VLM_BASE_URL")
+        self.client = httpx.AsyncClient(timeout=60.0)
+
+    def _requires_key(self) -> bool:
+        return self.provider in _KEY_REQUIRED_PROVIDERS
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -37,7 +60,9 @@ class VLMClient:
         - 2nd retry: fresh prompt.
         - 3rd: marks unparseable fallback.
         """
-        if self.provider == "mock" or not self.api_key:
+        # Fall back to mock when explicitly mocked, or when a key-required
+        # provider has no key configured (offline/test-safe default).
+        if self.provider == "mock" or (self._requires_key() and not self.api_key):
             return self._parse_mock(image_bytes)
 
         # Build prompts
@@ -92,7 +117,47 @@ class VLMClient:
         }
 
     async def _call_api(self, sys: str, user: str, img_b64: str) -> Dict[str, Any]:
-        """Performs actual HTTP call to the hosted API."""
+        """Performs the actual model call, routing OpenRouter/local via litellm."""
+        data_uri = f"data:image/jpeg;base64,{img_b64}"
+        messages = [
+            {"role": "system", "content": sys},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user},
+                    {"type": "image_url", "image_url": {"url": data_uri}},
+                ],
+            },
+        ]
+
+        # OpenRouter and local (ollama/vllm) both route through litellm, which
+        # normalizes the OpenAI-compatible multimodal message format and selects
+        # the backend from the model string (e.g. "openrouter/..." or "ollama/...").
+        if self.provider in ("openrouter", "ollama", "vllm", "litellm"):
+            import litellm
+
+            model = self.model or self._default_model()
+            kwargs: Dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": VLM_DEFAULT_PARAMS["temperature"],
+                "max_tokens": VLM_DEFAULT_PARAMS["max_tokens"],
+            }
+            if self.provider == "openrouter" and self.api_key:
+                kwargs["api_key"] = self.api_key
+            if self.base_url:
+                kwargs["api_base"] = self.base_url
+            # Request JSON output where the backend supports it.
+            try:
+                kwargs["response_format"] = VLM_DEFAULT_PARAMS["response_format"]
+                resp = await litellm.acompletion(**kwargs)
+            except Exception:
+                # Some local backends reject response_format; retry without it.
+                kwargs.pop("response_format", None)
+                resp = await litellm.acompletion(**kwargs)
+            content = resp["choices"][0]["message"]["content"]
+            return self._extract_json(content)
+
         if self.provider == "openai":
             url = "https://api.openai.com/v1/chat/completions"
             headers = {
@@ -100,17 +165,8 @@ class VLMClient:
                 "Content-Type": "application/json",
             }
             body = {
-                "model": "gpt-4o",
-                "messages": [
-                    {"role": "system", "content": sys},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": user},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
-                        ],
-                    },
-                ],
+                "model": self.model or "gpt-4o",
+                "messages": messages,
                 "temperature": VLM_DEFAULT_PARAMS["temperature"],
                 "max_tokens": VLM_DEFAULT_PARAMS["max_tokens"],
                 "response_format": VLM_DEFAULT_PARAMS["response_format"],
@@ -118,9 +174,30 @@ class VLMClient:
             r = await self.client.post(url, headers=headers, json=body)
             r.raise_for_status()
             content = r.json()["choices"][0]["message"]["content"]
-            return json.loads(content)
-        else:
-            raise ValueError(f"Unsupported provider: {self.provider}")
+            return self._extract_json(content)
+
+        raise ValueError(f"Unsupported provider: {self.provider}")
+
+    def _default_model(self) -> str:
+        """Sensible default model per provider when VLM_MODEL is unset."""
+        return {
+            "openrouter": "openrouter/qwen/qwen-2-vl-72b-instruct",
+            "ollama": "ollama/llama3.2-vision",
+            "vllm": "hosted_vllm/qwen2.5-vl",
+        }.get(self.provider, "openrouter/qwen/qwen-2-vl-72b-instruct")
+
+    @staticmethod
+    def _extract_json(content: str) -> Dict[str, Any]:
+        """Parse a JSON object from a model response, tolerating code fences."""
+        content = content.strip()
+        if content.startswith("```"):
+            # Strip ```json ... ``` fences.
+            content = content.split("```", 2)[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        return json.loads(content)
+
 
     def _validate_vlm_schema(self, res: Any) -> bool:
         """Lightweight check to make sure the dict matches the schema."""

@@ -11,9 +11,9 @@ Runtime screenshots are persisted temporarily for retry, debugging, and map-buil
 
 This project's end state is a packaged plugin distributed for installation, not a Git repo that accumulates runtime data forever. The Git repo is the *source* of the package. Runtime artifacts (BIOS maps, screenshots, experiment records) live in the install location at runtime, not in the repo source tree. This is why maps are not committed — they're user data, not project knowledge.
 
-## D3 — Cartography skill placement: reference under comet-bios-triage
+## D3 — Cartography skill placement: reference under active plans
 
-BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It will be documented as a reference file under `skills/comet-bios-triage/references/` (e.g. `bios-cartography.md`). The existing skill's trigger surface already covers BIOS workflows; cartography is a prerequisite step within that workflow, not a separate capability.
+BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It is documented under `docs/architecture.md` and active plans (e.g. `docs/plans/01-vlm-mcp-integration-plan.md`). The existing skill's trigger surface already covers BIOS workflows; cartography is a prerequisite step within that workflow, not a separate capability.
 
 ## D4 — Map store runtime location: on-Comet preferred, pending verification
 
@@ -31,9 +31,9 @@ The ability to match a live screen against stored maps from *similar* boards (no
 
 `glkvm_mcp.py` is currently a single-file MCP server. It already runs two background asyncio loops (watchdog + pinger) and holds session state. The planned state engine will join as a third background loop in the same file. This is not a hard constraint — if the file's complexity grows past the point where a single file is maintainable (e.g. after adding the state engine and crawler-driving hooks), it may be split into modules within the same package. That split, if it comes, separates transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) — not into separate MCP servers.
 
-## D7 — State engine deployment: internal asyncio loop
+## D7 — State engine deployment: internal asyncio tracking
 
-The stateful screen-level position tracker runs as an internal asyncio background task inside `glkvm_mcp.py`, joining the existing `_watchdog_loop` (40ms) and `_pinger_loop` (1s). It is exposed via read-only MCP tools (`kvm_current_screen`, `kvm_in_sync`, etc.). It is maintained by deterministic code, not the main LLM. The MCP server already holds session state and runs background tasks — this is the existing pattern, not new architecture.
+The stateful screen-level position tracker runs inside the MCP server process, keeping track of which graph node the session is currently on. Instead of running a background loop that constantly polls (which is slow and expensive), the state tracker is updated on-demand when the Driver Agent calls tools like `bios_observe_state`, `bios_navigate_to`, or `bios_apply_setting_change`. The MCP server matches screens locally using perceptual hashes and OCR fingerprints (`kvm_match_screen`), calling the VLM tool (`kvm_vlm_parse`) only when grounding is needed.
 
 ## D8 — Two granularity levels: workflow phases vs screen position
 
@@ -52,3 +52,16 @@ The crawler produces two views of the same crawl data:
 - **Screen-node graph** (for the state engine): a network of screen nodes keyed by perceptual hash + OCR fingerprint, with edges labeled by the keystroke that transitions between them. The state engine matches live screenshots against these nodes for transition validation.
 
 The crawler produces the graph (raw crawl data). A post-processing step derives the index from the graph. Both are persisted. See `docs/architecture.md` §9 for the full rationale.
+
+## D10 — VLM framework: `instructor` + `litellm`, not hand-rolled
+
+We do not build our own VLM transport, retry, or JSON-repair logic. We adopt two well-maintained libraries:
+
+- **`litellm`** provides one call interface across providers. A single `model` string selects an OpenRouter vision model (`openrouter/qwen/qwen-2-vl-72b-instruct`, `openrouter/google/gemini-flash-1.5`, etc.) or a locally served small VLM (`ollama/llama3.2-vision`, `ollama/qwen2.5-vl`, or a vLLM OpenAI-compatible endpoint). This satisfies the "OpenRouter vision model OR local small LLM" requirement without provider-specific code.
+- **`instructor`** wraps the call to return a Pydantic-validated object mapping onto `BiosState`. It handles corrective retries on malformed JSON, replacing the hand-rolled 3-attempt retry loop in `src/bios_sidecar/perception/vlm_client.py`.
+
+Provider selection is by environment (`VLM_PROVIDER`, `VLM_MODEL`, `VLM_BASE_URL`, `OPENROUTER_API_KEY`). `mock` remains the default for tests and offline development. Only `OPENROUTER_API_KEY` is a secret (Doppler); local serving needs no key. See `docs/plans/01-vlm-mcp-integration-plan.md` §3.
+
+## D11 — Tool surface granularity: phase-preserving, three-tier
+
+The MCP surface exposes a compact but phase-preserving set of stateful, policy-gated `bios_*` tools (Tier 1), inspection resources (Tier 2), and segregated raw/perception primitives (Tier 3). We reject both the collapsed single-tool surface (`bios_set_setting`) — which would hold the KVM session hostage during out-of-band human approval and erase the observe/crawl/navigate/propose/apply/save/recover/trace seams — and the "raw HID everywhere" surface that lets the driver agent bypass policy gating. The driver agent gets semantic tools, not key-by-key tools. Human approval is out-of-band; the driver never self-approves. See `docs/plans/01-vlm-mcp-integration-plan.md` §2.

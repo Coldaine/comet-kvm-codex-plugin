@@ -51,6 +51,7 @@ _TRANSITION_MATRIX = {
         "navigate_to": RuntimeState.NAVIGATING,
         "propose_setting_change": RuntimeState.SYNCED,
         "apply_setting_change": RuntimeState.MUTATING,
+        "save_and_reboot": RuntimeState.MUTATING,
         "disconnect_comet": RuntimeState.DISCONNECTED,
     },
     RuntimeState.CRAWLING: {
@@ -62,6 +63,7 @@ _TRANSITION_MATRIX = {
         "abort_and_recover": RuntimeState.RECOVERING,
     },
     RuntimeState.MUTATING: {
+        "save_and_reboot": RuntimeState.MUTATING,
         "disconnect_comet": RuntimeState.DISCONNECTED,
         "abort_and_recover": RuntimeState.RECOVERING,
     },
@@ -339,6 +341,30 @@ class StatefulBiosRuntime:
         except Exception as e:
             self.state = RuntimeState.DEGRADED
             LOG.error("Mutation failure: %s", e)
+            raise e
+
+    async def save_and_reboot(self, approval_id: str) -> Tuple[bool, Optional[BiosState], str]:
+        if self.client is None or not self.client.is_connected():
+            raise RuntimeError("Not connected.")
+        self._guard_transition("save_and_reboot")
+        self.state = RuntimeState.MUTATING
+        try:
+            ok, final, msg = await self.mutator.save_and_reboot(
+                self.client, self.run_id, self.device_id, approval_id
+            )
+            self.current_state_rec = final
+            self.state = RuntimeState.SYNCED if ok else RuntimeState.DEGRADED
+            await self.trace.log_event(
+                run_id=self.run_id,
+                event_type=EventClass.APPROVAL_GRANTED,
+                requested_action={"type": "save_and_reboot"},
+                policy_decision={"approval_id": approval_id, "success": ok},
+                state_after=final.state_id if final else None,
+            )
+            return ok, final, msg
+        except Exception as e:
+            self.state = RuntimeState.DEGRADED
+            LOG.error("Save/reboot failure: %s", e)
             raise e
 
     async def abort_and_recover(self) -> str:

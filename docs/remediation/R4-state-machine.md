@@ -1,7 +1,7 @@
 # R4 — Runtime State Machine Is Decorative
 
 **Severity:** 🟡 High
-**Filed against:** PR #12 (`feat/bios-sidecar-runtime`)
+**Filed against:** PR #12 (`feat/mcp-tool-surface`)
 **Design section:** §10 — Runtime state machine
 
 ---

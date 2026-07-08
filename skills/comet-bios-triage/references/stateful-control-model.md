@@ -7,7 +7,7 @@ The MCP server provides transport (screenshots, keyboard, mouse, OCR). The workf
 | Level | What it tracks | Who maintains it | Lifetime | Example question |
 |-------|---------------|-----------------|----------|-----------------|
 | **Workflow phase** (this doc) | Which stage of an experiment are we in | The agent + run ledger | Across sessions, persisted | "Are we in the bios-edit phase?" |
-| **Screen position** (state engine) | Which BIOS menu node are we on right now | Background asyncio loop in `glkvm_mcp.py` | Ephemeral, per live session | "Are we on the Overclocking submenu row 3?" |
+| **Screen position** (state engine) | Which BIOS menu node are we on right now | The sidecar state tracker in `glkvm_mcp.py` | Ephemeral, per live session | "Are we on the Overclocking submenu row 3?" |
 
 Neither subsumes the other. The phase model governs the experiment lifecycle. The state engine governs live navigation safety within a phase — it validates that each keystroke produced the screen transition the stored map predicted.
 
@@ -33,11 +33,11 @@ If no map exists, the agent should either run cartography first or fall back to 
 
 ## Screen-Level State Engine
 
-When a BIOS map is loaded, the state engine (an internal asyncio loop in `glkvm_mcp.py`) provides:
+When a BIOS map is loaded, the state engine (running inside `glkvm_mcp.py` during tool execution) provides:
 
-- **Current screen identification** — matches live screenshots against map nodes via perceptual hash + OCR fingerprint.
-- **Transition validation** — when a keystroke is sent, the engine checks the next screen against the expected destination edge from the map. If it doesn't match, it raises a drift alarm.
-- **Background polling** — runs on its own timer, independent of the main LLM's tool calls. The LLM queries results via read-only tools; it does not drive the poll loop.
+- **Current screen identification** — matches live screenshots against map nodes via perceptual hash + OCR fingerprint (`kvm_match_screen`).
+- **Transition validation** — when keys are sent during path execution, the engine validates the destination edge from the map. If it doesn't match, it halts and triggers VLM grounding.
+- **On-Demand VLM Grounding** — calls the VLM tool (`kvm_vlm_parse`) only when entering/syncing, checking options, or verifying post-mutation values to avoid API latency.
 
 The state engine does not replace the workflow phases. It operates *within* a phase (typically `bios-read`, `bios-edit`, and `save-confirm`) to ensure the agent is where it thinks it is before taking an action.
 
@@ -60,15 +60,12 @@ Never transition from `bios-edit` to `save-confirm` unless the changed field is 
 
 When the state engine is active, these transitions are additionally gated by screen-node validation — the expected node must match the observed screen before the transition is allowed.
 
-## First Live-Safe MCP Sequence
+## Safe Tuning MCP Sequence
 
-Use only after credentials are supplied through the chosen MCP client configuration.
-
-1. `kvm_connect`
-2. `kvm_status`
-3. `kvm_screenshot`
-4. `kvm_ocr_screenshot`
-5. `kvm_release_all`
-6. `kvm_disconnect`
-
-This sequence does not intentionally send target-changing input. If the screenshot is blank, fix video/EDID/cabling before any BIOS workflow.
+1. `bios_connect` — establish session.
+2. `bios_observe_state` — verify initial position and sync state.
+3. `bios_navigate_to` — navigate to OC/CPU configuration nodes.
+4. `bios_propose_setting_change` — offline planning and policy evaluation.
+5. `bios_apply_setting_change` — apply the approved mutation directly and verify visually via the VLM tool.
+6. `bios_save_and_reboot` — execute save, verify dialog, and reboot.
+7. `bios_disconnect` — clean up connection.

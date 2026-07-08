@@ -11,11 +11,10 @@ Before changing BIOS settings, read:
 
 - `../../docs/architecture.md` — current BIOS cartography and state-engine design
 - `../../docs/vlm-prompt-contract.md` — current VLM perception contract
+- `../../docs/plans/01-vlm-mcp-integration-plan.md` — VLM-MCP boundary integration plan
 - `references/stateful-control-model.md`
 - `references/msi-z690-bios-workflow.md`
 - `references/hwinfo-run-loop.md`
-
-`references/bios-cartography.md` is retained only as a superseded historical draft; do not use it as current operating guidance.
 
 Rules:
 
