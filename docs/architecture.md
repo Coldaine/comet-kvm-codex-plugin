@@ -157,7 +157,7 @@ The Comet (GL-RM1) has a quad-core ARM Cortex-A7 @ 1.5GHz with no GPU. VLM infer
 
 ## 7. State Engine vs. VLM
 
-The stateful screen-level position tracker runs inside the MCP server process, keeping track of which graph node the session is currently on. Instead of running a background loop that constantly polls (which is slow and expensive), the state tracker is updated on-demand when the Driver Agent calls tools like `bios_observe_state` or `bios_set_setting`.
+The stateful screen-level position tracker runs inside the MCP server process, keeping track of which graph node the session is currently on. Instead of running a background loop that constantly polls (which is slow and expensive), the state tracker is updated on-demand when the Driver Agent calls tools like `bios_observe_state`, `bios_navigate_to`, or `bios_apply_setting_change`.
 
 The MCP server matches screens locally using perceptual hashes and OCR fingerprints via the `kvm_match_screen` tool, calling the VLM tool (`kvm_vlm_parse`) only when grounding is needed.
 
@@ -180,10 +180,10 @@ The crawler produces two views of the same crawl data:
    * The VLM parses the screen, returns the JSON, and the tracker aligns the session to `"EZ Mode"`.
 3. **Driver Agent** calls `bios_navigate_to("node_oc_settings")`.
    * The stateful tracker replays the keystroke path. It uses fast, local visual hashes and OCR fingerprints (`kvm_match_screen`) to track the cursor at each intermediate step without calling the VLM.
-4. **Driver Agent** calls `bios_propose_setting_change(...)` -> generates a plan.
+4. **Driver Agent** calls `bios_propose_setting_change("cpu_lite_load_mode", "Mode 3")` -> generates a plan.
 5. **[Operator grants approval out-of-band]**.
-6. **Driver Agent** calls `bios_set_setting(capability_id, desired_value, approval_id)`.
-   * The tracker navigates to the row, activates input, types the value directly, and hits Enter.
+6. **Driver Agent** calls `bios_apply_setting_change(plan_id, approval_id, capability_id, desired_value)`.
+   * The tracker verifies the row, activates input, types the value directly, and hits Enter.
    * The tracker calls `kvm_vlm_parse` to visually verify the change.
 7. **Driver Agent** calls `bios_save_and_reboot()`.
    * The tracker sends `"F10"`, calls the VLM to verify the confirm dialog is active, and hits `"Enter"`.

@@ -65,6 +65,7 @@ When the state engine is active, these transitions are additionally gated by scr
 1. `bios_connect` — establish session.
 2. `bios_observe_state` — verify initial position and sync state.
 3. `bios_navigate_to` — navigate to OC/CPU configuration nodes.
-4. `bios_set_setting` — apply the approved mutation directly (no option parsing, just direct value typing) and verify visually via the VLM tool.
-5. `bios_save_and_reboot` — execute save, verify dialog, and reboot.
-6. `bios_disconnect` — clean up connection.
+4. `bios_propose_setting_change` — offline planning and policy evaluation.
+5. `bios_apply_setting_change` — apply the approved mutation directly and verify visually via the VLM tool.
+6. `bios_save_and_reboot` — execute save, verify dialog, and reboot.
+7. `bios_disconnect` — clean up connection.
