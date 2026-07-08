@@ -6,6 +6,7 @@ import base64
 from typing import Optional, Dict, Any
 import httpx
 from src.bios_sidecar.perception.contract import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, VLM_DEFAULT_PARAMS
+from src.bios_sidecar.perception.models import BiosScreenParse
 
 LOG = logging.getLogger("bios_sidecar.perception.vlm")
 
@@ -34,6 +35,19 @@ class VLMClient:
         self.model = model or os.environ.get("VLM_MODEL")
         self.base_url = base_url or os.environ.get("VLM_BASE_URL")
         self.client = httpx.AsyncClient(timeout=60.0)
+        self._instructor_client: Any = None
+
+    def _get_instructor_client(self) -> Any:
+        """Lazily build an instructor-patched async litellm client."""
+        if self._instructor_client is None:
+            import instructor
+            import litellm
+
+            self._instructor_client = instructor.from_litellm(
+                litellm.acompletion,
+                mode=instructor.Mode.JSON,
+            )
+        return self._instructor_client
 
     def _requires_key(self) -> bool:
         return self.provider in _KEY_REQUIRED_PROVIDERS
@@ -134,8 +148,6 @@ class VLMClient:
         # normalizes the OpenAI-compatible multimodal message format and selects
         # the backend from the model string (e.g. "openrouter/..." or "ollama/...").
         if self.provider in ("openrouter", "ollama", "vllm", "litellm"):
-            import litellm
-
             model = self.model or self._default_model()
             kwargs: Dict[str, Any] = {
                 "model": model,
@@ -147,16 +159,30 @@ class VLMClient:
                 kwargs["api_key"] = self.api_key
             if self.base_url:
                 kwargs["api_base"] = self.base_url
-            # Request JSON output where the backend supports it.
+
+            # Prefer instructor for Pydantic-validated structured output.
             try:
-                kwargs["response_format"] = VLM_DEFAULT_PARAMS["response_format"]
-                resp = await litellm.acompletion(**kwargs)
-            except Exception:
-                # Some local backends reject response_format; retry without it.
-                kwargs.pop("response_format", None)
-                resp = await litellm.acompletion(**kwargs)
-            content = resp["choices"][0]["message"]["content"]
-            return self._extract_json(content)
+                client = self._get_instructor_client()
+                validated: BiosScreenParse = await client.create(
+                    response_model=BiosScreenParse,
+                    **kwargs,
+                )
+                return validated.model_dump()
+            except Exception as e:
+                # Some backends (or transient errors) reject the structured
+                # path; fall back to a raw litellm call and manual JSON extraction.
+                LOG.warning("instructor path failed (%s); falling back to raw litellm", e)
+                import litellm
+
+                try:
+                    fallback_kwargs = dict(kwargs)
+                    fallback_kwargs["response_format"] = VLM_DEFAULT_PARAMS["response_format"]
+                    resp = await litellm.acompletion(**fallback_kwargs)
+                except Exception:
+                    # Some local backends reject response_format; retry without it.
+                    resp = await litellm.acompletion(**kwargs)
+                content = resp["choices"][0]["message"]["content"]
+                return self._extract_json(content)
 
         if self.provider == "openai":
             url = "https://api.openai.com/v1/chat/completions"
