@@ -4,6 +4,8 @@
 > **Scope:** Repo-grounded audit of the Comet KVM BIOS/UEFI sidecar skill/tooling bundle.
 > **Method:** Evidence-only answers from current repository files. Proposed or missing items are labeled as such.
 
+> **Status:** Historical and superseded for product framing. Use these audits as evidence snapshots only; `docs/kvm-core.md` and `docs/decisions.md` supersede any policy/approval or VLM-as-peer-agent framing.
+
 ## Documents
 
 - [`01-executive-summary.md`](01-executive-summary.md) — short answer, current-state inventory, missing pieces, recommended next PR, and open experiments.

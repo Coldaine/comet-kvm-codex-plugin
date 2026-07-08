@@ -1,7 +1,9 @@
 # Plan 01: VLM-MCP Integration & Safe Agent-Driven Architecture
 
-> **Status:** Active
+> **Status:** Superseded by `docs/kvm-core.md` and current `docs/decisions.md`.
 > **Supersedes:** the monolithic in-process VLM design and the collapsed 5-tool surface.
+
+> **Supersession note:** This plan is historical. Its D10/D11 approval-token and policy-gated authority framing has been cut. `comet_raw_*` aliases are deprecated in documentation only, raw `kvm_*` tools remain available, and the VLM is sidecar-internal rather than a peer agent role.
 
 ## 1. Context and Goals
 

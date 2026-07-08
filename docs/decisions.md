@@ -7,9 +7,6 @@
 
 Runtime screenshots are persisted temporarily for retry, debugging, and map-building, then automatically purged after approximately 30 days. They are never committed to Git. The retention is a cleanup policy, not a git policy — the TTL runs against whatever runtime data directory the installed plugin uses (host-side or on-Comet).
 
-## D2 — Packaging end-state: plugin, not eternal Git repo
-
-This project's end state is a packaged plugin distributed for installation, not a Git repo that accumulates runtime data forever. The Git repo is the *source* of the package. Runtime artifacts (BIOS maps, screenshots, experiment records) live in the install location at runtime, not in the repo source tree. This is why maps are not committed — they're user data, not project knowledge.
 
 ## D3 — Cartography skill placement: reference under active plans
 
@@ -23,9 +20,9 @@ BIOS maps should persist on the Comet device itself, co-located with the hardwar
 
 **Fallback:** If on-Comet storage proves impractical, maps persist in the host-side plugin data directory. The VLM interpretation layer always runs on the host (the Comet has no GPU) regardless of where maps are stored.
 
-## D5 — Fuzzy matching against similar boards: future MCP tool
+## D5 — Fuzzy matching against similar boards: not a goal
 
-The ability to match a live screen against stored maps from *similar* boards (not just the exact same board/BIOS-version) is a future capability. It will be exposed as an MCP tool that the calling LLM can invoke to investigate matches. The exact matching algorithm (perceptual hash similarity threshold, OCR text overlap, graph topology comparison) is not yet designed.
+Fuzzy matching is not a core requirement. The driver agent can look at stored maps and then decide if a map is similar enough to be imported and reused. We prioritize agent-led comparison over automated heuristic matching.
 
 ## D6 — glkvm_mcp.py file structure: not a hard constraint
 
@@ -37,12 +34,12 @@ The stateful screen-level position tracker runs inside the MCP server process, k
 
 ## D8 — Two granularity levels: workflow phases vs screen position
 
+**Status: QUESTIONED.** User does not understand this concept yet; do not enshrine the workflow phase ledger as product architecture without re-evaluation.
+
 The project operates at two distinct granularity levels that complement, not replace, each other:
 
 - **Workflow level** (`stateful-control-model.md`): phases like `planned → preflight → bios-entry → bios-edit → save-confirm → windows-boot → hwinfo-log → analysis → done`. Agent-maintained, persisted in the run ledger. Asks "are we in the edit phase?"
 - **Screen level** (state engine): which BIOS menu node are we on right now, matched against a stored map. Background-maintained, ephemeral per session. Asks "are we on the Overclocking submenu row 3, and did that Enter press land where the map predicted?"
-
-Neither subsumes the other. The workflow phase model governs the experiment lifecycle; the screen-level state engine governs live navigation safety within a phase.
 
 ## D9 — Output format: Semantic Capability Index + screen-node graph
 
@@ -53,21 +50,36 @@ The crawler produces two views of the same crawl data:
 
 The crawler produces the graph (raw crawl data). A post-processing step derives the index from the graph. Both are persisted. See `docs/architecture.md` §9 for the full rationale.
 
-## D10 — VLM framework: `instructor` + `litellm`, not hand-rolled
+## D10 — REMOVED: VLM framework choice as product architecture
 
-We do not build our own VLM transport, retry, or JSON-repair logic. We adopt two well-maintained libraries:
+Removed as a durable decision. VLM implementation details may still exist inside the BIOS sidecar, but they are sidecar-internal and do not define the KVM MCP core product.
 
-- **`litellm`** provides one call interface across providers. A single `model` string selects an OpenRouter vision model (`openrouter/qwen/qwen-2-vl-72b-instruct`, `openrouter/google/gemini-flash-1.5`, etc.) or a locally served small VLM (`ollama/llama3.2-vision`, `ollama/qwen2.5-vl`, or a vLLM OpenAI-compatible endpoint). This satisfies the "OpenRouter vision model OR local small LLM" requirement without provider-specific code.
-- **`instructor`** wraps the call to return a Pydantic-validated object mapping onto `BiosState`. It handles corrective retries on malformed JSON, replacing the hand-rolled 3-attempt retry loop in `src/bios_sidecar/perception/vlm_client.py`.
+## D11 — REMOVED: Approval/policy-gated authority model
 
-Provider selection is by environment:
-- `VLM_PROVIDER` — `openrouter`, `ollama`, `vllm`, `openai`, or `mock` (default)
-- `VLM_MODEL` — model string routed by litellm (e.g. `openrouter/qwen/qwen-2-vl-72b-instruct`, `ollama/llama3.2-vision`)
-- `VLM_BASE_URL` — override API endpoint (defaults to provider's standard URL)
-- `VLM_API_KEY` — OpenAI-compatible API key. Required for OpenRouter and OpenAI; set to any value for local Ollama/vLLM.
+Removed as product architecture. Approval tokens, `bios_grant_human_approval`, and policy-gated authority are cut from the docs. Tool annotations, path safety, stale-key watchdog behavior, destructive labeling, and visual verification remain. `bios_save_and_reboot` checking that a save dialog is visible before pressing Enter is screen-state verification, not approval-token policy.
 
-The server reads these from its environment however they were injected — shell export, `.env`, MCP client config `env` dict, or Doppler. `mock` remains the default for tests and offline development. See `docs/plans/01-vlm-mcp-integration-plan.md` §3.
+## D-K1 — KVM tool surface plus deprecated aliases
 
-## D11 — Tool surface granularity: phase-preserving, three-tier
+The KVM core exposes these unique driver-facing tools: `kvm_connect`, `kvm_disconnect`, `kvm_status`, `kvm_send_text`, `kvm_send_keys`, `kvm_hold_key`, `kvm_release_all`, `kvm_mouse_move`, `kvm_mouse_move_pct`, `kvm_mouse_click`, `kvm_mouse_scroll`, `kvm_screenshot`, `kvm_screenshot_to_file`, `kvm_ocr_screenshot`, `kvm_ocr_click`, `comet_atx_power`, `comet_atx_click`, `comet_sysinfo`, and `comet_msd_upload`.
 
-The MCP surface exposes a compact but phase-preserving set of stateful, policy-gated `bios_*` tools (Tier 1), inspection resources (Tier 2), and segregated raw/perception primitives (Tier 3). We reject both the collapsed single-tool surface (`bios_set_setting`) — which would hold the KVM session hostage during out-of-band human approval and erase the observe/crawl/navigate/propose/apply/save/recover/trace seams — and the "raw HID everywhere" surface that lets the driver agent bypass policy gating. The driver agent gets semantic tools, not key-by-key tools. Human approval is out-of-band; the driver never self-approves. See `docs/plans/01-vlm-mcp-integration-plan.md` §2.
+The 10 `comet_raw_*` aliases duplicate `kvm_*` tools and are deprecated in documentation only. Do not remove them in this docs pass; `tests/test_smoke.py` currently expects `comet_raw_send_keys` and `comet_raw_screenshot`.
+
+## D-K2 — ATX power control is wrapped
+
+ATX power control is available through `comet_atx_power` and `comet_atx_click`. These tools supersede the stale AGENTS.md claim that ATX endpoints are not wrapped. The tools still require the ATX add-on board to be physically installed and wired to the target.
+
+## D-K3 — Upstream sync is fetch-only and selective
+
+Keep `upstream` pointing at `kennypeh85/glkvm-mcp` as a fetch-only remote. Selectively cherry-pick upstream bug fixes or API improvements when relevant. This repo is not a mirror, not an upstream PR staging area, and does not track upstream releases.
+
+## D-K4 — Watchdog and pinger are core firmware workarounds
+
+The stale key watchdog and WebSocket pinger are required KVM-core reliability mechanisms. The watchdog runs every 40ms and force-releases keys held longer than 250ms. The pinger sends WebSocket pings every 1s to prevent kvmd timeout. These are firmware/API workarounds, not policy or approval mechanisms.
+
+## D-K5 — Security model is LAN-first with per-session password
+
+The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verification is disabled because the device uses a self-signed certificate. The password is supplied per session via `kvm_connect`; no Comet password is committed to the repository. `COMET_PASSWORD` is the only secret and is managed through Doppler.
+
+## D-K6 — PEP 723 script deployment remains the target
+
+`glkvm_mcp.py` remains the single-script MCP entry point intended for `uv run --script`. The current PEP 723 metadata is stale because importing the sidecar pulls dependencies such as `instructor` and `litellm` that are present in `pyproject.toml` but missing from the inline dependency block. That dependency drift is a known gap to fix in a later code round.

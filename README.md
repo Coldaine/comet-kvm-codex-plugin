@@ -6,9 +6,9 @@
 | **Forked from** | [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp) (upstream MCP server) |
 | **Relationship** | Selective fork — occasionally review upstream for bug fixes, but this repo diverges strongly and is its own project |
 
-A packaged plugin for GL.iNet Comet KVM-driven hardware triage workflows — BIOS configuration, pre-OS operations, and Windows-side validation on physical machines. Not VM orchestration or general-purpose remote desktop.
+A packaged GL.iNet Comet KVM MCP plugin for physical-machine triage. The KVM server is the universal physical-control substrate; BIOS configuration, pre-OS operations, and Windows-side validation are downstream workflows built on that substrate. Not VM orchestration or general-purpose remote desktop.
 
-**Primary target: Codex.** Cross-tool compatibility (Claude Code, Cursor, VS Code/Copilot) is designed in but deferred until the Codex plugin is proven. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
+**Primary target: Codex.** Cross-tool compatibility (Claude Code, Cursor, VS Code/Copilot) is designed in and sequenced after the Codex plugin is proven. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
 
 ---
 
@@ -34,6 +34,7 @@ comet-kvm-codex-plugin/
 │   ├── NORTH_STAR.md
 │   ├── decisions.md
 │   ├── architecture.md
+│   ├── kvm-core.md
 │   ├── vlm-prompt-contract.md
 │   └── reference/
 ├── extras/                  # Upstream utilities (calibration, click helper, userscript)
@@ -82,7 +83,8 @@ This pattern was validated by real-world multi-target plugins (e.g. [InventorLab
 
 See:
 - [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — project goals
-- [`docs/architecture.md`](docs/architecture.md) — how the repo is laid out, how `glkvm_mcp.py` works, and why every architectural choice was made
+- [`docs/kvm-core.md`](docs/kvm-core.md) — KVM MCP server architecture, tool surface, and KVM/BIOS sidecar boundary
+- [`docs/architecture.md`](docs/architecture.md) — repo layout, sidecar shape, and known architecture gaps
 - [`docs/decisions.md`](docs/decisions.md) — implementation decisions
 - [`docs/vlm-prompt-contract.md`](docs/vlm-prompt-contract.md) — VLM prompt draft + justification
 - [`docs/reference/comet-hardware.md`](docs/reference/comet-hardware.md) — verified Comet hardware/platform facts
@@ -166,6 +168,18 @@ Add to any MCP client config:
 | `kvm_ocr_screenshot(search_text?, preview?)` | Capture + Tesseract OCR: returns all text with coordinates |
 | `kvm_ocr_click(text, button?, count?, search_area?)` | Find text via OCR and click it |
 
+### Comet Hardware
+| Tool | Description |
+|------|-------------|
+| `comet_atx_power(action)` | Power on/off/reset through the ATX add-on board |
+| `comet_atx_click(button)` | Momentary power/reset button pulse through the ATX add-on board |
+| `comet_sysinfo()` | Retrieve device metadata and capabilities |
+| `comet_msd_upload(remote_path, local_path)` | Upload a host file to the Comet's `/userdata/media/` partition |
+
+### Deprecated Aliases
+
+The `comet_raw_*` aliases currently duplicate `kvm_*` tools. They are deprecated in documentation only; the tools still exist and removal is a future code task.
+
 ---
 
 ## Architecture
@@ -180,9 +194,9 @@ Add to any MCP client config:
                                       (host-side)
 ```
 
-The MCP server maintains a persistent WebSocket connection to the Comet for low-latency keyboard/mouse input, and uses HTTP for screenshots and authentication. It already runs two background asyncio loops (key watchdog + WebSocket pinger) — the planned state engine will join as a third.
+The MCP server maintains a persistent WebSocket connection to the Comet for low-latency keyboard/mouse input, and uses HTTP for screenshots, authentication, ATX, sysinfo, and MSD upload. It runs background key-watchdog and WebSocket-pinger loops.
 
-See [`docs/reference/comet-api.md`](docs/reference/comet-api.md) for the full API surface and internal architecture details.
+See [`docs/kvm-core.md`](docs/kvm-core.md) for the KVM core architecture and [`docs/reference/comet-api.md`](docs/reference/comet-api.md) for verified Comet API details.
 
 ---
 

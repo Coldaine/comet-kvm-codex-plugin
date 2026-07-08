@@ -17,7 +17,7 @@
 |---|---|---|---|
 | Package `kennypeh85/glkvm-mcp` fork as Comet KVM hardware-triage plugin. | Existing goal | `docs/NORTH_STAR.md:5`. | High |
 | Not VM orchestration or generic remote desktop. | Existing anti-scope | `docs/NORTH_STAR.md:5`. | High |
-| Codex first; cross-tool manifests deferred. | Existing goal | `docs/NORTH_STAR.md:7`. | High |
+| Codex first; cross-tool manifests sequenced after Codex proof. | Existing goal | `docs/NORTH_STAR.md:7`. | High |
 | BIOS cartography first spike. | Existing goal | `docs/NORTH_STAR.md:9-13`. | High |
 | MSI Z690 one-setting-per-run workflow with HWiNFO validation. | Existing goal | `docs/NORTH_STAR.md:15-18`. | High |
 
