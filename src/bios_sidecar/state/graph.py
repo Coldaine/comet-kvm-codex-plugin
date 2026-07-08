@@ -26,12 +26,19 @@ class BiosGraph:
             LOG.info("Added state node %s to graph", node.node_id)
 
     def add_edge(self, edge: GraphEdge):
-        # Ensure nodes exist
-        if edge.from_node not in self.nodes or edge.to_node not in self.nodes:
-            LOG.warning("Adding edge %s but from_node or to_node is missing from nodes list!", edge.edge_id)
+        # Ensure both endpoint nodes exist — reject orphaned edges rather than silently inserting.
+        missing = [n for n in (edge.from_node, edge.to_node) if n not in self.nodes]
+        if missing:
+            raise ValueError(
+                f"Cannot add edge {edge.edge_id!r}: node(s) {missing} not found in graph. "
+                "Add both endpoint nodes before adding the edge."
+            )
 
         # Avoid duplicate edges
-        exists = any(e.from_node == edge.from_node and e.to_node == edge.to_node and e.action.key == edge.action.key for e in self.edges)
+        exists = any(
+            e.from_node == edge.from_node and e.to_node == edge.to_node and e.action.key == edge.action.key
+            for e in self.edges
+        )
         if not exists:
             self.edges.append(edge)
             self.store.save_edge(edge)

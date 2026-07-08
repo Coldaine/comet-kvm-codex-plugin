@@ -3,6 +3,7 @@ import sqlite3
 import json
 import os
 import logging
+import threading
 from typing import Dict, Any, List, Optional
 from src.bios_sidecar.domain.enums import EventClass
 from src.bios_sidecar.domain.models import BiosState, StateNode, GraphEdge, CapabilityEntry, TraceEvent, EdgeAction, EdgeEvidence
@@ -15,12 +16,14 @@ class SQLiteStore:
         db_dir = os.path.dirname(db_path)
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path)
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        self._lock = threading.Lock()
         self._create_tables()
 
     def _create_tables(self):
-        cursor = self.conn.cursor()
+        with self._lock:
+         cursor = self.conn.cursor()
 
         # 1. Runs table
         cursor.execute("""
@@ -130,22 +133,25 @@ class SQLiteStore:
         self.conn.commit()
 
     def close(self):
-        self.conn.close()
+        with self._lock:
+            self.conn.close()
 
     # --- Run persistence ---
     def save_run(self, run_id: str, device_id: str, started_at: str, status: str = "active"):
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "INSERT OR REPLACE INTO runs (run_id, device_id, started_at, status) VALUES (?, ?, ?, ?)",
-            (run_id, device_id, started_at, status)
-        )
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT OR REPLACE INTO runs (run_id, device_id, started_at, status) VALUES (?, ?, ?, ?)",
+                (run_id, device_id, started_at, status)
+            )
+            self.conn.commit()
 
     # --- BiosState persistence ---
     def save_bios_state(self, state: BiosState):
-        cursor = self.conn.cursor()
-        d = state.to_dict()
-        cursor.execute("""
+        with self._lock:
+         cursor = self.conn.cursor()
+         d = state.to_dict()
+         cursor.execute("""
             INSERT OR REPLACE INTO states (
                 state_id, run_id, device_id, screen_title, menu_path, screen_kind,
                 selection_label, selection_val, controls, blocklist_flag, blocklist_keywords,
@@ -165,21 +171,23 @@ class SQLiteStore:
 
     # --- StateNode persistence ---
     def save_node(self, node: StateNode):
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO nodes (
-                node_id, visual_hash, ocr_hash, semantic_hash, volatile_regions, representative_state_id
-            ) VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            node.node_id, node.visual_hash, node.ocr_hash, node.semantic_hash,
-            json.dumps(node.volatile_regions), node.representative_state_id
-        ))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO nodes (
+                    node_id, visual_hash, ocr_hash, semantic_hash, volatile_regions, representative_state_id
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                node.node_id, node.visual_hash, node.ocr_hash, node.semantic_hash,
+                json.dumps(node.volatile_regions), node.representative_state_id
+            ))
+            self.conn.commit()
 
     def get_node(self, node_id: str) -> Optional[StateNode]:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,))
-        row = cursor.fetchone()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM nodes WHERE node_id = ?", (node_id,))
+            row = cursor.fetchone()
         if row:
             return StateNode(
                 node_id=row["node_id"],
@@ -192,8 +200,10 @@ class SQLiteStore:
         return None
 
     def list_nodes(self) -> List[StateNode]:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM nodes")
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM nodes")
+            rows = cursor.fetchall()
         return [
             StateNode(
                 node_id=row["node_id"],
@@ -203,31 +213,34 @@ class SQLiteStore:
                 volatile_regions=json.loads(row["volatile_regions"]),
                 representative_state_id=row["representative_state_id"]
             )
-            for row in cursor.fetchall()
+            for row in rows
         ]
 
     # --- GraphEdge persistence ---
     def save_edge(self, edge: GraphEdge):
-        cursor = self.conn.cursor()
-        d = edge.to_dict()
-        cursor.execute("""
-            INSERT OR REPLACE INTO edges (
-                edge_id, from_node, action_type, action_key, policy_decision, policy_profile,
-                to_node, transition_type, before_screenshot, after_screenshot, before_state, after_state
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            d["edge_id"], d["from_node"], d["action"]["type"], d["action"]["key"],
-            d["action"]["policy_decision"], d["action"]["policy_profile"], d["to_node"], d["transition_type"],
-            d["evidence"]["before_screenshot"], d["evidence"]["after_screenshot"],
-            d["evidence"]["before_state"], d["evidence"]["after_state"]
-        ))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            d = edge.to_dict()
+            cursor.execute("""
+                INSERT OR REPLACE INTO edges (
+                    edge_id, from_node, action_type, action_key, policy_decision, policy_profile,
+                    to_node, transition_type, before_screenshot, after_screenshot, before_state, after_state
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                d["edge_id"], d["from_node"], d["action"]["type"], d["action"]["key"],
+                d["action"]["policy_decision"], d["action"]["policy_profile"], d["to_node"], d["transition_type"],
+                d["evidence"]["before_screenshot"], d["evidence"]["after_screenshot"],
+                d["evidence"]["before_state"], d["evidence"]["after_state"]
+            ))
+            self.conn.commit()
 
     def list_edges(self) -> List[GraphEdge]:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM edges")
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM edges")
+            rows = cursor.fetchall()
         edges = []
-        for r in cursor.fetchall():
+        for r in rows:
             edges.append(GraphEdge(
                 edge_id=r["edge_id"],
                 from_node=r["from_node"],
@@ -250,22 +263,24 @@ class SQLiteStore:
 
     # --- CapabilityIndex persistence ---
     def save_capability(self, cap: CapabilityEntry):
-        cursor = self.conn.cursor()
-        d = cap.to_dict()
-        cursor.execute("""
-            INSERT OR REPLACE INTO capabilities (
-                capability_id, canonical_name, aliases, vendor, board_family, paths, risk, mutation_policy, validation
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            d["capability_id"], d["canonical_name"], json.dumps(d["aliases"]), d["vendor"], d["board_family"],
-            json.dumps(d["paths"]), d["risk"], d["mutation_policy"], json.dumps(d["validation"])
-        ))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            d = cap.to_dict()
+            cursor.execute("""
+                INSERT OR REPLACE INTO capabilities (
+                    capability_id, canonical_name, aliases, vendor, board_family, paths, risk, mutation_policy, validation
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                d["capability_id"], d["canonical_name"], json.dumps(d["aliases"]), d["vendor"], d["board_family"],
+                json.dumps(d["paths"]), d["risk"], d["mutation_policy"], json.dumps(d["validation"])
+            ))
+            self.conn.commit()
 
     def get_capability(self, cap_id: str) -> Optional[CapabilityEntry]:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM capabilities WHERE capability_id = ?", (cap_id,))
-        r = cursor.fetchone()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM capabilities WHERE capability_id = ?", (cap_id,))
+            r = cursor.fetchone()
         if r:
             return CapabilityEntry.from_dict({
                 "capability_id": r["capability_id"],
@@ -281,8 +296,10 @@ class SQLiteStore:
         return None
 
     def list_capabilities(self) -> List[CapabilityEntry]:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM capabilities")
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM capabilities")
+            rows = cursor.fetchall()
         return [
             CapabilityEntry.from_dict({
                 "capability_id": r["capability_id"],
@@ -295,46 +312,51 @@ class SQLiteStore:
                 "mutation_policy": r["mutation_policy"],
                 "validation": json.loads(r["validation"])
             })
-            for r in cursor.fetchall()
+            for r in rows
         ]
 
     # --- Approvals persistence ---
     def save_approval(self, approval_id: str, plan_id: str, approved_at: str, approved_by: str, status: str):
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO approvals (approval_id, plan_id, approved_at, approved_by, status)
-            VALUES (?, ?, ?, ?, ?)
-        """, (approval_id, plan_id, approved_at, approved_by, status))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO approvals (approval_id, plan_id, approved_at, approved_by, status)
+                VALUES (?, ?, ?, ?, ?)
+            """, (approval_id, plan_id, approved_at, approved_by, status))
+            self.conn.commit()
 
     def get_approval(self, approval_id: str) -> Optional[Dict[str, Any]]:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM approvals WHERE approval_id = ?", (approval_id,))
-        row = cursor.fetchone()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM approvals WHERE approval_id = ?", (approval_id,))
+            row = cursor.fetchone()
         if row:
             return dict(row)
         return None
 
     # --- Trace event logs ---
     def save_trace_event(self, event: TraceEvent):
-        cursor = self.conn.cursor()
-        d = event.to_dict()
-        cursor.execute("""
-            INSERT INTO trace_events (
-                event_id, run_id, timestamp, event_type, state_before, requested_action, policy_decision, state_after, artifacts
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            d["event_id"], d["run_id"], d["timestamp"], d["event_type"],
-            d.get("state_before"), json.dumps(d.get("requested_action")),
-            json.dumps(d.get("policy_decision")), d.get("state_after"), json.dumps(d.get("artifacts", {}))
-        ))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            d = event.to_dict()
+            cursor.execute("""
+                INSERT INTO trace_events (
+                    event_id, run_id, timestamp, event_type, state_before, requested_action, policy_decision, state_after, artifacts
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                d["event_id"], d["run_id"], d["timestamp"], d["event_type"],
+                d.get("state_before"), json.dumps(d.get("requested_action")),
+                json.dumps(d.get("policy_decision")), d.get("state_after"), json.dumps(d.get("artifacts", {}))
+            ))
+            self.conn.commit()
 
     def list_trace_events(self, run_id: str) -> List[TraceEvent]:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM trace_events WHERE run_id = ? ORDER BY timestamp ASC", (run_id,))
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM trace_events WHERE run_id = ? ORDER BY timestamp ASC", (run_id,))
+            rows = cursor.fetchall()
         events = []
-        for r in cursor.fetchall():
+        for r in rows:
             events.append(TraceEvent(
                 event_id=r["event_id"],
                 run_id=r["run_id"],

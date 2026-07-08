@@ -3,7 +3,7 @@ import os
 import json
 import logging
 import base64
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 import httpx
 from src.bios_sidecar.perception.contract import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, VLM_DEFAULT_PARAMS
 
@@ -13,18 +13,23 @@ class VLMClient:
     def __init__(self, api_key: Optional[str] = None, provider: str = "mock"):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("VLM_API_KEY")
         self.provider = provider
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.AsyncClient(timeout=30.0)
 
-    def close(self) -> None:
-        self.client.close()
+    async def close(self) -> None:
+        await self.client.aclose()
 
-    def __enter__(self) -> VLMClient:
+    async def __aenter__(self) -> VLMClient:
         return self
 
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-        self.close()
+    async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+        await self.close()
 
-    def parse_screenshot(self, image_bytes: bytes, previous_state: Optional[Dict[str, Any]] = None, last_action: Optional[str] = None) -> Dict[str, Any]:
+    async def parse_screenshot(
+        self,
+        image_bytes: bytes,
+        previous_state: Optional[Dict[str, Any]] = None,
+        last_action: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Parses screenshot using chosen VLM provider.
         Supports automatic Corrective Retry according to contract:
@@ -56,14 +61,18 @@ class VLMClient:
                     current_user_prompt = user_prompt
                 elif attempt == 1:
                     # Corrective prompt retry
-                    current_user_prompt = user_prompt + "\n\nYour previous response was not valid JSON or was missing required fields. Return only the JSON object matching the schema."
+                    current_user_prompt = (
+                        user_prompt
+                        + "\n\nYour previous response was not valid JSON or was missing required fields."
+                        " Return only the JSON object matching the schema."
+                    )
                     LOG.info("VLM corrective retry (attempt 2)")
                 else:
                     # Fresh original query retry
                     current_user_prompt = user_prompt
                     LOG.info("VLM fresh rerun retry (attempt 3)")
 
-                response_parsed = self._call_api(system_prompt, current_user_prompt, image_b64)
+                response_parsed = await self._call_api(system_prompt, current_user_prompt, image_b64)
                 if self._validate_vlm_schema(response_parsed):
                     return response_parsed
                 else:
@@ -71,7 +80,7 @@ class VLMClient:
             except Exception as e:
                 LOG.error("VLM call attempt %d failed: %s", attempt + 1, e)
 
-        # Fallback if both retries fail
+        # Fallback if all retries fail
         LOG.error("VLM failed after 3 attempts. Returning unparseable state.")
         return {
             "screen_title": "Unparseable Screen",
@@ -79,37 +88,34 @@ class VLMClient:
             "cursor_at": None,
             "entries": [],
             "blocklist_flag": False,
-            "blocklist_keywords": []
+            "blocklist_keywords": [],
         }
 
-    def _call_api(self, sys: str, user: str, img_b64: str) -> Dict[str, Any]:
+    async def _call_api(self, sys: str, user: str, img_b64: str) -> Dict[str, Any]:
         """Performs actual HTTP call to the hosted API."""
         if self.provider == "openai":
             url = "https://api.openai.com/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
             body = {
                 "model": "gpt-4o",
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": sys
-                    },
+                    {"role": "system", "content": sys},
                     {
                         "role": "user",
                         "content": [
                             {"type": "text", "text": user},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
-                        ]
-                    }
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                        ],
+                    },
                 ],
                 "temperature": VLM_DEFAULT_PARAMS["temperature"],
                 "max_tokens": VLM_DEFAULT_PARAMS["max_tokens"],
-                "response_format": VLM_DEFAULT_PARAMS["response_format"]
+                "response_format": VLM_DEFAULT_PARAMS["response_format"],
             }
-            r = self.client.post(url, headers=headers, json=body)
+            r = await self.client.post(url, headers=headers, json=body)
             r.raise_for_status()
             content = r.json()["choices"][0]["message"]["content"]
             return json.loads(content)
@@ -145,10 +151,10 @@ class VLMClient:
                 "cursor_at": 0,
                 "entries": [
                     {"label": "CPU Cooler Tuning", "type": "leaf-enum", "value": "Water Cooler", "options": ["Box Cooler", "Tower Cooler", "Water Cooler"], "key_to_enter": "Enter"},
-                    {"label": "Memory Fast Boot", "type": "leaf-toggle", "value": "Enabled", "options": ["Enabled", "Disabled"], "key_to_enter": "Enter"}
+                    {"label": "Memory Fast Boot", "type": "leaf-toggle", "value": "Enabled", "options": ["Enabled", "Disabled"], "key_to_enter": "Enter"},
                 ],
                 "blocklist_flag": False,
-                "blocklist_keywords": []
+                "blocklist_keywords": [],
             }
         elif val == 1:
             return {
@@ -159,10 +165,10 @@ class VLMClient:
                     {"label": "System Status", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
                     {"label": "Advanced", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
                     {"label": "Boot", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-                    {"label": "Security", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"}
+                    {"label": "Security", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
                 ],
                 "blocklist_flag": False,
-                "blocklist_keywords": []
+                "blocklist_keywords": [],
             }
         elif val == 2:
             return {
@@ -172,10 +178,10 @@ class VLMClient:
                 "entries": [
                     {"label": "PCI Subsystem Settings", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
                     {"label": "ACPI Settings", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-                    {"label": "Integrated Peripherals", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"}
+                    {"label": "Integrated Peripherals", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
                 ],
                 "blocklist_flag": False,
-                "blocklist_keywords": []
+                "blocklist_keywords": [],
             }
         else:
             return {
@@ -184,8 +190,8 @@ class VLMClient:
                 "cursor_at": 1,
                 "entries": [
                     {"label": "Above 4G memory/Crypto Currency mining", "type": "leaf-toggle", "value": "Enabled", "options": ["Enabled", "Disabled"], "key_to_enter": "Enter"},
-                    {"label": "Re-Size BAR Support", "type": "leaf-enum", "value": "Auto", "options": ["Auto", "Disabled", "Enabled"], "key_to_enter": "Enter"}
+                    {"label": "Re-Size BAR Support", "type": "leaf-enum", "value": "Auto", "options": ["Auto", "Disabled", "Enabled"], "key_to_enter": "Enter"},
                 ],
                 "blocklist_flag": False,
-                "blocklist_keywords": []
+                "blocklist_keywords": [],
             }
