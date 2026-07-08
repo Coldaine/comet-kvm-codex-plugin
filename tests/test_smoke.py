@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import os
+import subprocess
 import sys
 import unittest
 
@@ -98,6 +99,25 @@ class SmokeTest(unittest.TestCase):
             username_default, "admin",
             msg=f"kvm_connect username should default to 'admin', got {username_default!r}",
         )
+
+    def test_kvm_core_tools_do_not_import_sidecar(self):
+        code = """
+import asyncio
+import sys
+import src.kvm_core.tools
+from src.kvm_core.server import mcp
+tool_names = {tool.name for tool in asyncio.run(mcp.list_tools())}
+assert not any(name.startswith('bios_') for name in tool_names), sorted(tool_names)
+assert not any(name.startswith('src.bios_sidecar') for name in sys.modules), 'sidecar imported by kvm core'
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
 
 
 if __name__ == "__main__":

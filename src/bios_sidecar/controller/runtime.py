@@ -1,5 +1,4 @@
 from __future__ import annotations
-import os
 import logging
 import datetime
 from typing import Optional, Dict, Any, Tuple, List
@@ -27,18 +26,16 @@ LOG = logging.getLogger("bios_sidecar.controller.runtime")
 # Maps (current_state, method_name) → allowed
 _TRANSITION_MATRIX = {
     RuntimeState.UNCONFIGURED: {
-        "connect_comet": RuntimeState.CONNECTED,
+        "attach_to_kvm": RuntimeState.CONNECTED,
     },
     RuntimeState.DISCONNECTED: {
-        "connect_comet": RuntimeState.CONNECTED,
+        "attach_to_kvm": RuntimeState.CONNECTED,
     },
     RuntimeState.CONNECTED: {
         "observe_state": RuntimeState.OBSERVING,
-        "disconnect_comet": RuntimeState.DISCONNECTED,
     },
     RuntimeState.OBSERVING: {
         # Transitions to SYNCED or DEGRADED based on result
-        "disconnect_comet": RuntimeState.DISCONNECTED,
     },
     RuntimeState.SYNCED: {
         "observe_state": RuntimeState.OBSERVING,
@@ -48,28 +45,22 @@ _TRANSITION_MATRIX = {
         "propose_setting_change": RuntimeState.SYNCED,
         "apply_setting_change": RuntimeState.MUTATING,
         "save_and_reboot": RuntimeState.MUTATING,
-        "disconnect_comet": RuntimeState.DISCONNECTED,
     },
     RuntimeState.CRAWLING: {
-        "disconnect_comet": RuntimeState.DISCONNECTED,
         "abort_and_recover": RuntimeState.RECOVERING,
     },
     RuntimeState.NAVIGATING: {
-        "disconnect_comet": RuntimeState.DISCONNECTED,
         "abort_and_recover": RuntimeState.RECOVERING,
     },
     RuntimeState.MUTATING: {
         "save_and_reboot": RuntimeState.MUTATING,
-        "disconnect_comet": RuntimeState.DISCONNECTED,
         "abort_and_recover": RuntimeState.RECOVERING,
     },
     RuntimeState.RECOVERING: {
         "observe_state": RuntimeState.OBSERVING,
-        "disconnect_comet": RuntimeState.DISCONNECTED,
     },
     RuntimeState.DEGRADED: {
         "observe_state": RuntimeState.OBSERVING,
-        "disconnect_comet": RuntimeState.DISCONNECTED,
         "abort_and_recover": RuntimeState.RECOVERING,
     },
 }
@@ -129,6 +120,7 @@ class StatefulBiosRuntime:
         self.run_id: str = "run_unassigned"
         self.device_id: str = "device_unassigned"
         self.current_state_rec: Optional[BiosState] = None
+        self._attached_client_id: Optional[int] = None
 
         self.state = RuntimeState.DISCONNECTED
 
@@ -161,14 +153,20 @@ class StatefulBiosRuntime:
             )
         return allowed[method_name]
 
-    async def connect_comet(self, host: str, pswd: str, username: str = "admin") -> bool:
-        if self.client:
-            await self.disconnect_comet()
-        self._guard_transition("connect_comet")
+    async def attach_to_kvm(self) -> bool:
+        """Initialize BIOS-sidecar state around an existing KVM core session."""
+        if self.client is None or not self.client.is_connected():
+            raise RuntimeError("Not connected. Call kvm_connect first.")
+        client_id = id(self.client)
+        if self._attached_client_id == client_id and self.state not in (
+            RuntimeState.UNCONFIGURED,
+            RuntimeState.DISCONNECTED,
+        ):
+            return True
+        if self.state in (RuntimeState.UNCONFIGURED, RuntimeState.DISCONNECTED):
+            self._guard_transition("attach_to_kvm")
 
-        await self.kvm.connect(host=host, username=username, password=pswd)
-
-        # Update connection states
+        host = self.client.host
         self.run_id = f"run_{datetime.datetime.now().strftime('%Y_%m_%d_%H%M%S')}"
         self.device_id = f"comet_node_{host.replace('.', '_')}"
 
@@ -180,6 +178,8 @@ class StatefulBiosRuntime:
         )
 
         self.state = RuntimeState.CONNECTED
+        self.current_state_rec = None
+        self._attached_client_id = client_id
         LOG.info("Stateful runtime connection established. State=CONNECTED.")
         await self.trace.log_event(
             run_id=self.run_id,
@@ -188,14 +188,15 @@ class StatefulBiosRuntime:
         )
         return True
 
-    async def disconnect_comet(self):
-        await self.kvm.disconnect()
+    async def detach_from_kvm(self):
+        """Clear BIOS-sidecar state without disconnecting the KVM core session."""
         self.state = RuntimeState.DISCONNECTED
-        LOG.info("Stateful runtime disconnected. State=DISCONNECTED.")
+        self.current_state_rec = None
+        self._attached_client_id = None
+        LOG.info("BIOS runtime detached from KVM. State=DISCONNECTED.")
 
     async def observe_state(self) -> BiosState:
-        if self.client is None or not self.client.is_connected():
-            raise RuntimeError("Not connected. Call kvm_connect first.")
+        await self.attach_to_kvm()
         self._guard_transition("observe_state")
 
         self.state = RuntimeState.OBSERVING
@@ -218,8 +219,7 @@ class StatefulBiosRuntime:
             raise e
 
     async def crawl_step(self) -> Tuple[BiosState, Optional[GraphEdge], str]:
-        if self.client is None or not self.client.is_connected():
-            raise RuntimeError("Not connected.")
+        await self.attach_to_kvm()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("crawl_step")
@@ -253,8 +253,7 @@ class StatefulBiosRuntime:
         """
         Full DFS crawl of the current BIOS region using frontier + backtracking.
         """
-        if self.client is None or not self.client.is_connected():
-            raise RuntimeError("Not connected.")
+        await self.attach_to_kvm()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("crawl_region")
@@ -283,8 +282,7 @@ class StatefulBiosRuntime:
             raise e
 
     async def navigate_to(self, target_node_id: str) -> Tuple[bool, Optional[BiosState], str]:
-        if self.client is None or not self.client.is_connected():
-            raise RuntimeError("Not connected.")
+        await self.attach_to_kvm()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("navigate_to")
@@ -308,8 +306,7 @@ class StatefulBiosRuntime:
     async def apply_setting_change(
         self, capability_id: str, desired_value: str
     ) -> Tuple[bool, Optional[BiosState], str]:
-        if self.client is None or not self.client.is_connected():
-            raise RuntimeError("Not connected.")
+        await self.attach_to_kvm()
         self._guard_transition("apply_setting_change")
         self.state = RuntimeState.MUTATING
         try:
@@ -331,8 +328,7 @@ class StatefulBiosRuntime:
             raise e
 
     async def save_and_reboot(self) -> Tuple[bool, Optional[BiosState], str]:
-        if self.client is None or not self.client.is_connected():
-            raise RuntimeError("Not connected.")
+        await self.attach_to_kvm()
         self._guard_transition("save_and_reboot")
         self.state = RuntimeState.MUTATING
         try:
@@ -354,8 +350,7 @@ class StatefulBiosRuntime:
             raise e
 
     async def abort_and_recover(self) -> str:
-        if self.client is None or not self.client.is_connected():
-            raise RuntimeError("Not connected. Call kvm_connect first.")
+        await self.attach_to_kvm()
         self.state = RuntimeState.RECOVERING
         res = await self.recovery.abort_and_recover(self.client)
         # Recapture state to sync point
