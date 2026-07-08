@@ -154,7 +154,7 @@ The design plan calls for these reference docs under `skills/comet-bios-triage/r
 
 **Recommended actions:**
 1. Link PRs #11/#12 to Issue #10 in PR descriptions
-2. Close Issue #3 and Issue #2 as "blocked" or defer them — they depend on live Comet access which is separate from the offline implementation
+2. Close Issue #3 and Issue #2 as "blocked by live Comet access" — they depend on live Comet access which is separate from the offline implementation
 3. Add Issue #4 to the tracked scope of the remediation pass
 4. Leave Issue #5 and #6 as future work
 

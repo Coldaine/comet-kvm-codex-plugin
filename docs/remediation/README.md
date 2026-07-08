@@ -1,6 +1,6 @@
 # Remediation Index
 
-> **Note:** These documents are historical reference artifacts from a past audit pass. The issue catalog and analysis remain useful context, but statuses and PR references may be stale. See `docs/plans/01-vlm-mcp-integration-plan.md` for current work.
+> **Note:** These documents are historical reference artifacts from a past audit pass. The issue catalog and analysis remain useful context, but statuses, PR references, and D10/D11 policy/approval framing are superseded by `docs/kvm-core.md` and `docs/decisions.md`.
 
 **Generated:** 2026-07-07
 **Updated:** 2026-07-07 (post-fix pass)

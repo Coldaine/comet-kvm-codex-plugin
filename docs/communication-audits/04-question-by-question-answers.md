@@ -12,7 +12,7 @@ Each answer includes direct answer, evidence, existing implementation, proposed 
 
 **Proposed change:** None for the statement itself.
 
-**Unknowns:** Packaging distribution flow beyond Codex is deferred.
+**Unknowns:** Packaging distribution flow beyond Codex is outside the current scope.
 
 **Confidence:** High.
 

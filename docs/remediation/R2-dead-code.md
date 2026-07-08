@@ -75,7 +75,7 @@ self.policy_engine = PolicyEngine(
 
 ---
 
-## Order of remediation (deferred to follow-up work)
+## Order of remediation (follow-up work)
 
 1. R2a (trace ledger) — highest value, enables operational observability
 2. R2d (matrix.yaml) — quick wiring, enables config-driven policy changes

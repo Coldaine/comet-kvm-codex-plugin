@@ -1,11 +1,13 @@
 # VLM Prompt Contract (Draft)
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
-> **Status:** Draft — 2026-07-07. This documents the prompt that will be embedded in the cartographer tool's source code as a string constant/template. It is NOT a skill file — the VLM does not read markdown from the filesystem. It is NOT reference material — it is a design artifact that justifies every element of the prompt we will send to the VLM API at call time.
+> **Status:** Draft — 2026-07-07. Sidecar-internal design artifact. This documents the prompt that will be embedded in the BIOS sidecar/cartographer tool's source code as a string constant/template. It is NOT KVM-core architecture. It is NOT a skill file — the VLM does not read markdown from the filesystem. It is NOT reference material — it is a design artifact that justifies every element of the prompt we will send to the VLM API at call time.
 
 ## Why This Is a Prompt, Not a Skill
 
-The VLM agent is not a file-reading agent. It is a service invoked via an API call: the cartographer tool sends a screenshot image + a prompt string, and the VLM returns a JSON object. The VLM has no filesystem access, no skill-loading mechanism, and no persistent context across calls. Every call is stateless.
+The VLM is not a file-reading agent or peer role. It is a service invoked via an API call: the cartographer tool sends a screenshot image + a prompt string, and the VLM returns a JSON object. The VLM has no filesystem access, no skill-loading mechanism, and no persistent context across calls. Every call is stateless.
+
+The KVM core does not know about this prompt. It exposes screenshots, OCR, HID, and Comet hardware APIs. The BIOS sidecar may call those primitives and then call a VLM to interpret BIOS screenshots.
 
 Therefore, the VLM's instructions must be **embedded in the code that calls it** — the prompt is a string the cartographer tool passes to the VLM API. This document drafts that string and justifies every element in it. When the cartographer tool is implemented, this prompt becomes a code artifact (a string constant or template), not a documentation file.
 

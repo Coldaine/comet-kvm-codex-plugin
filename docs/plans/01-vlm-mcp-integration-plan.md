@@ -1,7 +1,9 @@
 # Plan 01: VLM-MCP Integration & Safe Agent-Driven Architecture
 
-> **Status:** Active
+> **Status:** Superseded by `docs/kvm-core.md` and current `docs/decisions.md`.
 > **Supersedes:** the monolithic in-process VLM design and the collapsed 5-tool surface.
+
+> **Supersession note:** This plan is historical. Its D10/D11 approval-token and policy-gated authority framing has been cut. `comet_raw_*` aliases are deprecated in documentation only, raw `kvm_*` tools remain available, and the VLM is sidecar-internal rather than a peer agent role.
 
 ## 1. Context and Goals
 
@@ -71,10 +73,10 @@ We do **not** roll our own VLM transport or JSON-repair logic. See `docs/decisio
 Provider is selected by env:
 
 ```text
-VLM_PROVIDER=openrouter | ollama | mock
-VLM_MODEL=openrouter/qwen/qwen-2-vl-72b-instruct   # or ollama/llama3.2-vision
-OPENROUTER_API_KEY=<doppler-injected, OpenRouter only>
-VLM_BASE_URL=http://localhost:11434   # Ollama/vLLM local serving
+VLM_PROVIDER  = openrouter | ollama | vllm | openai | mock
+VLM_MODEL     = openrouter/qwen/qwen-2-vl-72b-instruct   # or ollama/llama3.2-vision
+VLM_API_KEY   = sk-...    # OpenAI-compatible API key (required for OpenRouter/OpenAI)
+VLM_BASE_URL  = http://localhost:11434/v1   # override API endpoint (optional)
 ```
 
 `mock` remains the default for tests and offline development.

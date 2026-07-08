@@ -12,7 +12,7 @@ comet-kvm-codex-plugin/
 │   └── plugin.json          # Codex plugin manifest (thin — points at shared resources)
 ├── .mcp.json                # MCP server config (tool-agnostic, any MCP client can use it)
 ├── AGENTS.md                # Operating rules for the developer agent (repo conventions)
-├── glkvm_mcp.py             # The MCP server (single-file, PEP 723, tool-agnostic)
+├── glkvm_mcp.py             # KVM MCP server entry point (PEP 723, tool-agnostic intent)
 ├── skills/                  # Agent Skills (agentskills.io open standard)
 │   └── comet-bios-triage/   # The BIOS triage skill (instructs the driver agent)
 │       ├── SKILL.md
@@ -29,6 +29,7 @@ comet-kvm-codex-plugin/
 │   ├── NORTH_STAR.md        # Goals (top-level authority)
 │   ├── decisions.md         # Implementation decisions
 │   ├── architecture.md      # This document
+│   ├── kvm-core.md          # KVM MCP core architecture and sidecar boundary
 │   ├── vlm-prompt-contract.md  # VLM prompt draft + justification
 │   └── reference/           # Verified facts about external systems
 │       ├── comet-hardware.md
@@ -55,8 +56,9 @@ See `README.md` § Plugin Architecture for the thin-manifest pattern rationale a
 |-------------|----------|-----|
 | Goals (what we're building) | `docs/NORTH_STAR.md` | Top-level authority, read first |
 | Implementation decisions (how we build it) | `docs/decisions.md` | Separate from goals; decisions can change |
-| Architecture explanation (how + why) | `docs/architecture.md` (this doc) | Design rationale, code structure, runtime composition |
-| VLM prompt contract | `docs/vlm-prompt-contract.md` | Design artifact that will become code; not a skill |
+| KVM core architecture | `docs/kvm-core.md` | Universal KVM tool surface, product boundary, reliability patterns |
+| Architecture explanation (how + why) | `docs/architecture.md` (this doc) | Repo layout, sidecar shape, known architecture gaps |
+| VLM prompt contract | `docs/vlm-prompt-contract.md` | Sidecar-internal design artifact that will become code; not a skill |
 | Verified external facts | `docs/reference/` | Hardware specs, API surface — cited, dated |
 | Developer agent rules | `AGENTS.md` | Repo conventions for code editing |
 | Driver agent rules | `skills/comet-bios-triage/` | Runtime KVM operation instructions |
@@ -67,64 +69,24 @@ See `README.md` § Plugin Architecture for the thin-manifest pattern rationale a
 
 ## 2. How glkvm_mcp.py Works
 
-### Single-file PEP 723 MCP server
+`glkvm_mcp.py` is the KVM MCP entry point, but the current implementation is structurally inverted: it imports `mcp` and `get_runtime()` from `src.bios_sidecar.mcp.server`, and that sidecar module owns `FastMCP("glkvm_sidecar")`.
 
-`glkvm_mcp.py` is a self-contained Python file that serves as the entire MCP server. It uses PEP 723 inline script metadata to declare dependencies, so it can be run with `uv run --script ./glkvm_mcp.py` without a separate `requirements.txt` or virtual environment setup. Dependencies (`mcp[cli]`, `websockets`, `httpx`, `Pillow`, `pytesseract`) are auto-installed by `uv` on first run.
+The intended boundary is documented in `docs/kvm-core.md`: the KVM MCP server is the universal physical-control substrate, while the BIOS sidecar is an optional BIOS-aware orchestration layer that uses KVM primitives plus VLM grounding, graph state, and visual verification.
 
-The server uses `FastMCP` from the `mcp.server.fastmcp` module — a high-level MCP server framework that lets tools be defined as decorated async Python functions.
+Known architecture gap: desired dependency direction is `bios_sidecar -> kvm_core`; current direction is `kvm_core/glkvm_mcp.py -> bios_sidecar runtime`. This also makes the PEP 723 metadata stale because script execution pulls sidecar dependencies that are not listed in the inline dependency block.
 
-### Connection state
-
-The server maintains a single global `Connection` dataclass:
-
-```python
-@dataclass
-class Connection:
-    base_url: str                    # e.g., "https://192.168.0.126"
-    http: httpx.AsyncClient           # HTTP client for screenshots + auth
-    ws: websockets.WebSocketClientProtocol  # WebSocket for keyboard/mouse
-    held: dict[str, float]            # key -> down_at (monotonic) for watchdog
-    send_lock: asyncio.Lock           # serializes WS sends
-    watchdog: Optional[asyncio.Task]  # background key-watchdog task
-    pinger: Optional[asyncio.Task]    # background WebSocket ping task
-```
-
-A single `_conn` global holds the active connection. `kvm_connect` creates it, `kvm_disconnect` tears it down. All other tools call `_require_conn()` to access it.
-
-### Background asyncio loops
-
-The server runs two background asyncio tasks per connection:
-
-**`_watchdog_loop` (40ms period):**
-- Monitors the `held` dict for keys that have been down longer than `STALE_S` (250ms).
-- Force-releases stale keys via WebSocket.
-- Prevents stuck keys from interrupted or failed input sequences.
-
-**`_pinger_loop` (1s period):**
-- Sends WebSocket ping frames to keep the connection alive.
-- PiKVM's kvmd drops connections after ~15 missed pings; this prevents that.
-
-### Key/mouse input protocol
-
-Keyboard events are sent as W3C KeyboardEvent codes over WebSocket. Modifiers wrap strictly outside the main key: mods down → key down → key up → mods up.
-
-Mouse events use absolute int16 coordinates or percentage-based positioning.
-
-### OCR and VLM integration (Tesseract & VLM Tool)
-
-OCR and perception run on the host:
-- Tesseract provides local OCR text mapping (`kvm_ocr_screenshot`, `kvm_ocr_click`).
-- The VLM parses screenshots via the `kvm_vlm_parse` tool, ensuring the prompt, inputs, and JSON output are recorded in the MCP server's transaction log.
+The detailed KVM-core connection model, background watchdog/pinger loops, input protocol, screenshot/OCR pipeline, Comet hardware tools, tool annotations, and KVM/sidecar lifecycle now live in `docs/kvm-core.md`.
 
 ---
 
-## 3. Three-Agent Topology
+## 3. Agent and Service Topology
 
-Building a BIOS triage tool involves three fundamentally different concerns that are divided into distinct roles:
+Building a BIOS triage tool involves two agent roles and one sidecar-called perception service:
 
 1. **Developer Agent**: Writes the MCP tools, database storage schemas, and prompt contracts.
 2. **Driver Agent** (Orchestrating LLM): Drives the KVM, manages the crawl stack, implements the DFS logic, handles navigation, and coordinates safety checks.
-3. **VLM Agent** (Vision LLM): A stateless, pure-perception tool client. It receives screen images via `kvm_vlm_parse`, parses them, and returns JSON.
+
+The VLM is not a peer agent role. It is a stateless perception service invoked by the BIOS sidecar. It receives screen images, parses them, and returns JSON. It does not navigate, edit code, read repo docs at runtime, or decide hardware policy.
 
 ---
 
@@ -159,11 +121,13 @@ The Comet (GL-RM1) has a quad-core ARM Cortex-A7 @ 1.5GHz with no GPU. VLM infer
 
 The stateful screen-level position tracker runs inside the MCP server process, keeping track of which graph node the session is currently on. Instead of running a background loop that constantly polls (which is slow and expensive), the state tracker is updated on-demand when the Driver Agent calls tools like `bios_observe_state`, `bios_navigate_to`, or `bios_apply_setting_change`.
 
-The MCP server matches screens locally using perceptual hashes and OCR fingerprints via the `kvm_match_screen` tool, calling the VLM tool (`kvm_vlm_parse`) only when grounding is needed.
+The sidecar matches screens locally using perceptual hashes and OCR fingerprints, calling the VLM only when grounding is needed. `kvm_match_screen` can exist as a debug/developer tool, but the high-level driver workflow should call semantic `bios_*` tools rather than treating screen matching as a required driver step.
 
 ---
 
 ## 8. Output Format: Semantic Capability Index + Screen Graph
+
+This section is provisional. `docs/decisions.md` D9 records that this representation is useful but may not be the whole truth.
 
 The crawler produces two views of the same crawl data:
 
@@ -174,17 +138,14 @@ The crawler produces two views of the same crawl data:
 
 ## 9. Runtime Composition (Tuning Session)
 
-1. **Driver Agent** calls `bios_connect()`.
-2. **Driver Agent** calls `bios_observe_state()`.
-   * The stateful tracker captures the screen, tries `kvm_match_screen` first, and only calls `kvm_vlm_parse` when grounding is needed.
-   * The VLM parses the screen, returns the JSON, and the tracker aligns the session to `"EZ Mode"`.
-3. **Driver Agent** calls `bios_navigate_to("node_oc_settings")`.
-   * The stateful tracker replays the keystroke path. It uses fast, local visual hashes and OCR fingerprints (`kvm_match_screen`) to track the cursor at each intermediate step without calling the VLM.
-4. **Driver Agent** calls `bios_propose_setting_change("cpu_lite_load_mode", "Mode 3")` -> generates a plan.
-5. **[Operator grants approval out-of-band]**.
-6. **Driver Agent** calls `bios_apply_setting_change(plan_id, approval_id)`.
-   * The tracker verifies the row, activates input, types the value directly, and hits Enter.
-   * The tracker calls `kvm_vlm_parse` to visually verify the change.
-7. **Driver Agent** calls `bios_save_and_reboot(approval_id)`.
-   * The tracker sends `"F10"`, calls the VLM to verify the confirm dialog is active, and hits `"Enter"`.
-8. **Driver Agent** calls `bios_export_trace()` and `bios_disconnect()`.
+The corrected lifecycle is documented in `docs/kvm-core.md#9-kvm-and-sidecar-boundary`. In short:
+
+1. Open and close the physical session with `kvm_connect()` and `kvm_disconnect()`.
+2. Use raw `kvm_*` and `comet_*` tools for universal physical triage, POST, recovery, Windows, installers, shells, and ATX actions.
+3. Enter BIOS with KVM primitives such as `kvm_hold_key("Delete")` or repeated `kvm_send_keys("Delete")`.
+4. Attach the BIOS sidecar by calling `bios_observe_state()`.
+5. Use `bios_crawl_region(...)`, `bios_navigate_to(capability_id=...)`, and `bios_apply_setting_change(capability_id=..., desired_value=...)` for BIOS-aware work.
+6. Use `bios_save_and_reboot()` only after the sidecar visually verifies the save confirmation dialog is present. This is screen-state verification, not approval-token policy.
+7. Export evidence with `bios_export_trace()`.
+
+Raw `kvm_*` calls are not intercepted by the sidecar today. Current design is that `kvm_*` remains raw and `bios_*` wraps and verifies; the driver chooses the correct layer.
