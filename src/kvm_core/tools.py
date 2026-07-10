@@ -129,12 +129,15 @@ async def kvm_screenshot_to_file(path: str, preview: bool = False, max_width: in
 
 
 @mcp.tool(name="kvm_ocr_screenshot", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
-async def kvm_ocr_screenshot(search_text: str = "", preview: bool = False) -> dict:
-    """Capture full screenshot and run Tesseract OCR."""
+async def kvm_ocr_screenshot(search_text: str = "", preview: bool = False, psm: int = 3) -> dict:
+    """Capture a screenshot and return ordered screen text plus word coordinates.
+
+    Use psm=6 for a full-screen terminal or other single text block.
+    """
     client = _require_client()
     r = get_kvm_runtime()
     img_bytes = await client.get_screenshot(preview=preview)
-    return r.ocr_mgr.run_ocr(img_bytes, search_text)
+    return r.ocr_mgr.run_ocr(img_bytes, search_text, psm)
 
 
 @mcp.tool(name="kvm_ocr_click", annotations={"readOnlyHint": False, "destructiveHint": True})
