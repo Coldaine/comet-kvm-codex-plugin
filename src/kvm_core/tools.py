@@ -212,3 +212,65 @@ async def comet_msd_upload(remote_path: str, local_path: str) -> dict:
     except Exception as e:
         raise ValueError(f"Failed to read local file {local_path}: {e}")
     return await client.msd_upload(remote_path, data)
+
+
+# Deprecated aliases remain registered for backwards compatibility. They are
+# deliberately thin delegates so their behavior stays identical to kvm_*.
+@mcp.tool(name="comet_raw_send_text", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_raw_send_text(text: str, wpm: int = 200) -> dict:
+    """Deprecated alias of kvm_send_text."""
+    return await kvm_send_text(text, wpm)
+
+
+@mcp.tool(name="comet_raw_send_keys", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_raw_send_keys(combo: str) -> dict:
+    """Deprecated alias of kvm_send_keys."""
+    return await kvm_send_keys(combo)
+
+
+@mcp.tool(name="comet_raw_hold_key", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_raw_hold_key(key: str, duration_ms: int) -> dict:
+    """Deprecated alias of kvm_hold_key."""
+    return await kvm_hold_key(key, duration_ms)
+
+
+@mcp.tool(name="comet_raw_release_all", annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True})
+async def comet_raw_release_all() -> dict:
+    """Deprecated alias of kvm_release_all."""
+    return await kvm_release_all()
+
+
+@mcp.tool(name="comet_raw_mouse_move", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_raw_mouse_move(x: int, y: int) -> dict:
+    """Deprecated alias of kvm_mouse_move."""
+    return await kvm_mouse_move(x, y)
+
+
+@mcp.tool(name="comet_raw_mouse_move_pct", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_raw_mouse_move_pct(x_pct: float, y_pct: float) -> dict:
+    """Deprecated alias of kvm_mouse_move_pct."""
+    return await kvm_mouse_move_pct(x_pct, y_pct)
+
+
+@mcp.tool(name="comet_raw_mouse_click", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_raw_mouse_click(button: str = "left", count: int = 1) -> dict:
+    """Deprecated alias of kvm_mouse_click."""
+    return await kvm_mouse_click(button, count)
+
+
+@mcp.tool(name="comet_raw_mouse_scroll", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_raw_mouse_scroll(dx: int = 0, dy: int = 0) -> dict:
+    """Deprecated alias of kvm_mouse_scroll."""
+    return await kvm_mouse_scroll(dx, dy)
+
+
+@mcp.tool(name="comet_raw_screenshot", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_raw_screenshot(preview: bool = True, max_width: int = 1024, quality: int = 60) -> Image:
+    """Deprecated alias of kvm_screenshot."""
+    return await kvm_screenshot(preview, max_width, quality)
+
+
+@mcp.tool(name="comet_raw_status", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_raw_status() -> dict:
+    """Deprecated alias of kvm_status."""
+    return await kvm_status()

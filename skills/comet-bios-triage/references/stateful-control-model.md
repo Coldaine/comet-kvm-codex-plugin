@@ -62,10 +62,10 @@ When the state engine is active, these transitions are additionally gated by scr
 
 ## Safe Tuning MCP Sequence
 
-1. `bios_connect` — establish session.
-2. `bios_observe_state` — verify initial position and sync state.
+1. `kvm_connect` — establish the Comet transport session.
+2. `bios_observe_state` — attach the sidecar, verify initial position, and sync state.
 3. `bios_navigate_to` — navigate to OC/CPU configuration nodes.
-4. `bios_propose_setting_change` — offline planning and policy evaluation.
-5. `bios_apply_setting_change` — apply the approved mutation directly and verify visually via the VLM tool.
+4. `bios_propose_setting_change` — inspect the requested setting change before applying it.
+5. `bios_apply_setting_change` — apply the requested mutation and verify it visually via the VLM tool.
 6. `bios_save_and_reboot` — execute save, verify dialog, and reboot.
-7. `bios_disconnect` — clean up connection.
+7. `kvm_disconnect` — close the transport session after the BIOS workflow ends.

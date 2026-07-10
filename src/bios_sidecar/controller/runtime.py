@@ -83,7 +83,7 @@ class StatefulBiosRuntime:
         self.store = SQLiteStore(db_path=db_path)
 
         # 2. Key managers/subsystems — delegate transport/capture/OCR to KVM core
-        self.kvm = get_kvm_runtime()
+        self.kvm = get_kvm_runtime(screenshot_cache=screenshot_cache)
         self.vlm_client = VLMClient(provider=vlm_provider)
 
         # 3. State indexing

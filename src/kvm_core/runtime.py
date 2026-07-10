@@ -41,8 +41,8 @@ class KVMRuntime:
 _runtime: Optional[KVMRuntime] = None
 
 
-def get_kvm_runtime() -> KVMRuntime:
+def get_kvm_runtime(screenshot_cache: Optional[str] = None) -> KVMRuntime:
     global _runtime
     if _runtime is None:
-        _runtime = KVMRuntime()
+        _runtime = KVMRuntime(screenshot_cache=screenshot_cache or "state/screenshots")
     return _runtime

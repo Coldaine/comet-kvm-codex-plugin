@@ -40,6 +40,17 @@ EXPECTED_TOOLS = {
     "kvm_screenshot",
     "kvm_screenshot_to_file",
     "kvm_status",
+    # Deprecated raw aliases remain public compatibility API.
+    "comet_raw_send_text",
+    "comet_raw_send_keys",
+    "comet_raw_hold_key",
+    "comet_raw_release_all",
+    "comet_raw_mouse_move",
+    "comet_raw_mouse_move_pct",
+    "comet_raw_mouse_click",
+    "comet_raw_mouse_scroll",
+    "comet_raw_screenshot",
+    "comet_raw_status",
     # Tier 1 stateful BIOS tools
     "bios_observe_state",
     "bios_crawl_region",
@@ -118,6 +129,20 @@ assert not any(name.startswith('src.bios_sidecar') for name in sys.modules), 'si
             check=False,
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
+
+
+def test_sidecar_runtime_uses_requested_screenshot_cache(tmp_path, monkeypatch):
+    from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
+    import src.kvm_core.runtime as kvm_runtime
+
+    monkeypatch.setattr(kvm_runtime, "_runtime", None)
+    screenshot_cache = tmp_path / "screenshots"
+    runtime = StatefulBiosRuntime(
+        db_path=str(tmp_path / "bios_sidecar.db"),
+        screenshot_cache=str(screenshot_cache),
+    )
+
+    assert runtime.capture_mgr.cache_dir == str(screenshot_cache)
 
 
 if __name__ == "__main__":

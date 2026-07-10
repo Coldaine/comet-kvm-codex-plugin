@@ -22,7 +22,7 @@ The KVM core owns transport (CometClient, capture, HID, OCR). The BIOS sidecar i
 | D1 | Transport layer (`comet/`) moves to `kvm_core/` | Yes — git mv, verbatim |
 | D2 | OCR moves to `kvm_core/` | Yes — git mv, verbatim |
 | D3 | `bios_sidecar/policy/` deleted entirely | Yes — engine, approvals, hazards, matrix.yaml |
-| D4 | `comet_raw_*` alias tools deleted | Yes — 10 duplicates of kvm_* tools |
+| D4 | `comet_raw_*` aliases remain registered as deprecated compatibility tools | Yes — 10 thin delegates to kvm_* tools |
 | D5 | `bios_connect` / `bios_disconnect` deleted | Yes — kvm_connect is the session lifecycle |
 | D6 | `bios_grant_human_approval` deleted | Yes — no approval layer |
 | D7 | `approval_id` / `plan_id` params removed | Yes — from mutate tools and runtime |
@@ -129,9 +129,9 @@ src/
 
 Checkpoint: `python -m pytest tests/ -x` — remaining tests pass; `test_graph_transitions.py` needs no changes (only tests BiosGraph/StateSyncer, no policy/state-machine references)
 
-### Phase 5: Delete comet_raw_* aliases
-27. `glkvm_mcp.py` — delete all 10 `comet_raw_*` tool functions
-28. `tests/test_smoke.py` — update `EXPECTED_TOOLS`: remove `comet_raw_send_keys`, `comet_raw_screenshot`; remove `bios_connect`, `bios_disconnect`, `bios_grant_human_approval`
+### Phase 5: Preserve deprecated comet_raw_* aliases
+27. `kvm_core/tools.py` — retain all 10 `comet_raw_*` tool functions as thin delegates to their `kvm_*` counterparts.
+28. `tests/test_smoke.py` — retain every deprecated alias in `EXPECTED_TOOLS`; remove `bios_connect`, `bios_disconnect`, `bios_grant_human_approval`.
 
 Checkpoint: `python tests/test_smoke.py` passes
 
@@ -141,7 +141,6 @@ Checkpoint: `python tests/test_smoke.py` passes
 31. `uv run --script ./glkvm_mcp.py` — starts without import errors
 32. Grep verification — zero matches for:
     - `bios_sidecar.policy`
-    - `comet_raw_`
     - `approval_id\|plan_id\|grant_human_approval`
     - `PolicyProfile\|PolicyEngine\|ApprovalTracker`
     - `bios_sidecar\.comet`
