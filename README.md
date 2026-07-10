@@ -165,7 +165,7 @@ Add to any MCP client config:
 |------|-------------|
 | `kvm_screenshot(preview?, max_width?, quality?)` | Capture JPEG frame as MCP image content |
 | `kvm_screenshot_to_file(path, ...)` | Capture and save to disk |
-| `kvm_ocr_screenshot(search_text?, preview?)` | Capture + Tesseract OCR: returns all text with coordinates |
+| `kvm_ocr_screenshot(search_text?, preview?, psm?)` | Capture + Tesseract OCR: returns ordered text/lines plus word coordinates (`psm=6` for terminals) |
 | `kvm_ocr_click(text, button?, count?, search_area?)` | Find text via OCR and click it |
 
 ### Comet Hardware
@@ -195,6 +195,8 @@ The `comet_raw_*` aliases currently duplicate `kvm_*` tools. They are deprecated
 ```
 
 The MCP server maintains a persistent WebSocket connection to the Comet for low-latency keyboard/mouse input, and uses HTTP for screenshots, authentication, ATX, sysinfo, and MSD upload. It runs background key-watchdog and WebSocket-pinger loops.
+
+Runtime logs go to stderr and to the rotating file `state/logs/comet-kvm.log`. Set `COMET_LOG_LEVEL` or `COMET_LOG_DIR` to override the default level or directory.
 
 See [`docs/kvm-core.md`](docs/kvm-core.md) for the KVM core architecture and [`docs/reference/comet-api.md`](docs/reference/comet-api.md) for verified Comet API details.
 
