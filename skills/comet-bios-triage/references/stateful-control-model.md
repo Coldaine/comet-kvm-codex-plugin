@@ -7,7 +7,7 @@ The MCP server provides transport (screenshots, keyboard, mouse, OCR). The workf
 | Level | What it tracks | Who maintains it | Lifetime | Example question |
 |-------|---------------|-----------------|----------|-----------------|
 | **Workflow phase** (this doc) | Which stage of an experiment are we in | The agent + run ledger | Across sessions, persisted | "Are we in the bios-edit phase?" |
-| **Screen position** (state engine) | Which BIOS menu node are we on right now | The sidecar state tracker in `glkvm_mcp.py` | Ephemeral, per live session | "Are we on the Overclocking submenu row 3?" |
+| **Screen position** (state engine) | Which BIOS menu node are we on right now | The BIOS sidecar state tracker | Ephemeral, per live session | "Are we on the Overclocking submenu row 3?" |
 
 Neither subsumes the other. The phase model governs the experiment lifecycle. The state engine governs live navigation safety within a phase — it validates that each keystroke produced the screen transition the stored map predicted.
 
@@ -33,7 +33,7 @@ If no map exists, the agent should either run cartography first or fall back to 
 
 ## Screen-Level State Engine
 
-When a BIOS map is loaded, the state engine (running inside `glkvm_mcp.py` during tool execution) provides:
+When a BIOS map is loaded, the state engine in the BIOS sidecar provides:
 
 - **Current screen identification** — matches live screenshots against map nodes via perceptual hash + OCR fingerprint (`kvm_match_screen`).
 - **Transition validation** — when keys are sent during path execution, the engine validates the destination edge from the map. If it doesn't match, it halts and triggers VLM grounding.
@@ -62,10 +62,10 @@ When the state engine is active, these transitions are additionally gated by scr
 
 ## Safe Tuning MCP Sequence
 
-1. `bios_connect` — establish session.
-2. `bios_observe_state` — verify initial position and sync state.
+1. `kvm_connect` — establish the Comet transport session.
+2. `bios_observe_state` — attach the sidecar, verify initial position, and sync state.
 3. `bios_navigate_to` — navigate to OC/CPU configuration nodes.
-4. `bios_propose_setting_change` — offline planning and policy evaluation.
-5. `bios_apply_setting_change` — apply the approved mutation directly and verify visually via the VLM tool.
+4. `bios_propose_setting_change` — inspect the requested setting change before applying it.
+5. `bios_apply_setting_change` — apply the requested mutation and verify it visually via the VLM tool.
 6. `bios_save_and_reboot` — execute save, verify dialog, and reboot.
-7. `bios_disconnect` — clean up connection.
+7. `kvm_disconnect` — close the transport session after the BIOS workflow ends.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
-from src.bios_sidecar.comet.client import CometClient
+from src.kvm_core.comet.client import CometClient
 from src.bios_sidecar.state.hashing import calculate_visual_phash
 
 LOG = logging.getLogger("bios_sidecar.controller.settle")

@@ -4,11 +4,10 @@ import logging
 from typing import List, Set, Optional, Tuple
 from dataclasses import dataclass
 from src.bios_sidecar.domain.models import BiosState, StateNode, GraphEdge, EdgeAction, EdgeEvidence
-from src.bios_sidecar.domain.enums import PolicyProfile, StateKind, ControlRole
-from src.bios_sidecar.policy.engine import PolicyEngine
+from src.bios_sidecar.domain.enums import StateKind, ControlRole
 from src.bios_sidecar.controller.observe import StateObserver
 from src.bios_sidecar.controller.settle import ScreenSettler
-from src.bios_sidecar.comet.client import CometClient
+from src.kvm_core.comet.client import CometClient
 
 LOG = logging.getLogger("bios_sidecar.controller.crawl")
 
@@ -25,11 +24,9 @@ class BiosCrawler:
     def __init__(
         self,
         observer: StateObserver,
-        policy_engine: PolicyEngine,
         settler: ScreenSettler
     ):
         self.observer = observer
-        self.policy_engine = policy_engine
         self.settler = settler
         # DFS state, reset on each dfs_crawl start.
         self._frontier: List[CrawlEdge] = []
@@ -48,7 +45,6 @@ class BiosCrawler:
         run_id: str,
         device_id: str,
         current_state: BiosState,
-        policy_profile: PolicyProfile = PolicyProfile.READ_ONLY_CRAWL,
         max_depth: int = 8,
     ) -> Tuple[BiosState, List[GraphEdge], str]:
         """
@@ -56,7 +52,7 @@ class BiosCrawler:
         and cycle detection.
 
         Returns (final_state, discovered_edges, status).
-        Status: "complete" (frontier exhausted), "max_depth" (hit limit), "hazard_stop".
+        Status: "complete" when the frontier is exhausted.
         """
         self._frontier = []
         self._backtrack_stack = []
@@ -77,10 +73,6 @@ class BiosCrawler:
                  node_id, self._depth, len(self._frontier))
 
         while self._frontier:
-            if state.risk.blocklist_flag:
-                LOG.warning("DFS crawl hit hazard screen — stopping.")
-                return state, discovered_edges, "hazard_stop"
-
             # Pick highest-value unexplored edge from frontier
             next_edge = self._frontier.pop(0)
             action_key = next_edge.action_key
@@ -116,7 +108,7 @@ class BiosCrawler:
             # Record the edge
             edge = self._create_edge(
                 from_node=node_id, to_node=new_node_id,
-                action_key=action_key, policy_profile=policy_profile,
+                action_key=action_key,
                 before_state=state, after_state=new_state
             )
             if edge:
@@ -146,7 +138,7 @@ class BiosCrawler:
                 if backtracked:
                     node_id = self._get_or_create_node_id(state)
 
-        status = "complete" if not self._frontier else "max_depth"
+        status = "complete"
         LOG.info("DFS crawl %s: %d edges discovered, %d nodes visited",
                  status, len(discovered_edges), len(self._visited))
         return state, discovered_edges, status
@@ -159,20 +151,20 @@ class BiosCrawler:
             return
 
         candidates: List[CrawlEdge] = []
+        allowed_actions = self._allowed_crawl_actions(state)
 
         # 1. Enter on selected submenu (highest priority)
         for ctrl in state.controls:
-            if ctrl.selected and ctrl.role == ControlRole.SUBMENU:
-                decision = self.policy_engine.evaluate(state, "Enter", PolicyProfile.READ_ONLY_CRAWL)
-                if decision.decision == "allowed":
-                    candidates.append(CrawlEdge("Enter", self._depth + 1, f"Enter {ctrl.label}"))
+            if (
+                "Enter" in allowed_actions
+                and ctrl.selected
+                and ctrl.role == ControlRole.SUBMENU
+            ):
+                candidates.append(CrawlEdge("Enter", self._depth + 1, f"Enter {ctrl.label}"))
 
         # 2. ArrowDown to scan rows (medium priority)
-        down_decision = self.policy_engine.evaluate(state, "ArrowDown", PolicyProfile.READ_ONLY_CRAWL)
-        if down_decision.decision == "allowed":
-            # Only queue ArrowDown if there are more rows to scan
-            if len(state.controls) > 0:
-                candidates.append(CrawlEdge("ArrowDown", self._depth, "ArrowDown next row"))
+        if "ArrowDown" in allowed_actions and state.controls:
+            candidates.append(CrawlEdge("ArrowDown", self._depth, "ArrowDown next row"))
 
         self._frontier = [
             candidate for candidate in candidates
@@ -217,7 +209,6 @@ class BiosCrawler:
         run_id: str,
         device_id: str,
         current_state: BiosState,
-        policy_profile: PolicyProfile = PolicyProfile.READ_ONLY_CRAWL
     ) -> Tuple[BiosState, Optional[GraphEdge], str]:
         """
         Executes exactly ONE safe crawl action using DFS state tracking.
@@ -247,14 +238,14 @@ class BiosCrawler:
             LOG.info("DFS step: frontier empty — backtracking")
         else:
             # Try heuristic fallback if no DFS state initialized
-            candidate_key = self._heuristic_pick(current_state, policy_profile)
+            candidate_key = self._heuristic_pick(current_state)
 
         if not candidate_key:
-            LOG.error("No safe actions allowed by policy model! Stopping crawl.")
+            LOG.error("No crawl actions available. Stopping crawl.")
             return current_state, None, "stop"
 
         # 2. Execute action
-        LOG.info("Crawl execution key: %s (profile: %s)", candidate_key, policy_profile.value)
+        LOG.info("Crawl execution key: %s", candidate_key)
         await client.send_combo(candidate_key)
 
         # 3. Wait for settle
@@ -289,7 +280,7 @@ class BiosCrawler:
         # 8. Build edge
         edge = self._create_edge(
             from_node=node_id, to_node=new_node_id,
-            action_key=candidate_key, policy_profile=policy_profile,
+            action_key=candidate_key,
             before_state=current_state, after_state=new_state
         )
         if edge:
@@ -299,33 +290,35 @@ class BiosCrawler:
         self._enumerate_frontier(new_state, new_node_id)
 
         # 10. Assess recommendation
-        if new_state.risk.blocklist_flag:
-            LOG.warning("Crawler encountered blocklisted hazards! Recommending backtrack/stop.")
-            rec = "backtrack"
-        elif not self._frontier and not self._backtrack_stack:
+        if not self._frontier and not self._backtrack_stack:
             rec = "complete"
 
         return new_state, edge, rec
 
     # Heuristic fallback (when DFS state not initialized)
 
-    def _heuristic_pick(self, current_state: BiosState, policy_profile: PolicyProfile) -> Optional[str]:
+    def _heuristic_pick(self, current_state: BiosState) -> Optional[str]:
         """Fallback single-step heuristic when no DFS state is available."""
+        allowed_actions = self._allowed_crawl_actions(current_state)
         for ctrl in current_state.controls:
-            if ctrl.selected and ctrl.role == ControlRole.SUBMENU:
-                decision = self.policy_engine.evaluate(current_state, "Enter", policy_profile)
-                if decision.decision == "allowed":
-                    return "Enter"
+            if (
+                "Enter" in allowed_actions
+                and ctrl.selected
+                and ctrl.role == ControlRole.SUBMENU
+            ):
+                return "Enter"
 
-        down = self.policy_engine.evaluate(current_state, "ArrowDown", policy_profile)
-        if down.decision == "allowed":
+        if "ArrowDown" in allowed_actions and current_state.controls:
             return "ArrowDown"
 
-        esc = self.policy_engine.evaluate(current_state, "Escape", policy_profile)
-        if esc.decision == "allowed":
-            return "Escape"
+        return "Escape" if "Escape" in allowed_actions else None
 
-        return None
+    @staticmethod
+    def _allowed_crawl_actions(state: BiosState) -> Set[str]:
+        """Restrict the crawler to the normalized action set for the screen."""
+        if state.risk.blocklist_flag:
+            return {"Escape"}
+        return set(state.actions.safe) | set(state.actions.context_gated)
 
     # Helpers
 
@@ -340,7 +333,6 @@ class BiosCrawler:
         from_node: str,
         to_node: str,
         action_key: str,
-        policy_profile: PolicyProfile,
         before_state: BiosState,
         after_state: BiosState,
     ) -> Optional[GraphEdge]:
@@ -357,8 +349,6 @@ class BiosCrawler:
             action=EdgeAction(
                 type="KEY",
                 key=action_key,
-                policy_decision="allowed",
-                policy_profile=policy_profile.value
             ),
             to_node=to_node,
             transition_type="enter_submenu" if action_key == "Enter" else "navigation",

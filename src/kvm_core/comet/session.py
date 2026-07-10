@@ -1,9 +1,9 @@
 from __future__ import annotations
 import logging
 from typing import Optional
-from src.bios_sidecar.comet.client import CometClient
+from src.kvm_core.comet.client import CometClient
 
-LOG = logging.getLogger("bios_sidecar.comet.session")
+LOG = logging.getLogger("kvm_core.comet.session")
 
 class SessionManager:
     def __init__(self):

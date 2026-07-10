@@ -4,14 +4,11 @@ import json
 import logging
 import asyncio
 from typing import Dict, Any, List, Optional
-from mcp.server.fastmcp import FastMCP, Image
-from src.bios_sidecar.domain.enums import PolicyProfile
+from mcp.server.fastmcp import Image
+from src.kvm_core.server import mcp
 from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
 
 LOG = logging.getLogger("bios_sidecar.mcp")
-
-# Initialize unified server instance
-mcp = FastMCP("glkvm_sidecar")
 
 # Global runtime state instance
 _runtime: Optional[StatefulBiosRuntime] = None
@@ -67,31 +64,9 @@ def get_capabilities_resource() -> str:
     caps = r.store.list_capabilities()
     return json.dumps([c.to_dict() for c in caps], indent=2)
 
-@mcp.resource("bios://policy/current")
-def get_active_policy() -> str:
-    """Safety action matrix definitions."""
-    r = get_runtime()
-    return json.dumps(r.policy_engine.matrix, indent=2)
-
 # ===========================================================================
 # 2. Stateful MCP Tools (the main agent-facing interface)
 # ===========================================================================
-
-@mcp.tool()
-async def bios_connect(host: str, password: str, username: str = "admin") -> dict:
-    """
-    Connect stateful runtime to a physical Comet KVM session on LAN.
-    """
-    r = get_runtime()
-    ok = await r.connect_comet(host, password, username)
-    return {"connected": ok, "run_id": r.run_id, "device_id": r.device_id}
-
-@mcp.tool()
-async def bios_disconnect() -> dict:
-    """Disconnect session and release resources."""
-    r = get_runtime()
-    await r.disconnect_comet()
-    return {"status": "disconnected"}
 
 @mcp.tool()
 async def bios_observe_state() -> dict:
@@ -103,13 +78,12 @@ async def bios_observe_state() -> dict:
     return state.to_dict()
 
 @mcp.tool()
-async def bios_crawl_step(policy_profile: str = "read_only_crawl") -> dict:
+async def bios_crawl_step() -> dict:
     """
     Execute ONE safe crawling transition step to discover submenus & settings.
     """
-    profile = PolicyProfile(policy_profile)
     r = get_runtime()
-    state, edge, rec = await r.crawl_step(profile)
+    state, edge, rec = await r.crawl_step()
     return {
         "state": state.to_dict(),
         "created_edge": edge.to_dict() if edge else None,
@@ -117,14 +91,13 @@ async def bios_crawl_step(policy_profile: str = "read_only_crawl") -> dict:
     }
 
 @mcp.tool()
-async def bios_crawl_region(max_depth: int = 8, policy_profile: str = "read_only_crawl") -> dict:
+async def bios_crawl_region(max_depth: int = 8) -> dict:
     """
     Full DFS crawl with frontier queue, backtrack stack, depth enforcement,
     and cycle detection. Explores the current BIOS region exhaustively.
     """
     r = get_runtime()
-    profile = PolicyProfile(policy_profile)
-    final_state, edges, status = await r.crawl_region(profile, max_depth)
+    final_state, edges, status = await r.crawl_region(max_depth)
     return {
         "status": status,
         "edges_discovered_count": len(edges),
@@ -148,19 +121,19 @@ async def bios_navigate_to(target_node_id: str) -> dict:
 @mcp.tool()
 async def bios_propose_setting_change(capability_id: str, desired_value: str) -> dict:
     """
-    Validate, plan, and propose a setting alteration. Generates approval tokens.
+    Validate, plan, and propose a setting alteration.
     """
     r = get_runtime()
     res = await r.propose_setting_change(capability_id, desired_value)
     return res
 
 @mcp.tool()
-async def bios_apply_setting_change(plan_id: str, approval_id: str, capability_id: str, desired_value: str) -> dict:
+async def bios_apply_setting_change(capability_id: str, desired_value: str) -> dict:
     """
-    Executes an approved mutation. Verifies old value, switches value, captures post confirmations.
+    Executes a mutation. Verifies old value, switches value, captures post confirmations.
     """
     r = get_runtime()
-    ok, final, msg = await r.apply_setting_change(plan_id, approval_id, capability_id, desired_value)
+    ok, final, msg = await r.apply_setting_change(capability_id, desired_value)
     return {
         "success": ok,
         "state": final.to_dict() if final else None,
@@ -168,29 +141,15 @@ async def bios_apply_setting_change(plan_id: str, approval_id: str, capability_i
     }
 
 @mcp.tool()
-async def bios_grant_human_approval(approval_id: str, approved_by: str = "operator") -> dict:
-    """
-    Grants/authorizes a pending mutation approval.
-
-    NOTE: This represents an OUT-OF-BAND operator action, not a driver-agent
-    self-approval. The automated tuning agent must not call this to approve its
-    own proposals; a human operator (or operator UI) invokes it.
-    """
-    r = get_runtime()
-    ok = r.policy_engine.approval_tracker.grant_approval(approval_id, approved_by)
-    return {"granted": ok, "approval_id": approval_id}
-
-@mcp.tool()
-async def bios_save_and_reboot(approval_id: str) -> dict:
+async def bios_save_and_reboot() -> dict:
     """
     Commit staged BIOS changes to NVRAM and reboot the target.
 
-    Policy-gated: sends F10, VLM-verifies the save/confirmation dialog is present,
-    and confirms only if the dialog matches expectations. Requires an approved
-    save token (granted out-of-band).
+    Sends F10, VLM-verifies the save/confirmation dialog is present, and
+    confirms only if the dialog matches expectations.
     """
     r = get_runtime()
-    ok, final, msg = await r.save_and_reboot(approval_id)
+    ok, final, msg = await r.save_and_reboot()
     return {
         "success": ok,
         "state": final.to_dict() if final else None,
@@ -294,4 +253,3 @@ async def kvm_match_screen(screenshot_ref: str, expected_node_id: Optional[str] 
         result["expected_node_id"] = expected_node_id
         result["matches_expected"] = matched_id == expected_node_id
     return result
-

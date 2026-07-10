@@ -2,11 +2,10 @@ from __future__ import annotations
 import logging
 from typing import Optional, Any, Dict, Tuple
 from src.bios_sidecar.domain.models import BiosState
-from src.bios_sidecar.domain.enums import PolicyProfile, ControlRole
+from src.bios_sidecar.domain.enums import ControlRole
 from src.bios_sidecar.controller.observe import StateObserver
 from src.bios_sidecar.controller.settle import ScreenSettler
-from src.bios_sidecar.comet.client import CometClient
-from src.bios_sidecar.policy.engine import PolicyEngine
+from src.kvm_core.comet.client import CometClient
 
 LOG = logging.getLogger("bios_sidecar.controller.mutate")
 
@@ -14,11 +13,9 @@ class BiosMutator:
     def __init__(
         self,
         observer: StateObserver,
-        policy_engine: PolicyEngine,
         settler: ScreenSettler
     ):
         self.observer = observer
-        self.policy_engine = policy_engine
         self.settler = settler
 
     def _selection_steps(self, options: list[str], current_value: Optional[str], desired_value: str) -> Optional[int]:
@@ -47,19 +44,11 @@ class BiosMutator:
                 "plan": None
             }
 
-        plan_id = f"plan_{capability_id}_{desired_value.lower().replace(' ', '')}"
-
-        # Request approval token
-        apprv_id = self.policy_engine.approval_tracker.request_approval(plan_id)
-
         return {
             "decision": "planned",
-            "plan_id": plan_id,
-            "approval_id": apprv_id,
             "canonical_name": cap.canonical_name,
             "desired_value": desired_value,
             "risk": cap.risk.value,
-            "requires_human_approval": True,
             "paths": [p.to_dict() for p in cap.paths]
         }
 
@@ -68,24 +57,17 @@ class BiosMutator:
         client: CometClient,
         run_id: str,
         device_id: str,
-        plan_id: str,
-        approval_id: str,
         capability_id: str,
         desired_value: str
     ) -> Tuple[bool, Optional[BiosState], str]:
         """
-        Executes approved setting change.
+        Executes a setting change.
         Flow:
-            1. Validate Human Approval.
-            2. Verify cursor is sitting on targeted setting entry.
-            3. Open values dialog (Enter).
-            4. Send input keys to select desired_value.
-            5. Visually capture and verify change in value.
+            1. Verify cursor is sitting on targeted setting entry.
+            2. Open values dialog (Enter).
+            3. Send input keys to select desired_value.
+            4. Visually capture and verify change in value.
         """
-        # 1. Human approval check
-        if not self.policy_engine.approval_tracker.is_approved(approval_id):
-            return False, None, f"Unauthorized mutation. Approval {approval_id} must be granted first."
-
         # Obtain latest state
         state = await self.observer.observe_state(client, run_id, device_id)
 
@@ -119,11 +101,6 @@ class BiosMutator:
             return False, state, "Desired value cannot be selected deterministically from observed options."
 
         # 3. Open dropdown / field (Enter)
-        # Evaluate Enter action first with approval
-        decision = self.policy_engine.evaluate(state, "Enter", PolicyProfile.SUPERVISED_MUTATION, approval_id=approval_id)
-        if decision.decision != "allowed":
-            return False, state, f"Enter action blocked: {decision.reason}"
-
         # Press Enter, wait for dropdown modal
         await client.send_combo("Enter")
         await self.settler.wait_for_settle(client)
@@ -158,34 +135,20 @@ class BiosMutator:
         client: CometClient,
         run_id: str,
         device_id: str,
-        approval_id: str,
     ) -> Tuple[bool, Optional[BiosState], str]:
         """
         Commit staged BIOS changes to NVRAM and reboot.
 
         Flow:
-            1. Validate save approval.
-            2. Observe current state.
-            3. Policy-gate the F10 save chord.
-            4. Send F10, capture the confirmation modal.
-            5. VLM-verify a save/confirmation dialog is on screen.
-            6. Confirm with Enter only if the dialog matches expectations.
+            1. Observe current state.
+            2. Send F10, capture the confirmation modal.
+            3. VLM-verify a save/confirmation dialog is on screen.
+            4. Confirm with Enter only if the dialog matches expectations.
         """
-        # 1. Approval gate — save must be explicitly authorized.
-        if not self.policy_engine.approval_tracker.is_approved(approval_id):
-            return False, None, f"Unauthorized save. Approval {approval_id} must be granted first."
-
-        # 2. Ground current state.
+        # 1. Ground current state.
         state = await self.observer.observe_state(client, run_id, device_id)
 
-        # 3. Policy-gate F10 (save) under supervised mutation.
-        decision = self.policy_engine.evaluate(
-            state, "F10", PolicyProfile.SUPERVISED_MUTATION, approval_id=approval_id
-        )
-        if decision.decision != "allowed":
-            return False, state, f"Save (F10) blocked by policy: {decision.reason}"
-
-        # 4. Send F10 and wait for the confirmation modal.
+        # 3. Send F10 and wait for the confirmation modal.
         await client.send_combo("F10")
         await self.settler.wait_for_settle(client)
         modal_state = await self.observer.observe_state(client, run_id, device_id)
@@ -209,4 +172,3 @@ class BiosMutator:
 
         LOG.info("Save confirmed for run %s; target is rebooting.", run_id)
         return True, modal_state, "Save confirmed. Target committing changes and rebooting."
-

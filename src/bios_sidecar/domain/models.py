@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Any, Optional, List, Dict
 from datetime import datetime
-from src.bios_sidecar.domain.enums import StateKind, ControlRole, RiskClass, PolicyProfile, RuntimeState, EventClass
+from src.bios_sidecar.domain.enums import StateKind, ControlRole, RiskClass, RuntimeState, EventClass
 
 @dataclass
 class FrameMetadata:
@@ -306,27 +306,6 @@ class CapabilityEntry:
         d = dict(d)
         d["risk"] = RiskClass(d["risk"])
         d["paths"] = [CapabilityPath.from_dict(p) for p in d["paths"]]
-        return cls(**d)
-
-@dataclass
-class PolicyDecision:
-    decision: str  # "allowed", "blocked", "requires_approval"
-    reason: str
-    requested_action: str
-    policy_profile: PolicyProfile
-    state_id: str
-    required_approval: bool = False
-    recovery_action: str = "NOOP"
-
-    def to_dict(self) -> Dict[str, Any]:
-        d = asdict(self)
-        d["policy_profile"] = self.policy_profile.value
-        return d
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> PolicyDecision:
-        d = dict(d)
-        d["policy_profile"] = PolicyProfile(d["policy_profile"])
         return cls(**d)
 
 @dataclass

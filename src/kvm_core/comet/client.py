@@ -10,7 +10,7 @@ import httpx
 import websockets
 import ssl as _ssl
 
-LOG = logging.getLogger("bios_sidecar.comet")
+LOG = logging.getLogger("kvm_core.comet")
 
 # US key mapping
 CHAR_TO_KEY: dict[str, tuple[str, bool]] = {}
@@ -446,7 +446,7 @@ class CometClient:
         Upload a file to the Comet's /userdata/media/ partition.
         Used for persisting BIOS maps and state databases on-device.
 
-        remote_path: relative path under /userdata/media/ (e.g. "state/bios_sidecar.db")
+        remote_path: relative path under /userdata/media/
         """
         if not self.http:
             raise RuntimeError("Not connected")
@@ -463,4 +463,3 @@ class CometClient:
         if not r.is_success:
             r.raise_for_status()
         return {"path": remote_path, "size": len(data), "status": r.status_code}
-
