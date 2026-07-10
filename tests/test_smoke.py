@@ -104,8 +104,13 @@ class SmokeTest(unittest.TestCase):
         schema = connect.inputSchema
         required = set(schema.get("required", []))
         self.assertEqual(
-            required, {"host", "password"},
-            msg=f"kvm_connect required args should be host+password, got {required}",
+            required, {"host"},
+            msg=f"kvm_connect should require only a host, got {required}",
+        )
+        password_schema = schema.get("properties", {}).get("password", {})
+        self.assertIsNone(
+            password_schema.get("default"),
+            msg="kvm_connect should not expose a password default in its schema",
         )
         username_default = schema.get("properties", {}).get("username", {}).get("default")
         self.assertEqual(
