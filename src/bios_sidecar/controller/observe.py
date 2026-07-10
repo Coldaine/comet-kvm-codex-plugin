@@ -49,7 +49,7 @@ class StateObserver:
         phash = calculate_visual_phash(img_bytes)
 
         # 2. Run local OCR
-        ocr_res = self.ocr_mgr.run_ocr(img_bytes)
+        ocr_res = await asyncio.to_thread(self.ocr_mgr.run_ocr, img_bytes)
         ocr_h = calculate_ocr_hash(ocr_res.get("elements", []))
         ocr_conf = sum(e["confidence"] for e in ocr_res.get("elements", [])) / max(1, len(ocr_res.get("elements", []))) if ocr_res.get("elements") else 90.0
 

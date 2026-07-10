@@ -42,6 +42,10 @@ EXPECTED_TOOLS = {
     "kvm_mouse_scroll",
     "kvm_screenshot",
     "kvm_screenshot_to_file",
+    "kvm_ocr_status",
+    "kvm_ocr_text",
+    "kvm_ocr_screenshot",
+    "kvm_ocr_click",
     "kvm_status",
     # Deprecated raw aliases remain public compatibility API.
     "comet_raw_send_text",

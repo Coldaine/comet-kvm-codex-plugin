@@ -239,7 +239,7 @@ async def kvm_match_screen(screenshot_ref: str, expected_node_id: Optional[str] 
     from src.bios_sidecar.state.hashing import calculate_visual_phash, calculate_ocr_hash
 
     phash = calculate_visual_phash(img_bytes)
-    ocr_res = r.ocr_mgr.run_ocr(img_bytes)
+    ocr_res = await asyncio.to_thread(r.ocr_mgr.run_ocr, img_bytes)
     ocr_hash = calculate_ocr_hash(ocr_res.get("elements", []))
 
     node, confidence = r.matcher.match_state(phash, ocr_hash, semantic_hash="")

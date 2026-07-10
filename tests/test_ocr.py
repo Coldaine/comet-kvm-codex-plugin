@@ -1,6 +1,7 @@
 import io
 
 import pytesseract
+import pytest
 from PIL import Image
 
 from src.kvm_core.ocr import OCRManager
@@ -42,6 +43,8 @@ def test_run_ocr_returns_ordered_text_and_coordinates(monkeypatch):
     assert result["lines"] == ["hello world"]
     assert [element["text"] for element in result["elements"]] == ["hello", "world"]
     assert seen["config"] == "--psm 6"
+    assert seen["timeout"] == 15
+    assert (result["width"], result["height"]) == (200, 100)
 
 
 def test_run_ocr_rediscovers_tesseract_without_restart(monkeypatch):
@@ -69,3 +72,38 @@ def test_run_ocr_rediscovers_tesseract_without_restart(monkeypatch):
 
     assert result["tesseract_found"] is True
     assert result["text"] == "ready"
+
+
+def test_run_text_ocr_preserves_spacing_and_crop(monkeypatch):
+    manager = OCRManager()
+    manager.tesseract_bin = "tesseract"
+    seen = {}
+
+    def fake_image_to_string(image, **kwargs):
+        seen.update(kwargs)
+        seen["size"] = image.size
+        return "name      value\nrow       42\n"
+
+    monkeypatch.setattr(pytesseract, "image_to_string", fake_image_to_string)
+
+    result = manager.run_text_ocr(
+        _jpeg_bytes(),
+        psm=6,
+        languages="eng, deu",
+        crop=(10, 5, 110, 55),
+    )
+
+    assert result["text"] == "name      value\nrow       42"
+    assert result["lines"] == ["name      value", "row       42"]
+    assert seen["config"] == "--psm 6 -c preserve_interword_spaces=1"
+    assert seen["lang"] == "eng+deu"
+    assert seen["timeout"] == 15
+    assert seen["size"] == (100, 50)
+
+
+def test_run_text_ocr_rejects_empty_crop():
+    manager = OCRManager()
+    manager.tesseract_bin = "tesseract"
+
+    with pytest.raises(ValueError, match="non-empty region"):
+        manager.run_text_ocr(_jpeg_bytes(), crop=(20, 20, 10, 10))

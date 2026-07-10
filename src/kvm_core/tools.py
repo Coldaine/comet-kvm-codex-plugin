@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -7,6 +9,9 @@ from mcp.server.fastmcp import Image
 
 from src.kvm_core.runtime import get_kvm_runtime
 from src.kvm_core.server import mcp
+from src.kvm_core.ocr import validate_psm
+
+LOG = logging.getLogger("kvm_core.tools")
 
 
 def _require_client():
@@ -141,7 +146,94 @@ async def kvm_ocr_screenshot(search_text: str = "", preview: bool = False, psm: 
     client = _require_client()
     r = get_kvm_runtime()
     img_bytes = await client.get_screenshot(preview=preview)
-    return r.ocr_mgr.run_ocr(img_bytes, search_text, psm)
+    return await asyncio.to_thread(r.ocr_mgr.run_ocr, img_bytes, search_text, psm)
+
+
+def _ocr_crop(left: int, top: int, right: int, bottom: int) -> tuple[int, int, int, int] | None:
+    values = (left, top, right, bottom)
+    if all(value < 0 for value in values):
+        return None
+    if right >= 0 and left >= right:
+        raise ValueError("right must be greater than left")
+    if bottom >= 0 and top >= bottom:
+        raise ValueError("bottom must be greater than top")
+    return values
+
+
+@mcp.tool(name="kvm_ocr_status", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def kvm_ocr_status() -> dict:
+    """Report native Comet OCR and host Tesseract availability."""
+    client = _require_client()
+    r = get_kvm_runtime()
+    try:
+        device = await client.get_ocr_state(refresh=True)
+    except Exception as exc:
+        LOG.warning("Native OCR capability probe failed: %s", type(exc).__name__)
+        device = {"enabled": False, "error": "capability probe failed"}
+    host = r.ocr_mgr.get_status()
+    if device.get("enabled"):
+        recommended = "comet-native"
+    elif host.get("available"):
+        recommended = "host-tesseract"
+    else:
+        recommended = "unavailable"
+    return {
+        "device": device,
+        "host": host,
+        "recommended_text_engine": recommended,
+    }
+
+
+@mcp.tool(name="kvm_ocr_text", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def kvm_ocr_text(
+    psm: int = 6,
+    languages: str = "",
+    prefer_native: bool = True,
+    left: int = -1,
+    top: int = -1,
+    right: int = -1,
+    bottom: int = -1,
+) -> dict:
+    """Return visible screen text through native OCR when available, else host Tesseract.
+
+    This text-only path preserves terminal spacing and avoids word-box work. Crop
+    coordinates are pixels; leave all four at -1 for the full frame.
+    """
+    client = _require_client()
+    r = get_kvm_runtime()
+    validate_psm(psm)
+    crop = _ocr_crop(left, top, right, bottom)
+    device_state = None
+    fallback_reason = "native OCR not requested"
+
+    if prefer_native:
+        try:
+            device_state = await client.get_ocr_state()
+            if device_state.get("enabled"):
+                text = (await client.get_native_ocr_text(languages, crop)).rstrip()
+                return {
+                    "engine": f"comet-native:{device_state.get('engine', 'unknown')}",
+                    "text": text,
+                    "lines": text.splitlines(),
+                    "crop": list(crop) if crop else None,
+                    "device": device_state,
+                }
+            fallback_reason = "device OCR is disabled"
+        except Exception as exc:
+            LOG.warning("Native OCR read failed; using host fallback: %s", type(exc).__name__)
+            fallback_reason = "native OCR request failed"
+
+    image_bytes = await client.get_screenshot(preview=False)
+    host = await asyncio.to_thread(r.ocr_mgr.run_text_ocr, image_bytes, psm, languages, crop)
+    if "error" in host:
+        raise RuntimeError(host["error"])
+    host.update({
+        "engine": "host-tesseract",
+        "crop": list(crop) if crop else None,
+        "device": device_state,
+        "fallback_reason": fallback_reason,
+    })
+    return host
 
 
 @mcp.tool(name="kvm_ocr_click", annotations={"readOnlyHint": False, "destructiveHint": True})
@@ -150,7 +242,9 @@ async def kvm_ocr_click(text: str, button: str = "left", count: int = 1, search_
     client = _require_client()
     r = get_kvm_runtime()
     img_bytes = await client.get_screenshot(preview=False)
-    ocr = r.ocr_mgr.run_ocr(img_bytes, text)
+    ocr = await asyncio.to_thread(r.ocr_mgr.run_ocr, img_bytes, text)
+    if "error" in ocr:
+        raise RuntimeError(ocr["error"])
     if not ocr["elements"]:
         return {"found": False, "text": text, "message": "No matches."}
 
