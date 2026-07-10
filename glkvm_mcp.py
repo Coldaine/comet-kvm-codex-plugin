@@ -7,6 +7,8 @@
 #     "httpx>=0.27",
 #     "Pillow>=10",
 #     "pytesseract>=0.3.13",
+#     "instructor>=1.5",
+#     "litellm>=1.50",
 # ]
 # ///
 """

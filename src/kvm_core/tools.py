@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from mcp.server.fastmcp import Image
@@ -28,8 +29,19 @@ def _safe_screenshot_path(requested_path: str) -> Path:
 
 
 @mcp.tool(name="kvm_connect", annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
-async def kvm_connect(host: str, password: str, username: str = "admin") -> dict:
-    """Connect to a GLKVM device on LAN and authenticate."""
+async def kvm_connect(host: str, password: str | None = None, username: str = "admin") -> dict:
+    """Connect to a GLKVM device on LAN and authenticate.
+
+    When no password is supplied, use a credential injected into this MCP
+    process instead of exposing the credential in a tool call.
+    """
+    if password is None:
+        password = os.environ.get("COMET_PASSWORD") or os.environ.get("GLCOMET_ADMIN_PASSWORD")
+    if not password:
+        raise ValueError(
+            "No Comet password was provided. Pass password explicitly or inject "
+            "COMET_PASSWORD/GLCOMET_ADMIN_PASSWORD into the MCP process."
+        )
     r = get_kvm_runtime()
     ok = await r.connect(host=host, username=username, password=password)
     return {"connected": ok, "host": r.client.base_url, "message": "ok"}

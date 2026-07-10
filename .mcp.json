@@ -1,8 +1,15 @@
 {
   "mcpServers": {
     "comet-kvm": {
-      "command": "uv",
+      "command": "doppler",
       "args": [
+        "run",
+        "-p",
+        "secrets_managment",
+        "-c",
+        "dev",
+        "--",
+        "uv",
         "run",
         "--script",
         "./glkvm_mcp.py"
