@@ -78,8 +78,8 @@ The stale key watchdog and WebSocket pinger are required KVM-core reliability me
 
 ## D-K5 — Security model is LAN-first with per-session password
 
-The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verification is disabled because the device uses a self-signed certificate. The password is supplied per session via `kvm_connect`; no Comet password is committed to the repository. `COMET_PASSWORD` is the only secret and is managed through Doppler.
+The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verification is disabled because the device uses a self-signed certificate. The password is supplied per session via `kvm_connect` or injected into the MCP process as `COMET_PASSWORD`; no Comet password is committed to the repository. `GLCOMET_ADMIN_PASSWORD` is accepted as a legacy environment-variable name for that same secret.
 
 ## D-K6 — PEP 723 script deployment remains the target
 
-`glkvm_mcp.py` remains the single-script MCP entry point intended for `uv run --script`. The current PEP 723 metadata is stale because importing the sidecar pulls dependencies such as `instructor` and `litellm` that are present in `pyproject.toml` but missing from the inline dependency block. That dependency drift is a known gap to fix in a later code round.
+`glkvm_mcp.py` remains the single-script MCP entry point intended for `uv run --script`. The PEP 723 metadata includes the sidecar dependencies, including `instructor` and `litellm`, so script-only launches resolve the same runtime surface as the project environment.

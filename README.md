@@ -100,6 +100,7 @@ See:
 - [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) installed on the host
 - A GL.iNet Comet (GL-RM1) or PiKVM-compatible device on your LAN (firmware 1.9.0+)
 - [uv](https://docs.astral.sh/uv/) for running the MCP server
+- [Doppler CLI](https://docs.doppler.com/docs/install-cli) configured for `secrets_managment/dev` when using the bundled plugin launcher
 
 ### Install Tesseract
 
@@ -116,7 +117,7 @@ sudo apt-get install tesseract-ocr
 
 ### Use in Codex
 
-The plugin is auto-discovered when the repo is installed as a Codex plugin. The MCP server (`glkvm_mcp.py`) is launched via `uv run --script` with dependencies auto-installed from PEP 723 inline metadata.
+The plugin is auto-discovered when the repo is installed as a Codex plugin. Its bundled launcher uses Doppler to inject the Comet password, then runs `glkvm_mcp.py` via `uv run --script` with dependencies auto-installed from PEP 723 inline metadata.
 
 ### Use as a standalone MCP server
 
@@ -140,7 +141,7 @@ Add to any MCP client config:
 ### Connection
 | Tool | Description |
 |------|-------------|
-| `kvm_connect(host, password, username?)` | Connect to a Comet device on the LAN |
+| `kvm_connect(host, password?, username?)` | Connect to a Comet device; omitted password resolves from the MCP process environment |
 | `kvm_disconnect()` | Close the session |
 | `kvm_status()` | Report connection state and held keys |
 
@@ -206,7 +207,7 @@ See [`docs/kvm-core.md`](docs/kvm-core.md) for the KVM core architecture and [`d
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — the Comet ships with a self-signed certificate
-- **No credentials stored** — password is passed per-session via `kvm_connect`
+- **No credentials stored** — password is passed per-session or injected into the MCP process as `COMET_PASSWORD`
 - **Remote access** — use Tailscale (native on Comet) or VPN; do not expose the MCP server's stdio to an untrusted network
 
 ---

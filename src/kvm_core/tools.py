@@ -35,9 +35,13 @@ async def kvm_connect(host: str, password: str | None = None, username: str = "a
     When no password is supplied, use a credential injected into this MCP
     process instead of exposing the credential in a tool call.
     """
-    password = password or os.environ.get("COMET_PASSWORD") or os.environ.get("GLCOMET_ADMIN_PASSWORD")
+    if password is None:
+        password = os.environ.get("COMET_PASSWORD") or os.environ.get("GLCOMET_ADMIN_PASSWORD")
     if not password:
-        raise ValueError("No Comet password was provided or injected into the MCP process.")
+        raise ValueError(
+            "No Comet password was provided. Pass password explicitly or inject "
+            "COMET_PASSWORD/GLCOMET_ADMIN_PASSWORD into the MCP process."
+        )
     r = get_kvm_runtime()
     ok = await r.connect(host=host, username=username, password=password)
     return {"connected": ok, "host": r.client.base_url, "message": "ok"}

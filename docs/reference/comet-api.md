@@ -35,7 +35,7 @@ Response: Sets `auth_token` cookie; may return `two_step_required` for 2FA
 ```
 
 - Default username: `admin`
-- Password is passed per-session via the `kvm_connect` MCP tool — no credentials are stored server-side
+- Password is passed per-session via `kvm_connect` or injected into the MCP process as `COMET_PASSWORD` — no credentials are stored server-side
 - If `auth_token` is not in cookies and `two_step_required` is true, 2FA is needed (not handled in current code)
 - Token is extracted from the `auth_token` cookie and used for subsequent WebSocket and HTTP calls
 
@@ -108,7 +108,7 @@ Low-level GPIO control for the ATX board. Typically not needed directly — the 
 ### Connection
 | Tool | Signature | Annotations | Description |
 |------|-----------|-------------|-------------|
-| `kvm_connect` | `(host, password, username?)` | write, non-destructive, idempotent | Connect to Comet on LAN |
+| `kvm_connect` | `(host, password?, username?)` | write, non-destructive, idempotent | Connect to Comet on LAN; omitted password resolves from the MCP process environment |
 | `kvm_disconnect` | `()` | write, non-destructive, idempotent | Close session + cleanup |
 | `kvm_status` | `()` | read-only, non-destructive, idempotent | Report connection state + held keys |
 
@@ -208,7 +208,8 @@ The server reads these from its environment. They can be injected via shell expo
 
 | Variable | Secret? | Required | Default | Description |
 |---|---|---|---|---|
-| `COMET_PASSWORD` | **yes** | yes | — | Comet KVM admin password |
+| `COMET_PASSWORD` | **yes** | for env-backed connection | — | Preferred Comet KVM admin password variable |
+| `GLCOMET_ADMIN_PASSWORD` | **yes** | no | — | Legacy fallback name for the same Comet admin password |
 | `COMET_HOST` | no | no | `192.168.0.126` | LAN IP of the Comet |
 | `COMET_USERNAME` | no | no | `admin` | Comet login username |
 | `VLM_API_KEY` | **yes** | for VLM | — | OpenAI-compatible API key (OpenRouter, OpenAI, or set to any value for local Ollama) |
@@ -235,7 +236,7 @@ The server reads these from its environment. They can be injected via shell expo
 }
 ```
 
-For local development with Doppler: `doppler run -- uv run glkvm_mcp.py`.
+The bundled plugin launcher uses `doppler run -p secrets_managment -c dev -- uv run --script ./glkvm_mcp.py`, so agents can omit the password from `kvm_connect`. Standalone clients may instead inject `COMET_PASSWORD` by another secure mechanism or pass the password in the tool call.
 
 > **Source:** `glkvm_mcp.py` docstring lines 27-29 and `README.md#security`. Verified 2026-07-07.
 
