@@ -52,7 +52,7 @@ class BiosCrawler:
         and cycle detection.
 
         Returns (final_state, discovered_edges, status).
-        Status: "complete" (frontier exhausted), "max_depth" (hit limit), "hazard_stop".
+        Status: "complete" when the frontier is exhausted.
         """
         self._frontier = []
         self._backtrack_stack = []
@@ -138,7 +138,7 @@ class BiosCrawler:
                 if backtracked:
                     node_id = self._get_or_create_node_id(state)
 
-        status = "complete" if not self._frontier else "max_depth"
+        status = "complete"
         LOG.info("DFS crawl %s: %d edges discovered, %d nodes visited",
                  status, len(discovered_edges), len(self._visited))
         return state, discovered_edges, status
@@ -151,14 +151,19 @@ class BiosCrawler:
             return
 
         candidates: List[CrawlEdge] = []
+        allowed_actions = self._allowed_crawl_actions(state)
 
         # 1. Enter on selected submenu (highest priority)
         for ctrl in state.controls:
-            if ctrl.selected and ctrl.role == ControlRole.SUBMENU:
+            if (
+                "Enter" in allowed_actions
+                and ctrl.selected
+                and ctrl.role == ControlRole.SUBMENU
+            ):
                 candidates.append(CrawlEdge("Enter", self._depth + 1, f"Enter {ctrl.label}"))
 
         # 2. ArrowDown to scan rows (medium priority)
-        if len(state.controls) > 0:
+        if "ArrowDown" in allowed_actions and state.controls:
             candidates.append(CrawlEdge("ArrowDown", self._depth, "ArrowDown next row"))
 
         self._frontier = [
@@ -294,14 +299,26 @@ class BiosCrawler:
 
     def _heuristic_pick(self, current_state: BiosState) -> Optional[str]:
         """Fallback single-step heuristic when no DFS state is available."""
+        allowed_actions = self._allowed_crawl_actions(current_state)
         for ctrl in current_state.controls:
-            if ctrl.selected and ctrl.role == ControlRole.SUBMENU:
+            if (
+                "Enter" in allowed_actions
+                and ctrl.selected
+                and ctrl.role == ControlRole.SUBMENU
+            ):
                 return "Enter"
 
-        if len(current_state.controls) > 0:
+        if "ArrowDown" in allowed_actions and current_state.controls:
             return "ArrowDown"
 
-        return "Escape"
+        return "Escape" if "Escape" in allowed_actions else None
+
+    @staticmethod
+    def _allowed_crawl_actions(state: BiosState) -> Set[str]:
+        """Restrict the crawler to the normalized action set for the screen."""
+        if state.risk.blocklist_flag:
+            return {"Escape"}
+        return set(state.actions.safe) | set(state.actions.context_gated)
 
     # Helpers
 

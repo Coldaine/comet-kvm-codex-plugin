@@ -210,7 +210,7 @@ async def comet_msd_upload(remote_path: str, local_path: str) -> dict:
         with open(local_path, "rb") as f:
             data = f.read()
     except Exception as e:
-        raise ValueError(f"Failed to read local file {local_path}: {e}")
+        raise ValueError(f"Failed to read local file {local_path}: {e}") from e
     return await client.msd_upload(remote_path, data)
 
 

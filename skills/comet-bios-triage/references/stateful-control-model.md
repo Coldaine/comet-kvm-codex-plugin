@@ -7,7 +7,7 @@ The MCP server provides transport (screenshots, keyboard, mouse, OCR). The workf
 | Level | What it tracks | Who maintains it | Lifetime | Example question |
 |-------|---------------|-----------------|----------|-----------------|
 | **Workflow phase** (this doc) | Which stage of an experiment are we in | The agent + run ledger | Across sessions, persisted | "Are we in the bios-edit phase?" |
-| **Screen position** (state engine) | Which BIOS menu node are we on right now | The sidecar state tracker in `glkvm_mcp.py` | Ephemeral, per live session | "Are we on the Overclocking submenu row 3?" |
+| **Screen position** (state engine) | Which BIOS menu node are we on right now | The BIOS sidecar state tracker | Ephemeral, per live session | "Are we on the Overclocking submenu row 3?" |
 
 Neither subsumes the other. The phase model governs the experiment lifecycle. The state engine governs live navigation safety within a phase — it validates that each keystroke produced the screen transition the stored map predicted.
 
@@ -33,7 +33,7 @@ If no map exists, the agent should either run cartography first or fall back to 
 
 ## Screen-Level State Engine
 
-When a BIOS map is loaded, the state engine (running inside `glkvm_mcp.py` during tool execution) provides:
+When a BIOS map is loaded, the state engine in the BIOS sidecar provides:
 
 - **Current screen identification** — matches live screenshots against map nodes via perceptual hash + OCR fingerprint (`kvm_match_screen`).
 - **Transition validation** — when keys are sent during path execution, the engine validates the destination edge from the map. If it doesn't match, it halts and triggers VLM grounding.

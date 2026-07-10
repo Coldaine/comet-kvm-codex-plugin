@@ -17,7 +17,9 @@ import importlib.util
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 SERVER_PATH = os.path.join(REPO_ROOT, "glkvm_mcp.py")
@@ -130,19 +132,35 @@ assert not any(name.startswith('src.bios_sidecar') for name in sys.modules), 'si
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
 
+    def test_sidecar_runtime_reconfigures_existing_kvm_cache(self):
+        from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
+        import src.kvm_core.runtime as kvm_runtime
 
-def test_sidecar_runtime_uses_requested_screenshot_cache(tmp_path, monkeypatch):
-    from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
-    import src.kvm_core.runtime as kvm_runtime
+        with tempfile.TemporaryDirectory() as temp_dir:
+            initial_cache = os.path.join(temp_dir, "initial-screenshots")
+            requested_cache = os.path.join(temp_dir, "requested-screenshots")
+            with patch.object(
+                kvm_runtime,
+                "_runtime",
+                kvm_runtime.KVMRuntime(screenshot_cache=initial_cache),
+            ):
+                runtime = StatefulBiosRuntime(
+                    db_path=":memory:",
+                    screenshot_cache=requested_cache,
+                )
 
-    monkeypatch.setattr(kvm_runtime, "_runtime", None)
-    screenshot_cache = tmp_path / "screenshots"
-    runtime = StatefulBiosRuntime(
-        db_path=str(tmp_path / "bios_sidecar.db"),
-        screenshot_cache=str(screenshot_cache),
-    )
+                self.assertEqual(runtime.capture_mgr.cache_dir, requested_cache)
 
-    assert runtime.capture_mgr.cache_dir == str(screenshot_cache)
+    def test_msd_upload_preserves_file_read_error_as_cause(self):
+        import src.kvm_core.tools as kvm_tools
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            missing_path = os.path.join(temp_dir, "missing.iso")
+            with patch.object(kvm_tools, "_require_client", return_value=object()):
+                with self.assertRaises(ValueError) as raised:
+                    asyncio.run(kvm_tools.comet_msd_upload("images/missing.iso", missing_path))
+
+        self.assertIsInstance(raised.exception.__cause__, FileNotFoundError)
 
 
 if __name__ == "__main__":
