@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This repository is `Coldaine/comet-kvm-codex-plugin` — a packaged plugin for GL.iNet Comet KVM-driven hardware triage workflows. It is a selective fork of `kennypeh85/glkvm-mcp` (upstream MCP server). The two projects diverge strongly; see the [Upstream Relationship](README.md#upstream-relationship) section in the README.
+This repository develops a Comet KVM **MCP server** (selective fork of `kennypeh85/glkvm-mcp`, with local augmentations) and packages it for Codex as a plugin (manifest + `.mcp.json` + skills). This file is **not** part of that plugin payload — it is developer-agent guidance for working in the repo. See the [README](README.md#what-ships-where) for plugin vs repo surfaces.
 
-Most authority lives in [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) and [`docs/decisions.md`](docs/decisions.md). KVM-core architecture lives in [`docs/kvm-core.md`](docs/kvm-core.md). This file is the operating-rules summary for agents working in this repo.
+Most authority lives in [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) and [`docs/decisions.md`](docs/decisions.md). KVM-core architecture lives in [`docs/kvm-core.md`](docs/kvm-core.md).
 
 ## Agent Topology — Read This Before Working in This Repo
 
@@ -14,7 +14,7 @@ The same agent instance may fill multiple roles — the developer agent can also
 
 | Role | What it does | Where its instructions live |
 |------|-------------|---------------------------|
-| **Developer agent** | Writes, tests, refactors the plugin's source code | **This file (AGENTS.md)** + `docs/NORTH_STAR.md` + `docs/decisions.md` |
+| **Developer agent** | Writes, tests, refactors the MCP server, skills, and packaging in this repo | **This file (AGENTS.md)** + `docs/NORTH_STAR.md` + `docs/decisions.md` |
 | **Driver agent** | Operates the Comet KVM at runtime: navigates BIOS, changes settings, collects HWiNFO logs, runs experiments | **The skill files** under `skills/comet-bios-triage/` |
 
 The VLM is not a peer agent role. It is a stateless perception service the BIOS sidecar may call with screenshots to get structured parses. It does not navigate, edit code, or read repo docs at runtime.

@@ -24,13 +24,13 @@ BIOS maps should persist on the Comet device itself, co-located with the hardwar
 
 Fuzzy matching is not a core requirement. The driver agent can look at stored maps and then decide if a map is similar enough to be imported and reused. We prioritize agent-led comparison over automated heuristic matching.
 
-## D6 — glkvm_mcp.py file structure: not a hard constraint
+## D6 — glkvm_mcp.py is a composition entry point
 
-`glkvm_mcp.py` is currently a single-file MCP server. It already runs two background asyncio loops (watchdog + pinger) and holds session state. The planned state engine will join as a third background loop in the same file. This is not a hard constraint — if the file's complexity grows past the point where a single file is maintainable (e.g. after adding the state engine and crawler-driving hooks), it may be split into modules within the same package. That split, if it comes, separates transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) — not into separate MCP servers.
+`glkvm_mcp.py` remains the PEP 723 executable entry point, but it is no longer the implementation container. Universal transport, session, OCR, and tool code lives under `src/kvm_core/`; BIOS-specific state and orchestration lives under `src/bios_sidecar/`. Both layers register against the shared `FastMCP("comet-kvm")` instance. Preserve this dependency direction: the sidecar may depend on the KVM core, while the KVM core must not depend on BIOS semantics.
 
-## D7 — State engine deployment: internal asyncio tracking
+## D7 — State engine deployment: on-demand internal tracking
 
-The stateful screen-level position tracker runs inside the MCP server process, keeping track of which graph node the session is currently on. Instead of running a background loop that constantly polls (which is slow and expensive), the state tracker is updated on-demand when the Driver Agent calls tools like `bios_observe_state`, `bios_navigate_to`, or `bios_apply_setting_change`. The MCP server matches screens locally using perceptual hashes and OCR fingerprints (`kvm_match_screen`), calling the VLM tool (`kvm_vlm_parse`) only when grounding is needed.
+The stateful screen-level position tracker runs inside the MCP server process, keeping track of which graph node the session is currently on. It does not run an always-on screenshot/OCR loop. The sidecar updates state on demand when the Driver Agent calls tools such as `bios_observe_state`, `bios_navigate_to`, or `bios_apply_setting_change`. It matches screens locally using perceptual hashes and OCR fingerprints (`kvm_match_screen`), calling the VLM tool (`kvm_vlm_parse`) only when grounding is needed.
 
 ## D8 — Two granularity levels: workflow phases vs screen position
 
@@ -39,7 +39,7 @@ The stateful screen-level position tracker runs inside the MCP server process, k
 The project operates at two distinct granularity levels that complement, not replace, each other:
 
 - **Workflow level** (`stateful-control-model.md`): phases like `planned → preflight → bios-entry → bios-edit → save-confirm → windows-boot → hwinfo-log → analysis → done`. Agent-maintained, persisted in the run ledger. Asks "are we in the edit phase?"
-- **Screen level** (state engine): which BIOS menu node are we on right now, matched against a stored map. Background-maintained, ephemeral per session. Asks "are we on the Overclocking submenu row 3, and did that Enter press land where the map predicted?"
+- **Screen level** (state engine): which BIOS menu node are we on right now, matched against a stored map. Maintained on demand and ephemeral per session. Asks "are we on the Overclocking submenu row 3, and did that Enter press land where the map predicted?"
 
 ## D9 — Output format: Semantic Capability Index + screen-node graph
 
@@ -48,7 +48,7 @@ The crawler produces two views of the same crawl data:
 - **Semantic Capability Index** (for the driver agent): a JSON file keyed by setting name, containing the navigation path, UI type, available options, and interaction keys. The driver reads this to navigate deterministically without calling the VLM.
 - **Screen-node graph** (for the state engine): a network of screen nodes keyed by perceptual hash + OCR fingerprint, with edges labeled by the keystroke that transitions between them. The state engine matches live screenshots against these nodes for transition validation.
 
-The crawler produces the graph (raw crawl data). A post-processing step derives the index from the graph. Both are persisted. See `docs/architecture.md` §9 for the full rationale.
+The crawler produces the graph (raw crawl data). A post-processing step derives the index from the graph. Both are persisted. See `docs/architecture.md#state-and-cartography` for the current framing.
 
 ## D10 — REMOVED: VLM framework choice as product architecture
 
@@ -60,7 +60,7 @@ Removed as product architecture. Approval tokens, `bios_grant_human_approval`, a
 
 ## D-K1 — KVM tool surface plus deprecated aliases
 
-The KVM core exposes these unique driver-facing tools: `kvm_connect`, `kvm_disconnect`, `kvm_status`, `kvm_send_text`, `kvm_send_keys`, `kvm_hold_key`, `kvm_release_all`, `kvm_mouse_move`, `kvm_mouse_move_pct`, `kvm_mouse_click`, `kvm_mouse_scroll`, `kvm_screenshot`, `kvm_screenshot_to_file`, `kvm_ocr_screenshot`, `kvm_ocr_click`, `comet_atx_power`, `comet_atx_click`, `comet_sysinfo`, and `comet_msd_upload`.
+The KVM core exposes these unique driver-facing tools: `kvm_connect`, `kvm_disconnect`, `kvm_status`, `kvm_send_text`, `kvm_send_keys`, `kvm_hold_key`, `kvm_release_all`, `kvm_mouse_move`, `kvm_mouse_move_pct`, `kvm_mouse_click`, `kvm_mouse_scroll`, `kvm_screenshot`, `kvm_screenshot_to_file`, `kvm_ocr_status`, `kvm_ocr_text`, `kvm_ocr_screenshot`, `kvm_ocr_click`, `comet_atx_power`, `comet_atx_click`, `comet_sysinfo`, and `comet_msd_upload`.
 
 The 10 `comet_raw_*` aliases duplicate `kvm_*` tools and are deprecated in documentation only. Do not remove them in this docs pass; `tests/test_smoke.py` currently expects `comet_raw_send_keys` and `comet_raw_screenshot`.
 
@@ -83,3 +83,17 @@ The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verificatio
 ## D-K6 — PEP 723 script deployment remains the target
 
 `glkvm_mcp.py` remains the single-script MCP entry point intended for `uv run --script`. The PEP 723 metadata includes the sidecar dependencies, including `instructor` and `litellm`, so script-only launches resolve the same runtime surface as the project environment.
+
+## D-K7 — Terminal output uses explicit, bounded transports
+
+MCP tool return values are the primary agent data path. Runtime logs and MCP progress/resource notifications are diagnostics or optional mirrors; they are not command-output transport.
+
+For a pixel-only KVM console, the current primitive flow is `kvm_send_text` → `kvm_send_keys("Enter")` → `kvm_ocr_text()`, whose native-first ordered text is returned directly to the calling agent. A bounded composite `kvm_terminal_run` is **Planned**: it will poll only for the duration of one command, accumulate visible OCR deltas, return the result, and then discard the transcript. An always-on rolling OCR buffer is **Deferred** until recorded workloads prove that the bounded call is insufficient.
+
+Exact stdout/stderr/exit status requires a real byte-stream transport, not HDMI OCR. A separate AsyncSSH-backed target-shell component is a **Candidate** for machines that are directly reachable on the network. It must keep target credentials separate from `COMET_PASSWORD`, verify known hosts, and use an allowlist. It does not belong inside `kvm_core` and it cannot replace KVM access for BIOS, recovery, or network-down states.
+
+`kvm_ocr_text` probes the Comet/PiKVM device-side OCR endpoint and uses it for text-only reads when enabled, including its language and crop parameters. It automatically falls back to host Pillow plus pytesseract. The live Comet at `192.168.0.126` reported `enabled: false` with no languages on 2026-07-10, so the fallback is currently selected there. Coordinate-sensitive tools such as `kvm_ocr_click` continue to require host OCR word boxes.
+
+## D-K8 — Prefer small standard adapters over dependency expansion
+
+Keep Pillow for image decoding, pytesseract for Tesseract integration, and the Python standard library for rotating logs, bounded queues, subprocess offloading, and initial text overlap. Do not add `screen-ocr`, pandas, OpenCV, RapidFuzz, Loguru, structlog, or OpenTelemetry without fixture- or profiling-backed need. If direct SSH is implemented, use AsyncSSH rather than writing an SSH protocol/session layer or wrapping synchronous Paramiko. Pin the stable MCP Python SDK line below v2 until a deliberate v2 migration is completed.

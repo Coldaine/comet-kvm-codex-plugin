@@ -6,54 +6,62 @@
 | **Forked from** | [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp) (upstream MCP server) |
 | **Relationship** | Selective fork — occasionally review upstream for bug fixes, but this repo diverges strongly and is its own project |
 
-A packaged GL.iNet Comet KVM MCP plugin for physical-machine triage. The KVM server is the universal physical-control substrate; BIOS configuration, pre-OS operations, and Windows-side validation are downstream workflows built on that substrate. Not VM orchestration or general-purpose remote desktop.
+This repository develops and ships a **Comet KVM MCP server** for physical-machine triage, packaged for Codex as a plugin. The MCP server is the product: keyboard/mouse, screenshots, OCR, Comet hardware control, plus optional BIOS-aware tools. The Codex plugin is how that server (and its driver skill) get installed. Not VM orchestration or general-purpose remote desktop.
 
-**Primary target: Codex.** Cross-tool compatibility (Claude Code, Cursor, VS Code/Copilot) is designed in and sequenced after the Codex plugin is proven. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
+**Primary distribution target: Codex.** The MCP server itself is usable from any MCP client; Codex packaging is first. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
 
 ---
 
-## Plugin Architecture
+## What ships where
 
-This repo follows the **thin-manifest, shared-core** pattern that emerged across AI coding tools in 2025–2026. The idea: one repository, one set of shared resources, thin per-tool manifests that point at them. Adding a new tool later means adding one manifest file, not rewriting the plugin.
+A Codex plugin is an installable bundle. For this project that bundle is:
 
-### How it's structured
+| Plugin payload | Role |
+|---|---|
+| `.codex-plugin/plugin.json` | Manifest — identity + pointers |
+| `.mcp.json` | How Codex launches **this repo's** MCP server |
+| `skills/` | Driver playbooks (e.g. BIOS triage) |
+| `glkvm_mcp.py` + `src/` | The MCP server implementation the launcher runs |
+
+That is the whole plugin shape: **your MCP + skill(s)**. It is not a thin wrapper around upstream. Upstream (`kennypeh85/glkvm-mcp`) was the starting fork; this tree owns and augments the server.
+
+### Not part of the plugin
+
+These live in the repo for development and local agent work. They are **not** Codex plugin components:
+
+| Repo surface | Role |
+|---|---|
+| `AGENTS.md` | Developer-agent guidance when working *in* this repo |
+| `docs/` | Project authority and design docs |
+| `scripts/`, `tests/`, `extras/` | Local tooling, tests, preserved upstream helpers |
+
+`AGENTS.md` is project guidance (Codex loads it from the repo). Skills are workflows. MCP is tools. The plugin packages skills + MCP — not `AGENTS.md`.
+
+### Repo layout
 
 ```
 comet-kvm-codex-plugin/
 ├── .codex-plugin/
-│   └── plugin.json          # Codex plugin manifest (thin — points at shared resources)
-├── .mcp.json                # MCP server config (tool-agnostic, any MCP client can use it)
-├── AGENTS.md                # Operating rules (shared across tools)
-├── glkvm_mcp.py             # The MCP server (single-file, PEP 723, tool-agnostic)
-├── skills/                  # Agent Skills (agentskills.io open standard)
+│   └── plugin.json          # Codex plugin manifest → skills + MCP
+├── .mcp.json                # Launches this repo's MCP server
+├── glkvm_mcp.py             # PEP 723 MCP entry point
+├── src/
+│   ├── kvm_core/            # Universal KVM transport, OCR, tools, runtime
+│   └── bios_sidecar/        # Optional BIOS-aware tools on the same MCP process
+├── skills/                  # Bundled driver skills (plugin payload)
 │   └── comet-bios-triage/
-│       ├── SKILL.md
-│       └── references/
+├── AGENTS.md                # Repo developer guidance (not plugin payload)
+├── docs/                    # Design / authority docs (not plugin payload)
 ├── scripts/                 # Local tooling (preflight, run ledger)
-├── docs/                    # Project authority docs + design docs
-│   ├── NORTH_STAR.md
-│   ├── decisions.md
-│   ├── architecture.md
-│   ├── kvm-core.md
-│   ├── vlm-prompt-contract.md
-│   └── reference/
-├── extras/                  # Upstream utilities (calibration, click helper, userscript)
-├── runs/                    # Experiment records (gitignored content)
-├── state/                   # Runtime state (gitignored content)
+├── extras/                  # Upstream helpers (calibration, click helper, userscript)
+├── runs/                    # Experiment records (gitignored)
+├── state/                   # Runtime state (gitignored)
 └── tests/
 ```
 
-### The three portable layers
+### Manifest
 
-1. **MCP server** (`glkvm_mcp.py` + `.mcp.json`) — the universal tool-integration layer. MCP (Model Context Protocol) is supported by every major AI coding tool. The server is a single-file Python MCP server using PEP 723 inline dependencies, launched via `uv run --script`. It works identically in Codex, Claude Code, Cursor, Kilo, or any MCP-compatible client without modification.
-
-2. **Agent Skills** (`skills/*/SKILL.md`) — the universal instructions layer, following the [agentskills.io](https://agentskills.io) open standard. Skills are auto-discovered by Codex, Claude Code, Cursor, Kilo, OpenCode, Gemini CLI, and Cline. The `SKILL.md` format is the lowest common denominator across tools.
-
-3. **Operating rules** (`AGENTS.md`) — shared agent instructions. Read natively by Codex, Claude Code, Cursor, and most modern tools.
-
-### The thin manifest
-
-`.codex-plugin/plugin.json` is the only Codex-specific file. It declares the plugin name, metadata, and points at the shared resources:
+`.codex-plugin/plugin.json` points at the plugin payload only:
 
 ```json
 {
@@ -62,16 +70,7 @@ comet-kvm-codex-plugin/
 }
 ```
 
-No logic, no duplication — just a pointer. When cross-tool support is added later, a `.claude-plugin/plugin.json` or `.cursor-plugin/plugin.json` would be equally thin, pointing at the same `skills/` and `.mcp.json`.
-
-### Why this pattern
-
-- **MCP is the de facto common layer.** Every major AI coding tool supports MCP as its tool-integration mechanism. The server is written once, works everywhere.
-- **SKILL.md is the de facto instructions standard.** Adopted across the tool ecosystem per agentskills.io. Skills are portable without translation.
-- **Per-tool manifests are converging.** The [Open Plugin Specification](https://github.com/vercel-labs/open-plugin-spec) (v1.0.0, April 2026) defines a vendor-neutral `.plugin/plugin.json` that VS Code/Copilot already auto-detects alongside vendor-specific manifests. Each tool keeps its own manifest dir (`.codex-plugin/`, `.claude-plugin/`, `.cursor-plugin/`) but they're thin pointers, not competing formats.
-- **What doesn't port cleanly:** hooks (event vocabularies differ per tool), subagents, and permission policies. BIOS/HID safety logic is kept in the MCP server (portable) rather than in tool-specific hooks.
-
-This pattern was validated by real-world multi-target plugins (e.g. [InventorLab](https://github.com/adam-inventorlab/InventorLab)) that ship to Codex + Claude Code + Cursor from a single repo using thin per-tool manifests.
+`.mcp.json` starts `glkvm_mcp.py` (via Doppler + `uv run --script` in this repo's launcher). The server code that runs is this project's — `kvm_core` plus optional `bios_sidecar` on one `FastMCP("comet-kvm")` process.
 
 ---
 
@@ -166,7 +165,9 @@ Add to any MCP client config:
 |------|-------------|
 | `kvm_screenshot(preview?, max_width?, quality?)` | Capture JPEG frame as MCP image content |
 | `kvm_screenshot_to_file(path, ...)` | Capture and save to disk |
-| `kvm_ocr_screenshot(search_text?, preview?, psm?)` | Capture + Tesseract OCR: returns ordered text/lines plus word coordinates (`psm=6` for terminals) |
+| `kvm_ocr_status()` | Report native Comet OCR and host Tesseract availability |
+| `kvm_ocr_text(psm?, languages?, prefer_native?, left?, top?, right?, bottom?)` | Native-first visible text with host Tesseract fallback and optional crop |
+| `kvm_ocr_screenshot(search_text?, preview?, psm?)` | Host Tesseract OCR with ordered text/lines plus word coordinates |
 | `kvm_ocr_click(text, button?, count?, search_area?)` | Find text via OCR and click it |
 
 ### Comet Hardware
@@ -223,14 +224,14 @@ This server includes fixes for known GLKVM/PiKVM firmware bugs:
 
 ## Upstream Relationship
 
-This repo is a fork of [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp), but the two projects have diverged in purpose:
+This repo is a selective fork of [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp):
 
-- **Upstream** (`kennypeh85/glkvm-mcp`) is a standalone MCP server for GLKVM/Comet keyboard/mouse/screenshot/OCR control.
-- **This repo** (`Coldaine/comet-kvm-codex-plugin`) is a packaged plugin with skills, workflow scaffolding, reference docs, and planned tooling (BIOS cartography, state engine) that upstream does not have and is not expected to adopt.
+- **Upstream** is a standalone MCP server for GLKVM/Comet keyboard/mouse/screenshot/OCR.
+- **This repo** ships its **own** MCP server (forked code under `src/`, composed by `glkvm_mcp.py`), augments it (BIOS sidecar, native OCR path, Comet hardware tools, etc.), and packages that server for Codex with skills.
 
-**Stance on upstream sync:** The `upstream` git remote is kept fetch-only (push disabled) so upstream changes can be reviewed manually. We selectively cherry-pick bug fixes or API improvements from upstream when relevant — but this repo is not a mirror, not a PR target for upstream, and does not track upstream's release cadence. The shared code (`glkvm_mcp.py`) may diverge as this project adds the state engine and other capabilities upstream doesn't need.
+We are not wrapping upstream as an external dependency. We keep a fetch-only `upstream` remote to cherry-pick bug fixes or API improvements when useful. This repo is not a mirror and does not track upstream releases.
 
-Upstream helper utilities (screenshot calibration, click helper) that were in the repo root have been preserved in [`extras/`](extras/) — they are not part of the plugin core.
+Helpers that lived at upstream's repo root (calibration, click helper, stuck-key userscript) are preserved in [`extras/`](extras/) — useful, not plugin payload.
 
 ## License
 
