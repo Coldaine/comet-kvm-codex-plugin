@@ -4,7 +4,7 @@
 
 **Overall:** Convert `kennypeh85/glkvm-mcp` into a packaged plugin for GL.iNet Comet KVM-driven hardware triage workflows — BIOS configuration, pre-OS operations, and Windows-side validation on physical machines. Not VM orchestration or general-purpose remote desktop.
 
-**One spike, two layers:** The first proof point advances the universal KVM MCP server (connect, OCR, plugin packaging) and the BIOS sidecar (cartography, navigation, mutation) together on live hardware — not as sequential "finish KVM, then start BIOS" phases.
+**One spike, two layers:** One integrated spike with two layers maturing in parallel: the universal KVM MCP server (transport, OCR, plugin packaging) and the BIOS sidecar (cartography, navigation, mutation). The live-hardware proof point on MSI Z690 is **Planned** — code exists but has not yet been validated end-to-end against a real board.
 
 **Primary target: Codex.** Ship as a Codex plugin first. Skills follow the open `SKILL.md` (agentskills.io) standard and the MCP server is tool-agnostic, so cross-tool compatibility with Claude Code, Cursor, VS Code/Copilot, and others should follow by adding thin per-tool manifests after the Codex plugin is proven.
 

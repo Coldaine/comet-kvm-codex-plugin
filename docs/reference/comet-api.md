@@ -13,9 +13,14 @@
 │ (Codex/LLM)  │    tool calls       │  (MCP server)   │   (PiKVM API)     │  (GL-RM1)│
 └──────────────┘                     └─────────────────┘                   └──────────┘
                                              │
-                                      Tesseract OCR
-                                      (host-side, reads
-                                       screenshot text)
+                                      kvm_ocr_text
+                                             │
+                    ┌────────────────────────┴────────────────────────┐
+                    ▼                                                 ▼
+         Native OCR (Comet)                              Host Tesseract
+         /api/streamer/ocr                               (pytesseract)
+                    │                                                 ▲
+                    └── disabled / fail ──── fallback ────────────────┘
 ```
 
 The MCP server uses `glkvm_mcp.py` as a PEP 723 composition entry point and keeps implementation under `src/kvm_core/` and `src/bios_sidecar/`. It is launched via `uv run --script ./glkvm_mcp.py` and runs over stdio. The KVM core maintains a persistent WebSocket connection to the Comet for low-latency input and uses HTTP for screenshots and authentication.
@@ -279,6 +284,7 @@ The server reads these from its environment. They can be injected via shell expo
 | `GLCOMET_ADMIN_PASSWORD` | **yes** | no | — | Legacy fallback name for the same Comet admin password |
 | `COMET_HOST` | no | no | `192.168.0.126` | LAN IP of the Comet |
 | `COMET_USERNAME` | no | no | `admin` | Comet login username |
+| `COMET_DISABLE_BIOS_SIDECAR` | no | no | unset | Set to `1` to skip loading `bios_sidecar` (loaded by default; dependency is one-way: sidecar → kvm_core) |
 | `VLM_API_KEY` | **yes** | for VLM | — | OpenAI-compatible API key (OpenRouter, OpenAI, or set to any value for local Ollama) |
 | `VLM_PROVIDER` | no | no | `mock` | `openrouter` \| `ollama` \| `vllm` \| `openai` \| `mock` |
 | `VLM_MODEL` | no | no | provider default | Model string routed by litellm (e.g. `openrouter/qwen/qwen-2-vl-72b-instruct`) |

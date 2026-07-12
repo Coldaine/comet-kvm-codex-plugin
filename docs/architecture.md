@@ -5,7 +5,7 @@
 
 ## Architecture Thesis
 
-One stdio MCP process composes a universal physical KVM core with an optional BIOS-aware sidecar. The KVM core owns Comet transport and screen primitives; the sidecar consumes those primitives and adds BIOS semantics. Agents receive results through explicit MCP tool return values. Perception and diagnostic services do not become peer navigators or hidden output channels.
+One stdio MCP process composes a universal physical KVM core with a BIOS-aware sidecar (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip). The KVM core owns Comet transport and screen primitives; the sidecar consumes those primitives and adds BIOS semantics. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa. Agents receive results through explicit MCP tool return values. Perception and diagnostic services do not become peer navigators or hidden output channels.
 
 ## Status Legend
 

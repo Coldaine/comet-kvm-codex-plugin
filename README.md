@@ -6,7 +6,7 @@
 | **Forked from** | [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp) (upstream MCP server) |
 | **Relationship** | Selective fork — occasionally review upstream for bug fixes, but this repo diverges strongly and is its own project |
 
-This repository develops and ships a **Comet KVM MCP server** for physical-machine triage, packaged for Codex as a plugin. The MCP server is the product: keyboard/mouse, screenshots, OCR, Comet hardware control, plus optional BIOS-aware tools. The Codex plugin is how that server (and its driver skill) get installed. Not VM orchestration or general-purpose remote desktop.
+This repository develops and ships a **Comet KVM MCP server** for physical-machine triage, packaged for Codex as a plugin. The MCP server is the product: keyboard/mouse, screenshots, OCR, Comet hardware control, plus BIOS-aware tools (loaded by default; disable with `COMET_DISABLE_BIOS_SIDECAR=1`). The Codex plugin is how that server (and its driver skill) get installed. Not VM orchestration or general-purpose remote desktop.
 
 **Primary distribution target: Codex.** The MCP server itself is usable from any MCP client; Codex packaging is first. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
 
@@ -47,7 +47,7 @@ comet-kvm-codex-plugin/
 ├── glkvm_mcp.py             # PEP 723 MCP entry point
 ├── src/
 │   ├── kvm_core/            # Universal KVM transport, OCR, tools, runtime
-│   └── bios_sidecar/        # Optional BIOS-aware tools on the same MCP process
+│   └── bios_sidecar/        # BIOS-aware tools (default on; one-way dep on kvm_core)
 ├── skills/                  # Bundled driver skills (plugin payload)
 │   └── comet-bios-triage/
 ├── AGENTS.md                # Repo developer guidance (not plugin payload)
@@ -70,13 +70,13 @@ comet-kvm-codex-plugin/
 }
 ```
 
-`.mcp.json` starts `glkvm_mcp.py` (via Doppler + `uv run --script` in this repo's launcher). The server code that runs is this project's — `kvm_core` plus optional `bios_sidecar` on one `FastMCP("comet-kvm")` process.
+`.mcp.json` starts `glkvm_mcp.py` (via Doppler + `uv run --script` in this repo's launcher). The server code that runs is this project's — `kvm_core` plus `bios_sidecar` (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip) on one `FastMCP("comet-kvm")` process. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa.
 
 ---
 
 ## Current Scope
 
-This is **one integrated spike** with two layers maturing in parallel: the universal KVM MCP server (transport, OCR, plugin packaging, session/auth) and the BIOS sidecar (cartography, navigation, mutation). These are not sequential phases — KVM connect, native OCR, and BIOS crawl all advance together toward the same proof point on live hardware.
+This is **one integrated spike** with two layers maturing in parallel: the universal KVM MCP server (transport, OCR, plugin packaging, session/auth) and the BIOS sidecar (cartography, navigation, mutation). The live-hardware proof point on MSI Z690 is **Planned** — code exists but has not yet been validated end-to-end against a real board.
 
 **First spike — BIOS cartography:** A tool that near-exhaustively crawls the non-blocklisted zones of a target board's BIOS — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing, and explicit blocklisting for destructive screens. Maps are persisted as labeled, reusable artifacts.
 
@@ -228,8 +228,14 @@ The `comet_raw_*` aliases currently duplicate `kvm_*` tools. They are deprecated
 │ (Codex)      │    tool calls       │  (MCP server)   │   (PiKVM API)     │  (GL-RM1)│
 └──────────────┘                     └─────────────────┘                   └──────────┘
                                              │
-                                      Tesseract OCR
-                                      (host-side)
+                                      kvm_ocr_text
+                                             │
+                    ┌────────────────────────┴────────────────────────┐
+                    ▼                                                 ▼
+         Native OCR (Comet)                              Host Tesseract
+         /api/streamer/ocr                               (pytesseract)
+                    │                                                 ▲
+                    └── disabled / fail ──── fallback ────────────────┘
 ```
 
 The MCP server maintains a persistent WebSocket connection to the Comet for low-latency keyboard/mouse input, and uses HTTP for screenshots, authentication, ATX, sysinfo, and MSD upload. It runs background key-watchdog and WebSocket-pinger loops.

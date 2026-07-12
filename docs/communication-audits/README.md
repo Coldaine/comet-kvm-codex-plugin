@@ -2,6 +2,8 @@
 
 > **WARNING — STALE SNAPSHOT (2026-07-07).** This audit predates the BIOS sidecar implementation. Rows marked **"Missing"** (VLM client, cartographer, state engine, policy engine, trace ledger) are **out of date** — those modules now exist under `src/bios_sidecar/`. **Do not use this folder for current-state decisions.**
 
+> **WARNING — STALE `file:line` CITATIONS.** All `file:line` citations in `01-04` are stale after the `kvm_core` / `bios_sidecar` refactor. The codebase was split from a single-file `glkvm_mcp.py` into `src/kvm_core/` + `src/bios_sidecar/` (for example, claims like `glkvm_mcp.py:283-904` no longer apply — that file is now a short composition entrypoint). **Do not trust any line number in these audit files.**
+
 > **Date:** 2026-07-07
 > **Scope:** Repo-grounded audit of the Comet KVM BIOS/UEFI sidecar skill/tooling bundle.
 > **Method:** Evidence-only answers from current repository files. Proposed or missing items are labeled as such.
