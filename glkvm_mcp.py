@@ -2,7 +2,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "mcp[cli]>=1.2",
+#     "mcp[cli]>=1.28,<2",
 #     "websockets>=12",
 #     "httpx>=0.27",
 #     "Pillow>=10",

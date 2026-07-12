@@ -42,7 +42,15 @@ EXPECTED_TOOLS = {
     "kvm_mouse_scroll",
     "kvm_screenshot",
     "kvm_screenshot_to_file",
+    "kvm_ocr_status",
+    "kvm_ocr_text",
+    "kvm_ocr_screenshot",
+    "kvm_ocr_click",
     "kvm_status",
+    "comet_atx_power",
+    "comet_atx_click",
+    "comet_sysinfo",
+    "comet_msd_upload",
     # Deprecated raw aliases remain public compatibility API.
     "comet_raw_send_text",
     "comet_raw_send_keys",
@@ -56,6 +64,7 @@ EXPECTED_TOOLS = {
     "comet_raw_status",
     # Tier 1 stateful BIOS tools
     "bios_observe_state",
+    "bios_crawl_step",
     "bios_crawl_region",
     "bios_navigate_to",
     "bios_propose_setting_change",

@@ -2,9 +2,17 @@ from __future__ import annotations
 import io
 import os
 import shutil
-import struct
 import pytesseract
 from PIL import Image as PILImage
+
+OCR_TIMEOUT_SECONDS = 15
+VALID_PSM_MODES = frozenset({1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13})
+
+
+def validate_psm(psm: int) -> None:
+    if psm not in VALID_PSM_MODES:
+        raise ValueError("psm must be a Tesseract text-recognition mode (1, 3-13 except 2)")
+
 
 class OCRManager:
     def __init__(self):
@@ -28,51 +36,53 @@ class OCRManager:
                     return candidate
         return None
 
-    def get_jpeg_dimensions(self, data: bytes) -> tuple[int, int]:
-        i = 0
-        while i < len(data) - 1:
-            if data[i] == 0xFF and data[i + 1] in (0xC0, 0xC2):
-                h = struct.unpack(">H", data[i + 5:i + 7])[0]
-                w = struct.unpack(">H", data[i + 7:i + 9])[0]
-                return w, h
-            i += 1
-        return 1920, 1080
+    def _ensure_tesseract(self) -> bool:
+        if self.tesseract_bin is None:
+            # Tesseract may be installed while a long-lived MCP process is running.
+            self.tesseract_bin = self._find_tesseract_binary()
+            if self.tesseract_bin:
+                pytesseract.pytesseract.tesseract_cmd = self.tesseract_bin
+        return self.tesseract_bin is not None
+
+    def get_status(self) -> dict:
+        return {
+            "available": self._ensure_tesseract(),
+            "command": self.tesseract_bin or "",
+            "timeout_seconds": OCR_TIMEOUT_SECONDS,
+        }
 
     def run_ocr(self, image_bytes: bytes, search_text: str = "", psm: int = 3) -> dict:
-        img_w, img_h = self.get_jpeg_dimensions(image_bytes)
         result = {
-            "width": img_w,
-            "height": img_h,
+            "width": 0,
+            "height": 0,
             "text": "",
             "lines": [],
             "elements": [],
             "tesseract_found": self.tesseract_bin is not None,
         }
 
-        if self.tesseract_bin is None:
-            # Tesseract may be installed while a long-lived MCP process is running.
-            self.tesseract_bin = self._find_tesseract_binary()
-            if self.tesseract_bin:
-                pytesseract.pytesseract.tesseract_cmd = self.tesseract_bin
-                result["tesseract_found"] = True
-
-        if self.tesseract_bin is None:
-            result["error"] = "Tesseract OCR binary not found."
-            return result
-
-        if psm not in {1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}:
-            raise ValueError("psm must be a Tesseract text-recognition mode (1, 3-13 except 2)")
+        validate_psm(psm)
 
         try:
             with PILImage.open(io.BytesIO(image_bytes)) as pil_img:
+                img_w, img_h = pil_img.size
+                result["width"] = img_w
+                result["height"] = img_h
+
+                if not self._ensure_tesseract():
+                    result["error"] = "Tesseract OCR binary not found."
+                    return result
+                result["tesseract_found"] = True
+
                 data = pytesseract.image_to_data(
                     pil_img,
                     config=f"--psm {psm}",
                     lang="eng",
                     output_type=pytesseract.Output.DICT,
+                    timeout=OCR_TIMEOUT_SECONDS,
                 )
         except Exception as e:
-            result["error"] = f"Tesseract error: {e}"
+            result["error"] = f"OCR error: {e}"
             return result
 
         lines: list[str] = []
@@ -129,4 +139,62 @@ class OCRManager:
 
         elements.sort(key=lambda e: (e["y_pct"], e["x_pct"]))
         result["elements"] = elements
+        return result
+
+    def run_text_ocr(
+        self,
+        image_bytes: bytes,
+        psm: int = 6,
+        languages: str = "",
+        crop: tuple[int, int, int, int] | None = None,
+    ) -> dict:
+        """Return spacing-preserving text without paying for word-box parsing."""
+        validate_psm(psm)
+
+        result = {
+            "width": 0,
+            "height": 0,
+            "text": "",
+            "lines": [],
+            "tesseract_found": self.tesseract_bin is not None,
+        }
+        try:
+            with PILImage.open(io.BytesIO(image_bytes)) as pil_img:
+                result["width"], result["height"] = pil_img.size
+                if not self._ensure_tesseract():
+                    result["error"] = "Tesseract OCR binary not found."
+                    return result
+                result["tesseract_found"] = True
+
+                ocr_img = pil_img
+                cropped_img = None
+                if crop is not None:
+                    left, top, right, bottom = crop
+                    left = max(0, left)
+                    top = max(0, top)
+                    right = pil_img.width if right < 0 else min(pil_img.width, right)
+                    bottom = pil_img.height if bottom < 0 else min(pil_img.height, bottom)
+                    if left >= right or top >= bottom:
+                        raise ValueError("OCR crop must describe a non-empty region inside the image")
+                    cropped_img = pil_img.crop((left, top, right, bottom))
+                    ocr_img = cropped_img
+
+                try:
+                    text = pytesseract.image_to_string(
+                        ocr_img,
+                        config=f"--psm {psm} -c preserve_interword_spaces=1",
+                        lang=("+".join(languages.replace(",", " ").split()) if languages.strip() else "eng"),
+                        timeout=OCR_TIMEOUT_SECONDS,
+                    ).rstrip()
+                finally:
+                    if cropped_img is not None:
+                        cropped_img.close()
+        except ValueError:
+            raise
+        except Exception as e:
+            result["error"] = f"OCR error: {e}"
+            return result
+
+        result["text"] = text
+        result["lines"] = text.splitlines()
         return result

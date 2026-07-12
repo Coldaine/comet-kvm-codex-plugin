@@ -18,19 +18,19 @@
                                        screenshot text)
 ```
 
-The MCP server (`glkvm_mcp.py`) is a **single-file Python MCP server** using PEP 723 inline script metadata. It is launched via `uv run --script ./glkvm_mcp.py` and runs as a stdio MCP server. It maintains a persistent WebSocket connection to the Comet for low-latency input, and uses HTTP for screenshots and authentication.
+The MCP server uses `glkvm_mcp.py` as a PEP 723 composition entry point and keeps implementation under `src/kvm_core/` and `src/bios_sidecar/`. It is launched via `uv run --script ./glkvm_mcp.py` and runs over stdio. The KVM core maintains a persistent WebSocket connection to the Comet for low-latency input and uses HTTP for screenshots and authentication.
 
-> **Source:** `glkvm_mcp.py` lines 1-11 (PEP 723 metadata), line 47 (FastMCP import), and `README.md#architecture`. Verified 2026-07-07.
+> **Source:** `glkvm_mcp.py` (PEP 723 metadata and composition), `src/kvm_core/server.py`, and `src/kvm_core/runtime.py`. Verified 2026-07-10.
 
 ## API Endpoints (PiKVM-Fork)
 
-The Comet runs a PiKVM-fork firmware. The API surface is PiKVM-compatible. This project exercises three endpoints:
+The Comet runs a PiKVM-fork firmware. The API surface is PiKVM-compatible. The project currently implements or probes the following endpoint groups.
 
 ### 1. Authentication: `POST /api/auth/login`
 
 ```
 POST /api/auth/login
-Body: { "username": "admin", "password": "<password>" }
+Form body: user=admin&passwd=<password>&expire=0
 Response: Sets `auth_token` cookie; may return `two_step_required` for 2FA
 ```
 
@@ -39,7 +39,7 @@ Response: Sets `auth_token` cookie; may return `two_step_required` for 2FA
 - If `auth_token` is not in cookies and `two_step_required` is true, 2FA is needed (not handled in current code)
 - Token is extracted from the `auth_token` cookie and used for subsequent WebSocket and HTTP calls
 
-> **Source:** `glkvm_mcp.py` lines 322-334. Verified 2026-07-07.
+> **Source:** `src/kvm_core/comet/client.py` (`CometClient.connect`). Verified 2026-07-10.
 
 ### 2. Keyboard/Mouse: `WSS /api/ws?auth_token=<token>&stream=false`
 
@@ -49,12 +49,12 @@ WebSocket connection for real-time input:
 - Mouse events: button press/release, absolute move (int16 coordinates), wheel scroll
 - A persistent ping loop (`_pinger_loop`) keeps the connection alive at 1-second intervals
 
-> **Source:** `glkvm_mcp.py` lines 338-339 (URL construction), lines 199-213 (pinger loop), lines 215-260 (WS send helpers). Verified 2026-07-07.
+> **Source:** `src/kvm_core/comet/client.py` (WebSocket URL, send helpers, and pinger loop). Verified 2026-07-10.
 
 ### 3. Screenshot: `GET /api/streamer/snapshot`
 
 ```
-GET /api/streamer/snapshot?preview=<bool>&width=<int>&quality=<int>
+GET /api/streamer/snapshot?preview=<bool>&preview_max_width=<int>&preview_quality=<int>
 Response: JPEG image bytes
 ```
 
@@ -62,18 +62,26 @@ Response: JPEG image bytes
 - Parameters control preview mode (downscaled) vs. full-resolution, max width, and JPEG quality
 - Used by `kvm_screenshot`, `kvm_screenshot_to_file`, `kvm_ocr_screenshot`, and `kvm_ocr_click` tools
 
-> **Source:** `glkvm_mcp.py` lines 608, 632, 789, 821. Verified 2026-07-07.
+> **Source:** `src/kvm_core/comet/client.py` (`get_screenshot`) and `src/kvm_core/tools.py` (screenshot/OCR tools). Verified 2026-07-10.
 
-### Endpoints Confirmed But Not Yet Exercised
+### 4. Native OCR: `GET /api/streamer/ocr` and snapshot OCR parameters
 
-The following endpoints were probed on 2026-07-07 against the target Comet at `192.168.0.126`. All return `401 Unauthorized` when unauthenticated — confirming they exist and are active, not `404`:
+`GET /api/streamer/ocr` reports whether device OCR is enabled, its engine (`tesseract` or `rknn`), and default/available languages. When enabled, `GET /api/streamer/snapshot?ocr=true` returns text and accepts `ocr_langs` plus pixel crop coordinates (`ocr_left`, `ocr_top`, `ocr_right`, `ocr_bottom`).
 
-| Endpoint | Response | Purpose |
-|---|---|---|
-| `GET /api/info` | `401` | Device metadata, firmware version, hardware info |
-| `POST /api/atx/*` | `401` | ATX power control — power on/off/reset the target |
-| `POST /api/msd/*` | `401` | Mass Storage Device — upload ISOs/images to `/userdata/media/` |
-| `POST /api/gpio/*` | `401` | GPIO pin control for ATX board |
+The live device returned HTTP 200 for the capability endpoint on 2026-07-10, with OCR disabled. The OCR snapshot path returned HTTP 500 while disabled. `kvm_ocr_status` and `kvm_ocr_text` wrap these endpoints and use host Tesseract as the automatic fallback.
+
+> **Source:** GL.iNet `kvmd/apps/kvmd/api/streamer.py`, `kvmd/apps/kvmd/ocr.py`, `src/kvm_core/comet/client.py`, and live probes. Verified 2026-07-10.
+
+### Additional implemented or probed endpoints
+
+These endpoints were checked against the target Comet at `192.168.0.126`. Destructive ATX actions and MSD uploads were not invoked during the 2026-07-10 read-only verification.
+
+| Endpoint | Implementation | Live verification | Purpose |
+|---|---|---|---|
+| `GET /api/info` | `comet_sysinfo` | Authenticated HTTP 200 on 2026-07-10 | Device metadata, firmware, and hardware info |
+| `POST /api/atx/*` | `comet_atx_power`, `comet_atx_click` | Endpoint existence only; action not invoked | ATX power/reset control |
+| `POST /api/msd/*` | `comet_msd_upload` | Endpoint existence only; upload not invoked | Upload media under `/userdata/media/` |
+| `POST /api/gpio/*` | No direct MCP tool | Endpoint existence only | Low-level GPIO for the ATX board |
 
 ### ATX Power Control (`POST /api/atx/*`)
 
@@ -83,27 +91,27 @@ The PiKVM ATX API typically supports:
 - `POST /api/atx/power` with `{"action": "on"|"off"|"reset"}`
 - `POST /api/atx/click` with `{"button": "power"|"reset"}` (momentary press, ~200ms)
 
-MCP tools: `comet_atx_power`, `comet_atx_click` (in `glkvm_mcp.py`).
+MCP tools: `comet_atx_power`, `comet_atx_click` in `src/kvm_core/tools.py`.
 
 ### Mass Storage (`POST /api/msd/*`)
 
 The Comet's `/userdata/media` partition (~5.3GB free on the 8GB model) is the write target for MSD operations. This is where BIOS maps and state databases should be persisted per `docs/decisions.md` D4.
 
-MCP tools: `comet_msd_upload` (in `glkvm_mcp.py`) — uploads a file to `/userdata/media/` for on-device state persistence.
+MCP tool: `comet_msd_upload` in `src/kvm_core/tools.py` — uploads a file to `/userdata/media/` for on-device state persistence.
 
 ### System Info (`GET /api/info`)
 
 Returns device metadata: model, firmware version, serial, hardware capabilities. Useful for agent self-discovery.
 
-MCP tool: `comet_sysinfo` (in `glkvm_mcp.py`).
+MCP tool: `comet_sysinfo` in `src/kvm_core/tools.py`.
 
 ### GPIO (`POST /api/gpio/*`)
 
 Low-level GPIO control for the ATX board. Typically not needed directly — the ATX API wraps GPIO operations.
 
-> **Probe date:** 2026-07-07 against `192.168.0.126`. All four endpoints returned `401` (not `404`), confirming they are active on this device.
+> **Probe history:** Endpoint existence was confirmed unauthenticated on 2026-07-07; `/api/info` and native OCR state were verified authenticated on 2026-07-10.
 
-## MCP Tools Exposed by `glkvm_mcp.py`
+## MCP Tools Exposed by the Composed Server
 
 ### Connection
 | Tool | Signature | Annotations | Description |
@@ -133,14 +141,64 @@ Low-level GPIO control for the ATX board. Typically not needed directly — the 
 |------|-----------|-------------|-------------|
 | `kvm_screenshot` | `(preview?, max_width?, quality?)` | read-only, non-destructive, idempotent | JPEG as MCP image content |
 | `kvm_screenshot_to_file` | `(path, preview?, ...)` | read-only, non-destructive, idempotent | Save JPEG to disk |
-| `kvm_ocr_screenshot` | `(search_text?, preview?)` | read-only, non-destructive, idempotent | Capture + Tesseract OCR → structured JSON with text + coordinates |
+| `kvm_ocr_status` | `()` | read-only, non-destructive, idempotent | Native OCR state plus host Tesseract status |
+| `kvm_ocr_text` | `(psm?, languages?, prefer_native?, left?, top?, right?, bottom?)` | read-only, non-destructive, idempotent | Native-first text OCR with host fallback and optional crop; `psm` configures fallback only |
+| `kvm_ocr_screenshot` | `(search_text?, preview?, psm?)` | read-only, non-destructive, idempotent | Capture + Tesseract OCR → ordered text/lines plus word coordinates; `psm=6` suits terminals |
 | `kvm_ocr_click` | `(text, button?, count?, search_area?)` | write, destructive | OCR-find text → click it (all-in-one) |
 
-> **Source:** `glkvm_mcp.py` — `@mcp.tool` decorators with annotations at lines 293, 361, 400, 436, 478, 504, 520, 537, 548, 568, 584, 613, 751, 794, 884. Verified 2026-07-07.
+> **Source:** `src/kvm_core/tools.py` (`@mcp.tool` registrations and annotations). Verified 2026-07-10.
+
+### Comet Hardware
+| Tool | Signature | Annotations | Description |
+|------|-----------|-------------|-------------|
+| `comet_atx_power` | `(action)` | write, destructive | ATX power on/off/reset (requires add-on board) |
+| `comet_atx_click` | `(button)` | write, destructive | Momentary power/reset pulse |
+| `comet_sysinfo` | `()` | read-only, non-destructive, idempotent | Device metadata and capabilities |
+| `comet_msd_upload` | `(remote_path, local_path)` | write, destructive | Upload file to `/userdata/media/` |
+
+### BIOS Workflow (sidecar)
+| Tool | Signature | Description |
+|------|-----------|-------------|
+| `bios_observe_state` | `()` | Capture, parse, and sync current BIOS position |
+| `bios_crawl_step` | `()` | Single safe crawl transition (debug) |
+| `bios_crawl_region` | `(max_depth?)` | DFS region crawl with cycle detection |
+| `bios_navigate_to` | `(target_node_id)` | Replay graph path to target node |
+| `bios_propose_setting_change` | `(capability_id, desired_value)` | Plan a setting change |
+| `bios_apply_setting_change` | `(capability_id, desired_value)` | Apply mutation with verification |
+| `bios_save_and_reboot` | `()` | F10 save with dialog verification, reboot |
+| `bios_abort_and_recover` | `()` | Release keys and Escape back-out |
+| `bios_export_trace` | `()` | Export replayable run trace JSON |
+
+### Perception (sidecar)
+| Tool | Signature | Description |
+|------|-----------|-------------|
+| `kvm_vlm_parse` | `(screenshot_ref, previous_state_id?, last_action?)` | VLM structured parse of cached screenshot |
+| `kvm_match_screen` | `(screenshot_ref, expected_node_id?)` | Local phash + OCR fingerprint graph match |
+
+### MCP Resources (sidecar)
+| URI | Returns | Description |
+|-----|---------|-------------|
+| `bios://state/current` | JSON string | Latest normalized BIOS state |
+| `bios://screen/current` | bytes | Current screenshot (known R1c limitation) |
+| `bios://graph/current` | JSON string | Navigation graph summary |
+| `bios://capabilities/current` | JSON string | Discovered settings index |
+
+See [`docs/kvm-core.md`](../kvm-core.md) for the BIOS interaction lifecycle.
+
+## External References
+
+This document maps **what this MCP server exercises** against the Comet/PiKVM API. It is not the full upstream API reference.
+
+| Source | What it covers |
+|--------|----------------|
+| [PiKVM API docs](https://docs.pikvm.org/api/) | Canonical PiKVM HTTP/WebSocket API (Comet firmware is a fork) |
+| [GL.iNet KVM docs](https://docs.gl-inet.com/kvm/) | Comet product documentation and user guides |
+| [gl-inet/glkvm](https://github.com/gl-inet/glkvm) | Firmware source; API handlers under `kvmd/apps/kvmd/api/` |
+| [kennypeh85/glkvm-mcp](https://github.com/kennypeh85/glkvm-mcp) | Upstream MCP server this repo forked from (15 `kvm_*` tools) |
 
 ## Internal Background Tasks (Asyncio)
 
-`glkvm_mcp.py` already runs **two background asyncio loops** within the single MCP server process. This is the existing pattern that the proposed state engine would follow as a third loop:
+The MCP process runs **two background asyncio loops** for transport reliability:
 
 ### `_watchdog_loop` (40ms period)
 - Monitors held keys
@@ -151,9 +209,9 @@ Low-level GPIO control for the ATX board. Typically not needed directly — the 
 - Sends WebSocket ping frames to keep the connection alive
 - Detects dropped connections
 
-> **Source:** `glkvm_mcp.py` lines 180-197 (watchdog), lines 199-213 (pinger). Verified 2026-07-07.
+> **Source:** `src/kvm_core/comet/client.py` (`_watchdog_loop` and `_pinger_loop`). Verified 2026-07-10.
 
-**Design implication:** A state-engine screen-poller would join these as a third background loop (e.g. `_screen_poll_loop`). This is the existing architectural pattern, not a new one. The MCP server already holds session state (the `Connection` dataclass at line 159) and runs background tasks — it is not, and has never been, purely stateless in the process sense. The "stateless transport" framing refers to the API contract (no tool call depends on prior tool-call state), not the process internals. See `docs/decisions.md` D7.
+**Design implication:** These loops are transport reliability mechanisms. The BIOS state tracker remains on demand; it is not an always-on third screenshot/OCR loop. A future bounded terminal observer should poll only for the duration of its active tool call. See `docs/decisions.md` D7 and D-K7.
 
 ## Known Firmware Bugs & Workarounds
 
@@ -171,19 +229,23 @@ Low-level GPIO control for the ATX board. Typically not needed directly — the 
 - **Recovery tool:** `kvm_release_all` force-releases everything — should be called after any failed or interrupted input sequence
 
 > **Sources:**
-> - `glkvm_mcp.py` docstring lines 18-26, tunables lines 52-56. Verified 2026-07-07.
+> - `src/kvm_core/comet/client.py` (HID timing fields, atomic press, modifier wrapping, watchdog). Verified 2026-07-10.
 > - `README.md#firmware-bug-fixes`. Verified 2026-07-07.
 
-## OCR Integration (Tesseract)
+## OCR Integration
 
-OCR runs **on the host**, not on the Comet:
+Text-only OCR uses the Comet when its native engine is enabled and falls back to the host:
 
 - Tesseract binary is located via `TESSERACT_PATH`/`TESSERACT_CMD` env vars, then `PATH`, then Windows default paths
+- `kvm_ocr_status` reads `GET /api/streamer/ocr` and reports native plus host availability
+- `kvm_ocr_text` prefers native `GET /api/streamer/snapshot?ocr=true`, passing language and crop parameters; it falls back to host `image_to_string` with preserved inter-word spacing
 - `kvm_ocr_screenshot` captures a frame, passes it to Tesseract, and returns structured JSON:
   ```json
   {
     "width": 1920,
     "height": 1080,
+    "text": "File Edit",
+    "lines": ["File Edit"],
     "elements": [
       {"text": "File", "confidence": 96.3, "x_pct": 5.2, "y_pct": 3.1},
       {"text": "Edit", "confidence": 95.8, "x_pct": 8.7, "y_pct": 3.1}
@@ -191,8 +253,13 @@ OCR runs **on the host**, not on the Comet:
   }
   ```
 - `kvm_ocr_click` finds text by name and clicks its exact coordinates — eliminates the "vision model estimates pixel position" unreliability
+- Pillow supplies decoded image dimensions; pytesseract is bounded to 15 seconds and runs off the MCP asyncio loop
 
-> **Source:** `glkvm_mcp.py` lines 650-674 (Tesseract binary lookup), lines 686-749 (OCR implementation), and `README.md#mcp-tools`. Verified 2026-07-07.
+### Device-side OCR capability
+
+GL.iNet's PiKVM fork exposes `GET /api/streamer/ocr` with `enabled`, `engine` (`tesseract` or `rknn`), and language state. `GET /api/streamer/snapshot?ocr=true` returns recognized text and accepts `ocr_langs`, `ocr_left`, `ocr_top`, `ocr_right`, and `ocr_bottom`. `kvm_ocr_text` now normalizes that native response and falls back automatically. On 2026-07-10, the live Comet at `192.168.0.126` returned `enabled: false`, engine `tesseract`, and no available/default languages; the native snapshot call returned HTTP 500, so host Tesseract is selected on that unit. Native OCR does not replace host word boxes used for coordinate-sensitive tools.
+
+> **Source:** `src/kvm_core/ocr.py`, `src/kvm_core/tools.py`, and live `/api/streamer/ocr` and OCR snapshot probes. Verified 2026-07-10.
 
 ## Security Model
 
@@ -238,21 +305,14 @@ The server reads these from its environment. They can be injected via shell expo
 
 The bundled plugin launcher uses `doppler run -p secrets_managment -c dev -- uv run --script ./glkvm_mcp.py`, so agents can omit the password from `kvm_connect`. Standalone clients may instead inject `COMET_PASSWORD` by another secure mechanism or pass the password in the tool call.
 
-> **Source:** `glkvm_mcp.py` docstring lines 27-29 and `README.md#security`. Verified 2026-07-07.
+**Launcher roadmap:** The bundled [`.mcp.json`](../../.mcp.json) hardcodes Doppler for local dev. A portable `uv` + `COMET_PASSWORD` launcher (or MCP v2 elicitation) is planned for distributable installs — [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
 
-## Single-File Architecture Assessment
+> **Source:** `src/kvm_core/tools.py` (`kvm_connect`), `.mcp.json`, `doppler.yaml`, and `README.md#security`. Verified 2026-07-10.
 
-`glkvm_mcp.py` is a **single-file MCP server** that contains:
+## Runtime Composition Assessment
 
-- PEP 723 inline dependency metadata (no separate `requirements.txt` or `pyproject.toml` needed for the server itself)
-- The `FastMCP` server definition and all 15 tool functions
-- The `Connection` dataclass (session state: base_url, httpx client, WebSocket)
-- Two background asyncio loops (watchdog, pinger)
-- Tesseract OCR integration
-- Key/mouse input protocol implementation with bug workarounds
+`glkvm_mcp.py` contains PEP 723 dependency metadata and imports the two registration layers. `src/kvm_core/` owns the shared FastMCP instance, Comet HTTP/WebSocket client, HID workarounds, capture, OCR, logging, runtime, and universal tools. `src/bios_sidecar/` owns BIOS state, graph, perception, trace, controller, resources, and `bios_*` tool registration.
 
-**Current state:** This is a collapsed single-file MCP server — transport, session management, OCR, and bug workarounds all in one file. It works for the bootstrap scope (connect, screenshot, OCR, input, release).
+This is one MCP process and one physical Comet session, not separate KVM and BIOS servers. The modular boundary keeps universal KVM behavior usable without introducing BIOS semantics into transport code. See `docs/decisions.md` D6.
 
-**Growth pressure:** Adding a state engine (3rd asyncio loop + screen-polling + map-matching) and potentially crawler-driving hooks will push this file past the point where a single file remains maintainable. The file structure is not a hard constraint — if it splits, it would separate transport (Comet API client) from state (session, polling, map-matching) from OCR (Tesseract integration) into modules within the same package, not into separate MCP servers. See `docs/decisions.md` D6.
-
-> **Source:** `glkvm_mcp.py` full file. Verified 2026-07-07.
+> **Source:** `glkvm_mcp.py`, `src/kvm_core/`, and `src/bios_sidecar/`. Verified 2026-07-10.
