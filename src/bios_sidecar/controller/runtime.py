@@ -22,6 +22,17 @@ from src.bios_sidecar.adapters.msi_click_bios import MsiClickBiosAdapter
 
 LOG = logging.getLogger("bios_sidecar.controller.runtime")
 
+# Hosts/URLs treated as non-live fixtures so unit tests can keep VLM_PROVIDER=mock.
+_FIXTURE_HOST_MARKERS = (
+    "192.0.2.",       # TEST-NET-1
+    "198.51.100.",    # TEST-NET-2
+    "203.0.113.",     # TEST-NET-3
+    "127.0.0.1",
+    "localhost",
+    "example.com",
+    "test.invalid",
+)
+
 # ── State machine transition matrix ────────────────────────────────
 # Maps (current_state, method_name) → allowed
 _TRANSITION_MATRIX = {
@@ -153,6 +164,33 @@ class StatefulBiosRuntime:
             )
         return allowed[method_name]
 
+    def _is_live_comet_connected(self) -> bool:
+        """True when a real Comet session is up (not a test fixture host)."""
+        client = self.client
+        if client is None or not client.is_connected():
+            return False
+        host = (getattr(client, "host", "") or "").lower()
+        base = (getattr(client, "base_url", "") or "").lower()
+        haystack = f"{host} {base}"
+        return not any(marker in haystack for marker in _FIXTURE_HOST_MARKERS)
+
+    def refuse_mock_vlm_on_live(self) -> None:
+        """
+        Hard-fail bios_* observation/mutation paths when mock VLM would drive a live Comet.
+
+        Mock mode remains valid for offline unit tests (disconnected or fixture hosts).
+        Guard lives here — not inside VLMClient — so tests can still call the mock parser.
+        """
+        if getattr(self.vlm_client, "provider", None) != "mock":
+            return
+        if not self._is_live_comet_connected():
+            return
+        raise RuntimeError(
+            "VLM_PROVIDER=mock with a live Comet connection — refusing to run "
+            "bios_* tools on fabricated VLM output. Set VLM_PROVIDER to a real provider "
+            "(openrouter/ollama/vllm/openai) or disconnect before using mock mode."
+        )
+
     async def attach_to_kvm(self) -> bool:
         """Initialize BIOS-sidecar state around an existing KVM core session."""
         if self.client is None or not self.client.is_connected():
@@ -197,6 +235,7 @@ class StatefulBiosRuntime:
 
     async def observe_state(self) -> BiosState:
         await self.attach_to_kvm()
+        self.refuse_mock_vlm_on_live()
         self._guard_transition("observe_state")
 
         self.state = RuntimeState.OBSERVING
@@ -220,6 +259,7 @@ class StatefulBiosRuntime:
 
     async def crawl_step(self) -> Tuple[BiosState, Optional[GraphEdge], str]:
         await self.attach_to_kvm()
+        self.refuse_mock_vlm_on_live()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("crawl_step")
@@ -254,6 +294,7 @@ class StatefulBiosRuntime:
         Full DFS crawl of the current BIOS region using frontier + backtracking.
         """
         await self.attach_to_kvm()
+        self.refuse_mock_vlm_on_live()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("crawl_region")
@@ -283,6 +324,7 @@ class StatefulBiosRuntime:
 
     async def navigate_to(self, target_node_id: str) -> Tuple[bool, Optional[BiosState], str]:
         await self.attach_to_kvm()
+        self.refuse_mock_vlm_on_live()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("navigate_to")
@@ -307,6 +349,7 @@ class StatefulBiosRuntime:
         self, capability_id: str, desired_value: str
     ) -> Tuple[bool, Optional[BiosState], str]:
         await self.attach_to_kvm()
+        self.refuse_mock_vlm_on_live()
         self._guard_transition("apply_setting_change")
         self.state = RuntimeState.MUTATING
         try:
@@ -329,6 +372,7 @@ class StatefulBiosRuntime:
 
     async def save_and_reboot(self) -> Tuple[bool, Optional[BiosState], str]:
         await self.attach_to_kvm()
+        self.refuse_mock_vlm_on_live()
         self._guard_transition("save_and_reboot")
         self.state = RuntimeState.MUTATING
         try:

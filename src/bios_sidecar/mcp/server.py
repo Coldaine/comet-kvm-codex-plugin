@@ -145,8 +145,9 @@ async def bios_save_and_reboot() -> dict:
     """
     Commit staged BIOS changes to NVRAM and reboot the target.
 
-    Sends F10, VLM-verifies the save/confirmation dialog is present, and
-    confirms only if the dialog matches expectations.
+    Sends F10, then checks for a save/confirm dialog via screen-title keywords
+    (save/confirm/reset/reboot/exit) or modal.present before confirming with Enter.
+    Aborts without confirm if neither signal is present.
     """
     r = get_runtime()
     ok, final, msg = await r.save_and_reboot()
