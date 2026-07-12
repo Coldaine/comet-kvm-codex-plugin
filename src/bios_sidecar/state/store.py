@@ -19,6 +19,8 @@ class SQLiteStore:
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
+        # Full BiosState objects for in-process OCR-first rematch (DB row is a projection).
+        self._state_cache: Dict[str, BiosState] = {}
         self._create_tables()
 
     def _create_tables(self):
@@ -157,6 +159,73 @@ class SQLiteStore:
             d["frame"]["captured_at"], json.dumps(d["confidence"])
         ))
         self.conn.commit()
+        self._state_cache[state.state_id] = state
+
+    def get_bios_state(self, state_id: str) -> Optional[BiosState]:
+        """Load a previously saved BiosState by id (used to reuse graph-matched representatives)."""
+        cached = self._state_cache.get(state_id)
+        if cached is not None:
+            return cached
+
+        from src.bios_sidecar.domain.enums import StateKind
+        from src.bios_sidecar.domain.models import (
+            FrameMetadata, BiosMetadata, LocationMetadata, SelectionMetadata,
+            ControlEntry, ModalMetadata, RiskStatus, ActionPolicies, ConfidenceMetrics,
+        )
+
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM states WHERE state_id = ?", (state_id,))
+            row = cursor.fetchone()
+        if row is None:
+            return None
+
+        breadcrumb = json.loads(row["menu_path"] or "[]")
+        controls_raw = json.loads(row["controls"] or "[]")
+        actions_raw = json.loads(row["actions"] or "{}")
+        confidence_raw = json.loads(row["confidence"] or "{}")
+        resolution = json.loads(row["frame_resolution"] or "[1920, 1080]")
+        top_module = breadcrumb[0] if breadcrumb else "SETTINGS"
+
+        state = BiosState(
+            state_id=row["state_id"],
+            run_id=row["run_id"],
+            device_id=row["device_id"],
+            frame=FrameMetadata(
+                screenshot_id=row["frame_screenshot_id"] or "",
+                sha256=row["frame_sha256"] or "",
+                perceptual_hash=row["frame_phash"] or "",
+                resolution=resolution,
+                captured_at=row["frame_captured_at"] or "",
+            ),
+            bios=BiosMetadata(
+                vendor="generic",
+                board_hint="unknown",
+                family="generic_uefi",
+                mode="advanced",
+            ),
+            location=LocationMetadata(
+                screen_kind=StateKind(row["screen_kind"]) if row["screen_kind"] else StateKind.UNKNOWN,
+                top_module=top_module,
+                breadcrumb=breadcrumb,
+                screen_title=row["screen_title"],
+            ),
+            selection=SelectionMetadata(
+                selected_index=None,
+                label=row["selection_label"],
+                value=row["selection_val"],
+            ),
+            controls=[ControlEntry.from_dict(c) for c in controls_raw],
+            modal=ModalMetadata(present=False),
+            risk=RiskStatus(
+                blocklist_flag=bool(row["blocklist_flag"]),
+                blocklist_keywords=json.loads(row["blocklist_keywords"] or "[]"),
+            ),
+            actions=ActionPolicies.from_dict(actions_raw) if actions_raw else ActionPolicies(),
+            confidence=ConfidenceMetrics.from_dict(confidence_raw) if confidence_raw else ConfidenceMetrics(1.0, 1.0, 1.0),
+        )
+        self._state_cache[state_id] = state
+        return state
 
     # --- StateNode persistence ---
     def save_node(self, node: StateNode):

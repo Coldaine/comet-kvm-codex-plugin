@@ -142,8 +142,9 @@ class BiosMutator:
         Flow:
             1. Observe current state.
             2. Send F10, capture the confirmation modal.
-            3. VLM-verify a save/confirmation dialog is on screen.
-            4. Confirm with Enter only if the dialog matches expectations.
+            3. Check for a save/confirm dialog via screen-title keywords
+               (save/confirm/reset/reboot/exit) or modal.present.
+            4. Confirm with Enter only if that check passes (fail-closed otherwise).
         """
         # 1. Ground current state.
         state = await self.observer.observe_state(client, run_id, device_id)

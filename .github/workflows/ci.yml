@@ -24,10 +24,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies from lockfile
-        run: uv sync --frozen
+        run: uv sync --frozen --group dev
 
       - name: Syntax check (compileall)
         run: uv run python -m compileall glkvm_mcp.py src/
 
       - name: Full test suite
-        run: uv run python -m unittest discover -s tests -p "test_*.py" -v
+        run: uv run pytest tests -v
