@@ -201,7 +201,6 @@ async def kvm_ocr_text(
     """
     client = _require_client()
     r = get_kvm_runtime()
-    validate_psm(psm)
     crop = _ocr_crop(left, top, right, bottom)
     device_state = None
     fallback_reason = "native OCR not requested"
@@ -223,6 +222,7 @@ async def kvm_ocr_text(
             LOG.warning("Native OCR read failed; using host fallback: %s", type(exc).__name__)
             fallback_reason = "native OCR request failed"
 
+    validate_psm(psm)
     image_bytes = await client.get_screenshot(preview=False)
     host = await asyncio.to_thread(r.ocr_mgr.run_text_ocr, image_bytes, psm, languages, crop)
     if "error" in host:
