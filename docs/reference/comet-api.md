@@ -148,6 +148,54 @@ Low-level GPIO control for the ATX board. Typically not needed directly — the 
 
 > **Source:** `src/kvm_core/tools.py` (`@mcp.tool` registrations and annotations). Verified 2026-07-10.
 
+### Comet Hardware
+| Tool | Signature | Annotations | Description |
+|------|-----------|-------------|-------------|
+| `comet_atx_power` | `(action)` | write, destructive | ATX power on/off/reset (requires add-on board) |
+| `comet_atx_click` | `(button)` | write, destructive | Momentary power/reset pulse |
+| `comet_sysinfo` | `()` | read-only, non-destructive, idempotent | Device metadata and capabilities |
+| `comet_msd_upload` | `(remote_path, local_path)` | write, destructive | Upload file to `/userdata/media/` |
+
+### BIOS Workflow (sidecar)
+| Tool | Signature | Description |
+|------|-----------|-------------|
+| `bios_observe_state` | `()` | Capture, parse, and sync current BIOS position |
+| `bios_crawl_step` | `()` | Single safe crawl transition (debug) |
+| `bios_crawl_region` | `(max_depth?)` | DFS region crawl with cycle detection |
+| `bios_navigate_to` | `(target_node_id)` | Replay graph path to target node |
+| `bios_propose_setting_change` | `(capability_id, desired_value)` | Plan a setting change |
+| `bios_apply_setting_change` | `(capability_id, desired_value)` | Apply mutation with verification |
+| `bios_save_and_reboot` | `()` | F10 save with dialog verification, reboot |
+| `bios_abort_and_recover` | `()` | Release keys and Escape back-out |
+| `bios_export_trace` | `()` | Export replayable run trace JSON |
+
+### Perception (sidecar)
+| Tool | Signature | Description |
+|------|-----------|-------------|
+| `kvm_vlm_parse` | `(screenshot_ref, previous_state_id?, last_action?)` | VLM structured parse of cached screenshot |
+| `kvm_match_screen` | `(screenshot_ref, expected_node_id?)` | Local phash + OCR fingerprint graph match |
+
+### MCP Resources (sidecar)
+| URI | Returns | Description |
+|-----|---------|-------------|
+| `bios://state/current` | JSON string | Latest normalized BIOS state |
+| `bios://screen/current` | bytes | Current screenshot (known R1c limitation) |
+| `bios://graph/current` | JSON string | Navigation graph summary |
+| `bios://capabilities/current` | JSON string | Discovered settings index |
+
+See [`docs/kvm-core.md`](../kvm-core.md) for the BIOS interaction lifecycle.
+
+## External References
+
+This document maps **what this MCP server exercises** against the Comet/PiKVM API. It is not the full upstream API reference.
+
+| Source | What it covers |
+|--------|----------------|
+| [PiKVM API docs](https://docs.pikvm.org/api/) | Canonical PiKVM HTTP/WebSocket API (Comet firmware is a fork) |
+| [GL.iNet KVM docs](https://docs.gl-inet.com/kvm/) | Comet product documentation and user guides |
+| [gl-inet/glkvm](https://github.com/gl-inet/glkvm) | Firmware source; API handlers under `kvmd/apps/kvmd/api/` |
+| [kennypeh85/glkvm-mcp](https://github.com/kennypeh85/glkvm-mcp) | Upstream MCP server this repo forked from (15 `kvm_*` tools) |
+
 ## Internal Background Tasks (Asyncio)
 
 The MCP process runs **two background asyncio loops** for transport reliability:
@@ -256,6 +304,8 @@ The server reads these from its environment. They can be injected via shell expo
 ```
 
 The bundled plugin launcher uses `doppler run -p secrets_managment -c dev -- uv run --script ./glkvm_mcp.py`, so agents can omit the password from `kvm_connect`. Standalone clients may instead inject `COMET_PASSWORD` by another secure mechanism or pass the password in the tool call.
+
+**Launcher roadmap:** The bundled [`.mcp.json`](../../.mcp.json) hardcodes Doppler for local dev. A portable `uv` + `COMET_PASSWORD` launcher (or MCP v2 elicitation) is planned for distributable installs — [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
 
 > **Source:** `src/kvm_core/tools.py` (`kvm_connect`), `.mcp.json`, `doppler.yaml`, and `README.md#security`. Verified 2026-07-10.
 

@@ -76,6 +76,8 @@ comet-kvm-codex-plugin/
 
 ## Current Scope
 
+This is **one integrated spike** with two layers maturing in parallel: the universal KVM MCP server (transport, OCR, plugin packaging, session/auth) and the BIOS sidecar (cartography, navigation, mutation). These are not sequential phases — KVM connect, native OCR, and BIOS crawl all advance together toward the same proof point on live hardware.
+
 **First spike — BIOS cartography:** A tool that near-exhaustively crawls the non-blocklisted zones of a target board's BIOS — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing, and explicit blocklisting for destructive screens. Maps are persisted as labeled, reusable artifacts.
 
 **Immediate workflow — MSI Z690 tuning:** Drive BIOS changes one setting at a time against stored maps, then validate in Windows via HWiNFO.
@@ -117,6 +119,8 @@ sudo apt-get install tesseract-ocr
 ### Use in Codex
 
 The plugin is auto-discovered when the repo is installed as a Codex plugin. Its bundled launcher uses Doppler to inject the Comet password, then runs `glkvm_mcp.py` via `uv run --script` with dependencies auto-installed from PEP 723 inline metadata.
+
+**Launcher note:** The bundled [`.mcp.json`](.mcp.json) hardcodes Doppler (`secrets_managment/dev`) for local development. A portable `uv` + `COMET_PASSWORD` launcher (or MCP v2 elicitation for out-of-band secrets) is planned for distributable plugin installs — tracked in [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
 
 ### Use as a standalone MCP server
 
@@ -177,6 +181,38 @@ Add to any MCP client config:
 | `comet_atx_click(button)` | Momentary power/reset button pulse through the ATX add-on board |
 | `comet_sysinfo()` | Retrieve device metadata and capabilities |
 | `comet_msd_upload(remote_path, local_path)` | Upload a host file to the Comet's `/userdata/media/` partition |
+
+### BIOS Workflow (sidecar)
+
+| Tool | Description |
+|------|-------------|
+| `bios_observe_state()` | Capture and parse current BIOS screen; sync position tracker |
+| `bios_crawl_step()` | Execute one safe crawl transition (debug single-step) |
+| `bios_crawl_region(max_depth?)` | DFS crawl of current BIOS region with cycle detection |
+| `bios_navigate_to(target_node_id)` | Replay stored graph path to a target node |
+| `bios_propose_setting_change(capability_id, desired_value)` | Plan and validate a setting change |
+| `bios_apply_setting_change(capability_id, desired_value)` | Apply mutation with visual verification |
+| `bios_save_and_reboot()` | F10 save with dialog verification, then reboot |
+| `bios_abort_and_recover()` | Release keys and Escape back-out of modals |
+| `bios_export_trace()` | Export replayable run trace JSON |
+
+### Perception (sidecar)
+
+| Tool | Description |
+|------|-------------|
+| `kvm_vlm_parse(screenshot_ref, previous_state_id?, last_action?)` | VLM structured parse of a cached screenshot |
+| `kvm_match_screen(screenshot_ref, expected_node_id?)` | Local phash + OCR fingerprint match against graph |
+
+### MCP Resources (sidecar)
+
+| URI | Description |
+|-----|-------------|
+| `bios://state/current` | Latest normalized BIOS state (JSON) |
+| `bios://screen/current` | Current screenshot bytes (known limitation: see R1c) |
+| `bios://graph/current` | Navigation graph summary (nodes + edges) |
+| `bios://capabilities/current` | Discovered settings capability index |
+
+See [`docs/kvm-core.md`](docs/kvm-core.md) for the BIOS interaction lifecycle.
 
 ### Deprecated Aliases
 

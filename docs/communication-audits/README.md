@@ -1,10 +1,12 @@
 # Communication Audit: BIOS Sidecar Discovery
 
+> **WARNING — STALE SNAPSHOT (2026-07-07).** This audit predates the BIOS sidecar implementation. Rows marked **"Missing"** (VLM client, cartographer, state engine, policy engine, trace ledger) are **out of date** — those modules now exist under `src/bios_sidecar/`. **Do not use this folder for current-state decisions.**
+
 > **Date:** 2026-07-07
 > **Scope:** Repo-grounded audit of the Comet KVM BIOS/UEFI sidecar skill/tooling bundle.
 > **Method:** Evidence-only answers from current repository files. Proposed or missing items are labeled as such.
 
-> **Status:** Historical and superseded for product framing. Use these audits as evidence snapshots only; `docs/kvm-core.md` and `docs/decisions.md` supersede any policy/approval or VLM-as-peer-agent framing.
+> **Status:** Historical and superseded for product framing. For current state use [`docs/architecture.md`](../architecture.md), [`docs/kvm-core.md`](../kvm-core.md), and [`docs/decisions.md`](../decisions.md). These audits supersede any policy/approval or VLM-as-peer-agent framing from the original audit pass.
 
 ## Documents
 
