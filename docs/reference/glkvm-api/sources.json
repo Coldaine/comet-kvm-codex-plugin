@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "glkvm": {
+      "repository": "https://github.com/gl-inet/glkvm",
+      "commit": "9bd8ad11ba03d220401b0b6a4208bbfd84ed6107",
+      "tree_url": "https://github.com/gl-inet/glkvm/tree/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107",
+      "license": {
+        "spdx": "GPL-3.0-or-later",
+        "url": "https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/LICENSE"
+      },
+      "vendored": false
+    },
+    "docs-kvm": {
+      "repository": "https://github.com/gl-inet/docs-kvm",
+      "commit": "9b6d508661f0808e8e69373e0da3ebf923c6e94d",
+      "tree_url": "https://github.com/gl-inet/docs-kvm/tree/9b6d508661f0808e8e69373e0da3ebf923c6e94d",
+      "license": null,
+      "license_note": "No license file is exposed by the repository at this commit; documentation is linked only and no content is vendored.",
+      "vendored": false
+    }
+  }
+}

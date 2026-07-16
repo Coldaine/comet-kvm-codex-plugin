@@ -1,0 +1,46 @@
+{
+  "skill": "comet-bios-triage",
+  "purpose": "Description-selection cases that separate firmware outcomes from generic Comet and pre-boot operation.",
+  "cases": [
+    {
+      "query": "Use the Comet to enter BIOS and enable IOMMU on pve01.",
+      "should_trigger": true
+    },
+    {
+      "query": "Map the UEFI menus on this MSI Z690 board.",
+      "should_trigger": true
+    },
+    {
+      "query": "Verify that CPU Lite Load is still Mode 9 before saving.",
+      "should_trigger": true
+    },
+    {
+      "query": "Change PL1 in BIOS and validate the run with HWiNFO.",
+      "should_trigger": true
+    },
+    {
+      "query": "Show me the POST error through the Comet.",
+      "should_trigger": false
+    },
+    {
+      "query": "Open the one-time boot menu and select the rescue ISO.",
+      "should_trigger": false
+    },
+    {
+      "query": "Reboot the frozen Proxmox node through the KVM.",
+      "should_trigger": false
+    },
+    {
+      "query": "Read the recovery shell and type this repair command.",
+      "should_trigger": false
+    },
+    {
+      "query": "Analyze this HWiNFO CSV without changing firmware.",
+      "should_trigger": false
+    },
+    {
+      "query": "Fix the bios_apply_setting_change implementation.",
+      "should_trigger": false
+    }
+  ]
+}

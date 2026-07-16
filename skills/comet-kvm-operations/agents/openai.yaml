@@ -1,0 +1,7 @@
+interface:
+  display_name: "Comet KVM Operations"
+  short_description: "Operate physical hosts through Comet KVM"
+  default_prompt: "Use $comet-kvm-operations to inspect and safely operate the selected physical host."
+
+policy:
+  allow_implicit_invocation: true

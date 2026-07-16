@@ -1,18 +1,28 @@
 # HWiNFO Run Loop
 
-After each BIOS change:
+Read this file only when the user explicitly requests HWiNFO-backed validation.
+This plugin does not provide HWiNFO control, a Windows transport, a workload
+runner, or an external analysis project. Confirm those mechanisms and all file
+destinations before starting.
+
+After one verified BIOS change:
 
 1. Boot Windows.
-2. Start HWiNFO sensor logging.
-3. Run the same workload used for the prior run.
+2. Start HWiNFO sensor logging through the available Windows control path.
+3. Run the same named workload, duration, and configuration used for the
+   baseline.
 4. Stop logging.
-5. Copy the CSV into `D:\_projects\hwinfo-cpu-triage\raw`.
-6. Rebuild exports using the existing HWiNFO triage scripts.
-7. Record max CPU package temperature, package power, Vcore/VR VOUT, effective clocks, throttle rows, and WHEA errors in the run ledger.
+5. Preserve the CSV at the user-selected destination.
+6. Analyze it with tools or scripts that are confirmed to exist in the current
+   environment.
+7. Record maximum CPU package temperature, package power, Vcore or VR VOUT,
+   effective clocks, throttle indicators, workload result, and WHEA errors.
 
-Existing analysis project:
+Use the same sensor set and aggregation rules across runs. Stop the experiment
+after WHEA errors, a crash or reboot, workload failure, performance collapse,
+severe throttling, clock-stretching, missing logs, or incomparable run
+conditions.
 
-- `D:\_projects\hwinfo-cpu-triage`
-- `scripts\export_hwinfo_cpu.py`
-- `scripts\build_duckdb_exports.py`
-- `docs\triage-playbook.md`
+Do not claim a firmware change is stable from a successful boot alone. Report
+the exact workload evidence, the log location, comparison limitations, and the
+last verified stable firmware state.

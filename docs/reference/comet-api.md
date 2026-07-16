@@ -1,7 +1,7 @@
 # Comet KVM API & Software Surface Reference
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
-> **Status:** Project-facing summary of upstream contracts this MCP cares about, plus what tools this repo exposes. Fuller endpoint inventory: [`docs/research/glkvm-api-surface.md`](../research/glkvm-api-surface.md).
+> **Status:** Project-facing summary of upstream contracts this MCP cares about, plus what tools this repo exposes. Curated upstream detail: [`docs/research/glkvm-api-surface.md`](../research/glkvm-api-surface.md). Complete pinned corpus: [`docs/reference/glkvm-api/`](glkvm-api/README.md).
 > **Compiled:** 2026-07-07 · **Revised:** 2026-07-16 (auth/discovery/ATX/MSD/OCR/verification)
 > **Purpose:** Auth, discovery, important request shapes, live-probe status, and MCP tool tables. Not ops advice (see [`docs/research/oob-proxmox-tailscale-vision.md`](../research/oob-proxmox-tailscale-vision.md)). Not a client-bug tracker (see [`docs/research/glkvm-client-audit-2026-07-15.md`](../research/glkvm-client-audit-2026-07-15.md)).
 
@@ -24,7 +24,7 @@ The MCP server uses `glkvm_mcp.py` as a PEP 723 composition entry point and keep
 
 > **Source:** `glkvm_mcp.py`, `src/kvm_core/server.py`, `src/kvm_core/runtime.py`. Verified 2026-07-10.
 
-**Versioning note:** There is no single native “API version.” Prefer connect-time discovery (`/api/upgrade/version`, `/api/info`, `/api/system/capability`, subsystem GETs) over pinning firmware/KVMD/Redfish triples in clients. There is no official OpenAPI for `/api`; [gl-inet/glkvm](https://github.com/gl-inet/glkvm) handlers are the contract. See the [research catalog](../research/glkvm-api-surface.md).
+**Versioning note:** There is no single native “API version.” Prefer connect-time discovery (`/api/upgrade/version`, `/api/info`, `/api/system/capability`, subsystem GETs) over pinning firmware/KVMD/Redfish triples in clients. There is no official OpenAPI for `/api`; the documentary evidence snapshot is pinned to [`gl-inet/glkvm@9bd8ad11`](https://github.com/gl-inet/glkvm/tree/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107), while the connected appliance remains authoritative at runtime. See the [research catalog](../research/glkvm-api-surface.md) and [generated corpus](glkvm-api/README.md).
 
 **JSON envelope:** Most native JSON routes return `{ "ok": true, "result": { ... } }`. Exceptions: JPEG/binary downloads, NDJSON progress streams, and Redfish (`wrap_result=False`).
 
@@ -46,7 +46,7 @@ Form body: user=admin&passwd=<password>&expire=0
 - This repo's client stores the cookie token and sends the HTTP `Token` header on subsequent requests; WebSocket auth uses `Cookie: auth_token=...` and `Token` headers (not a query-string token)
 - Clean disconnect calls `POST /api/auth/logout`; also `GET /api/auth/check`
 
-> **Source:** `gl-inet/glkvm` `kvmd/apps/kvmd/api/auth.py` (spot-checked 2026-07-15); `src/kvm_core/comet/client.py` (`CometClient.connect` / `disconnect`). Confidence: **High**.
+> **Source:** pinned [`auth.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/auth.py); `src/kvm_core/comet/client.py` (`CometClient.connect` / `disconnect`). Confidence: **High**.
 
 ### Discovery
 
@@ -149,11 +149,17 @@ MCP tools: `comet_sysinfo`, `comet_capabilities`.
 
 ### Broader surface
 
-WOL, Redfish (narrow power facade), recorder, Prometheus export, Tailscale config/status, Fingerbot, upgrade/diagnostics — inventoried in [`docs/research/glkvm-api-surface.md`](../research/glkvm-api-surface.md). Not all are wrapped by this MCP.
+WOL, Redfish (narrow power facade), recorder, Prometheus export, Tailscale config/status, Fingerbot, upgrade/diagnostics, and server-owned streamer controls are curated in [`docs/research/glkvm-api-surface.md`](../research/glkvm-api-surface.md). The [generated corpus](glkvm-api/README.md) contains every source registration; not all are wrapped by this MCP.
 
 ## Verification status
 
 What this project has actually exercised against the LAN Comet (`192.168.0.126`). Destructive ATX actions and MSD uploads were **not** invoked in read-only probes.
+
+The durable per-endpoint record is
+[`project-endpoint-coverage.csv`](glkvm-api/project-endpoint-coverage.csv). It
+keeps source handler presence, registration, live discovery, live exercise,
+hardware requirements, contract tests, and live qualification separate; none of
+those fields should be inferred from another.
 
 | Surface | Live tested? | When / notes |
 |---------|--------------|--------------|
@@ -230,7 +236,7 @@ This section is **this repo’s tool surface**, not the full firmware catalog. K
 | `comet_tailscale_status` | `(target?)` | read-only | Tailscale status |
 | `comet_redfish_power` | `(reset_type, target?)` | write, destructive | Redfish ComputerSystem.Reset |
 
-This table is **MCP tool names only**. Full upstream routes stay in the [research catalog](../research/glkvm-api-surface.md). Historical client mismatches (if any) are snapshotted in the [2026-07-15 audit](../research/glkvm-client-audit-2026-07-15.md) — do not treat audit blockers as current API facts.
+This table is **MCP tool names only**. Curated upstream facts stay in the [research catalog](../research/glkvm-api-surface.md); the full route set stays in the [generated corpus](glkvm-api/README.md). Historical client mismatches (if any) are snapshotted in the [2026-07-15 audit](../research/glkvm-client-audit-2026-07-15.md) — do not treat audit blockers as current API facts.
 
 ### BIOS Workflow (sidecar)
 | Tool | Signature | Description |
@@ -266,12 +272,13 @@ See [`docs/kvm-core.md`](../kvm-core.md) for the BIOS interaction lifecycle.
 | Source | What it covers |
 |--------|----------------|
 | [docs/research/README.md](../research/README.md) | Research index + homes map |
-| [docs/research/glkvm-api-surface.md](../research/glkvm-api-surface.md) | Fuller endpoint inventory, auth detail, source links |
+| [docs/reference/glkvm-api/](glkvm-api/README.md) | Complete generated endpoint/event inventory, immutable sources, and project coverage status |
+| [docs/research/glkvm-api-surface.md](../research/glkvm-api-surface.md) | Curated request shapes, auth detail, and exact source permalinks |
 | [docs/research/oob-proxmox-tailscale-vision.md](../research/oob-proxmox-tailscale-vision.md) | Ops vision (judgment; not API facts) |
 | [docs/research/glkvm-client-audit-2026-07-15.md](../research/glkvm-client-audit-2026-07-15.md) | Dated client-vs-firmware audit snapshot |
 | [PiKVM API docs](https://docs.pikvm.org/api/) | Canonical PiKVM HTTP/WebSocket API (Comet firmware is a fork) |
 | [GL.iNet KVM docs](https://docs.gl-inet.com/kvm/) | Comet product documentation and user guides |
-| [gl-inet/glkvm](https://github.com/gl-inet/glkvm) | Firmware source; API handlers under `kvmd/apps/kvmd/api/` |
+| [gl-inet/glkvm@9bd8ad11](https://github.com/gl-inet/glkvm/tree/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107) | Pinned firmware-source evidence; handlers live in `api/*.py` and `server.py` |
 | [kennypeh85/glkvm-mcp](https://github.com/kennypeh85/glkvm-mcp) | Upstream MCP server this repo forked from |
 
 ## Internal Background Tasks (Asyncio)

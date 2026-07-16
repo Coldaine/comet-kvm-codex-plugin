@@ -1,7 +1,7 @@
 {
   "name": "comet-kvm",
   "version": "0.1.0",
-  "description": "Codex plugin for GL.iNet Comet KVM control and BIOS/HWiNFO triage workflows.",
+  "description": "Codex plugin for GL.iNet Comet KVM operations, recovery, and BIOS/HWiNFO triage.",
   "author": {
     "name": "Coldaine",
     "url": "https://github.com/Coldaine"
@@ -16,14 +16,17 @@
     "comet",
     "pikvm",
     "bios",
-    "hwinfo"
+    "hwinfo",
+    "out-of-band",
+    "recovery",
+    "virtual-media"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Comet KVM",
     "shortDescription": "Drive GL.iNet Comet KVM workflows from Codex",
-    "longDescription": "Use a GL.iNet Comet or GLKVM-compatible device through MCP tools for screenshots, OCR, keyboard, mouse, and safe BIOS/HWiNFO triage workflows.",
+    "longDescription": "Operate physical hosts through a GL.iNet Comet or GLKVM-compatible device with screenshots, OCR, input, power, Wake-on-LAN, virtual media, appliance diagnostics, and specialized BIOS/HWiNFO workflows.",
     "developerName": "Coldaine",
     "category": "Developer Tools",
     "capabilities": [
@@ -32,9 +35,9 @@
     ],
     "websiteURL": "https://github.com/Coldaine/comet-kvm-codex-plugin",
     "defaultPrompt": [
-      "Run a Comet KVM preflight",
-      "Drive an MSI BIOS triage step",
-      "Create a HWiNFO experiment run"
+      "Inspect and recover a physical host through its Comet KVM",
+      "Mount rescue media and verify the target boots it",
+      "Inspect and verify one BIOS setting change"
     ],
     "brandColor": "#2563EB"
   }

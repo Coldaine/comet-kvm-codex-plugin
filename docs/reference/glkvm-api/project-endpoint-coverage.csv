@@ -1,0 +1,33 @@
+method,path,client_method,tools,handler_present,registration,discovered,exercised,hardware_required,contract_test_status,live_qualification_status,client_source,contract_test_source
+POST,/api/auth/login,connect,kvm_connect,true,unconditional,yes,yes,none,shape,qualified_read_only,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/ws,connect,kvm_connect;kvm_send_text;kvm_send_keys;kvm_hold_key;kvm_mouse_move;kvm_mouse_click;kvm_mouse_scroll,true,unconditional,yes,yes,none,shape,qualified_read_only,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+POST,/api/auth/logout,disconnect,kvm_disconnect,true,unconditional,yes,yes,none,shape,qualified_read_only,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/streamer/snapshot,get_screenshot,kvm_screenshot;kvm_screenshot_to_file;kvm_ocr_text;kvm_ocr_screenshot;kvm_ocr_click,true,unconditional,yes,yes,HDMI capture for a useful frame,none,qualified_read_only,src/kvm_core/comet/client.py,
+GET,/api/atx,atx_state,comet_power_state;comet_capabilities,true,unconditional,yes,read_only,ATX add-on for meaningful physical state,smoke,read_only_exercised,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+POST,/api/atx/power,atx_power,comet_atx_power,true,unconditional,not_recorded,no,ATX add-on and motherboard wiring,shape,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+POST,/api/atx/click,atx_click,comet_atx_click,true,unconditional,not_recorded,no,ATX add-on and motherboard wiring,shape,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/info,get_sysinfo,comet_sysinfo;comet_capabilities,true,unconditional,yes,read_only,none,smoke,qualified_read_only,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/upgrade/version,get_version,kvm_connect;comet_capabilities,true,unconditional,not_recorded,no,none,smoke,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/system/capability,get_system_capability,kvm_connect;comet_capabilities,true,unconditional,not_recorded,no,none,smoke,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/hid,discover_capabilities,kvm_connect;comet_capabilities,true,unconditional,not_recorded,no,USB HID gadget for physical input,smoke,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/msd,msd_state,comet_media_state;comet_capabilities,true,unconditional,not_recorded,no,MSD storage and USB gadget support,smoke,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/streamer,streamer_state,comet_streamer_state;comet_capabilities,true,unconditional,not_recorded,no,HDMI capture subsystem,smoke,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/streamer/ocr,discover_capabilities,kvm_connect;comet_capabilities,true,unconditional,yes,read_only,optional inherited server OCR engine,smoke,qualified_read_only,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/recorder,recorder_state,comet_recorder_state;comet_capabilities,true,unconditional,not_recorded,no,capture and media storage,smoke,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/tailscale/status,tailscale_status,comet_tailscale_status;comet_capabilities,true,unconditional,not_recorded,no,Tailscale integration,smoke,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+GET,/api/wol/list,wol_list,comet_wol_list;comet_capabilities,true,unconditional,not_recorded,no,network interface and target WOL support,smoke,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+POST,/api/msd/write,msd_upload_file;msd_upload,comet_msd_upload;comet_media_upload,true,unconditional,not_recorded,no,MSD storage and USB gadget support,shape,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+POST,/api/msd/write_remote,msd_fetch_remote,comet_media_fetch,true,unconditional,not_recorded,no,MSD storage and outbound network access,none,not_qualified,src/kvm_core/comet/client.py,
+POST,/api/msd/set_params,msd_set_params;msd_mount,comet_media_mount,true,unconditional,not_recorded,no,MSD storage and USB gadget support,shape,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+POST,/api/msd/set_connected,msd_set_connected;msd_mount;msd_unmount,comet_media_mount;comet_media_unmount,true,unconditional,not_recorded,no,MSD storage and USB gadget support,shape,not_qualified,src/kvm_core/comet/client.py,tests/test_comet_protocol.py
+POST,/api/msd/remove,msd_remove,comet_media_remove,true,unconditional,not_recorded,no,MSD storage,none,not_qualified,src/kvm_core/comet/client.py,
+POST,/api/msd/reset,msd_reset,comet_media_reset,true,unconditional,not_recorded,no,MSD subsystem,none,not_qualified,src/kvm_core/comet/client.py,
+GET,/api/wol/scan,wol_scan,comet_wol_scan,true,unconditional,not_recorded,no,network interface,none,not_qualified,src/kvm_core/comet/client.py,
+POST,/api/wol/wake,wol_wake,comet_wol_wake,true,unconditional,not_recorded,no,network interface and target WOL support,none,not_qualified,src/kvm_core/comet/client.py,
+POST,/api/streamer/set_params,streamer_set_params,comet_streamer_set_params,true,unconditional,not_recorded,no,HDMI capture subsystem,none,not_qualified,src/kvm_core/comet/client.py,
+POST,/api/recorder/start,recorder_start,comet_recorder_start,true,unconditional,not_recorded,no,capture and media storage,none,not_qualified,src/kvm_core/comet/client.py,
+POST,/api/recorder/stop,recorder_stop,comet_recorder_stop,true,unconditional,not_recorded,no,capture and media storage,none,not_qualified,src/kvm_core/comet/client.py,
+GET,/api/export/prometheus/metrics,prometheus_metrics,comet_metrics,true,unconditional,not_recorded,no,metric families are capability-dependent,none,not_qualified,src/kvm_core/comet/client.py,
+GET,/api/tailscale/config,tailscale_config,,true,unconditional,not_recorded,no,Tailscale integration,none,not_qualified,src/kvm_core/comet/client.py,
+GET,/redfish/v1/Systems/0,redfish_system,,true,unconditional,not_recorded,no,ATX add-on for meaningful power state,none,not_qualified,src/kvm_core/comet/client.py,
+POST,/redfish/v1/Systems/0/Actions/ComputerSystem.Reset,redfish_reset,comet_redfish_power,true,unconditional,not_recorded,no,ATX add-on and motherboard wiring,none,not_qualified,src/kvm_core/comet/client.py,

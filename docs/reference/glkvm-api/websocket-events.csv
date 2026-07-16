@@ -1,0 +1,13 @@
+event_type,binary,handler,source_file,source_line,source_url
+0,true,KvmdServer.__ws_bin_ping_handler,kvmd/apps/kvmd/server.py,558,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/server.py#L558
+1,true,HidApi.__ws_bin_key_handler,kvmd/apps/kvmd/api/hid.py,185,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L185
+2,true,HidApi.__ws_bin_mouse_button_handler,kvmd/apps/kvmd/api/hid.py,198,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L198
+3,true,HidApi.__ws_bin_mouse_move_handler,kvmd/apps/kvmd/api/hid.py,211,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L211
+4,true,HidApi.__ws_bin_mouse_relative_handler,kvmd/apps/kvmd/api/hid.py,221,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L221
+5,true,HidApi.__ws_bin_mouse_wheel_handler,kvmd/apps/kvmd/api/hid.py,225,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L225
+key,false,HidApi.__ws_key_handler,kvmd/apps/kvmd/api/hid.py,243,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L243
+mouse_button,false,HidApi.__ws_mouse_button_handler,kvmd/apps/kvmd/api/hid.py,253,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L253
+mouse_move,false,HidApi.__ws_mouse_move_handler,kvmd/apps/kvmd/api/hid.py,262,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L262
+mouse_relative,false,HidApi.__ws_mouse_relative_handler,kvmd/apps/kvmd/api/hid.py,271,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L271
+mouse_wheel,false,HidApi.__ws_mouse_wheel_handler,kvmd/apps/kvmd/api/hid.py,275,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py#L275
+ping,false,KvmdServer.__ws_ping_handler,kvmd/apps/kvmd/server.py,553,https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/server.py#L553
