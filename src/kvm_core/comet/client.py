@@ -152,7 +152,6 @@ class CometClient:
         self.watchdog_task: Optional[asyncio.Task] = None
         self.pinger_task: Optional[asyncio.Task] = None
         self.receiver_task: Optional[asyncio.Task] = None
-        self._ocr_state_cache: Optional[dict] = None
         self.server_state: dict[str, Any] = {}
         self.last_server_event_at: float | None = None
         self.last_pong_at: float | None = None
@@ -338,7 +337,6 @@ class CometClient:
                 pass
             self.http = None
         self.auth_token = None
-        self._ocr_state_cache = None
         LOG.info("Disconnected from Comet KVM (target=%s)", self.target_id)
 
     async def get_screenshot(self, preview: bool = True, max_width: int = 1024, quality: int = 60) -> bytes:
@@ -352,57 +350,6 @@ class CometClient:
         r = await self.http.get(f"{self.base_url}/api/streamer/snapshot", params=params)
         r.raise_for_status()
         return r.content
-
-    async def get_ocr_state(self, refresh: bool = False) -> dict:
-        """Return the Comet/PiKVM native OCR capability state."""
-        if not self.http:
-            raise RuntimeError("Not connected")
-        if self._ocr_state_cache is not None and not refresh:
-            return dict(self._ocr_state_cache)
-        response = await self.http.get(f"{self.base_url}/api/streamer/ocr")
-        response.raise_for_status()
-        payload = response.json()
-        state = payload.get("result", {}).get("ocr")
-        if not isinstance(state, dict):
-            raise RuntimeError("Native OCR status response did not contain result.ocr")
-        self._ocr_state_cache = dict(state)
-        return dict(state)
-
-    async def get_native_ocr_text(
-        self,
-        languages: str = "",
-        crop: tuple[int, int, int, int] | None = None,
-    ) -> str:
-        """Run the device's native OCR endpoint and return its plain text result."""
-        if not self.http:
-            raise RuntimeError("Not connected")
-
-        params = {"allow_offline": "true", "ocr": "true"}
-        if languages.strip():
-            params["ocr_langs"] = languages.strip()
-        if crop is not None:
-            left, top, right, bottom = crop
-            params.update({
-                "ocr_left": str(left),
-                "ocr_top": str(top),
-                "ocr_right": str(right),
-                "ocr_bottom": str(bottom),
-            })
-
-        response = await self.http.get(f"{self.base_url}/api/streamer/snapshot", params=params)
-        response.raise_for_status()
-
-        content_type = response.headers.get("content-type", "").lower()
-        if "json" not in content_type:
-            return response.text
-
-        payload = response.json()
-        result = payload.get("result")
-        if isinstance(result, str):
-            return result
-        if isinstance(result, dict) and isinstance(result.get("text"), str):
-            return result["text"]
-        raise RuntimeError("Native OCR response did not contain recognized text")
 
     async def send_key_event(self, key: str, state: bool, finish: bool = False):
         async with self.send_lock:
@@ -747,7 +694,7 @@ class CometClient:
             "atx",
             "msd",
             "streamer",
-            "ocr",
+            "legacy_server_ocr",
             "recorder",
             "tailscale",
             "wol",

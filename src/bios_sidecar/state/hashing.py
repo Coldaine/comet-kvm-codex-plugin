@@ -15,7 +15,7 @@ def calculate_visual_phash(image_bytes: bytes) -> str:
         img = PILImage.open(io.BytesIO(image_bytes))
         # Resize to 9x8 and convert to grayscale (L)
         img_gray = img.resize((9, 8)).convert("L")
-        pixels = list(img_gray.getdata())
+        pixels = list(img_gray.get_flattened_data())
 
         # dHash computation: compare pixel[x] to pixel[x+1] for each row
         difference = []

@@ -3,7 +3,7 @@ from PIL import Image as PILImage
 import io
 from src.bios_sidecar.state.hashing import calculate_visual_phash, calculate_ocr_hash, calculate_state_semantic_hash, hamming_distance
 
-def create_mock_jpeg(add_diff: bool = False) -> bytes:
+def create_sample_jpeg(add_diff: bool = False) -> bytes:
     img = PILImage.new("RGB", (100, 100))
     for x in range(100):
         for y in range(100):
@@ -17,9 +17,9 @@ def create_mock_jpeg(add_diff: bool = False) -> bytes:
 
 class TestStateIdentity(unittest.TestCase):
     def test_phash_differentiation(self):
-        # Generate two different mock images
-        blue_img = create_mock_jpeg(add_diff=False)
-        red_img = create_mock_jpeg(add_diff=True)
+        # Generate two deterministic, visually distinct sample images.
+        blue_img = create_sample_jpeg(add_diff=False)
+        red_img = create_sample_jpeg(add_diff=True)
 
         blue_hash = calculate_visual_phash(blue_img)
         red_hash = calculate_visual_phash(red_img)

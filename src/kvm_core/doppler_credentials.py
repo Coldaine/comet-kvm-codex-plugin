@@ -3,12 +3,18 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
+from collections.abc import Callable
 from typing import Optional
 
 LOG = logging.getLogger("kvm_core.doppler")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOPPLER_YAML = _REPO_ROOT / "doppler.yaml"
+_PASSWORD_SECRET_NAMES = (
+    "GLCOMET_ADMIN_PASSWORD",
+    "COMET_ADMIN_PASSWORD",
+    "COMET_PASSWORD",
+)
 
 
 class DopplerAuthError(RuntimeError):
@@ -115,6 +121,26 @@ def _doppler_get_plain(name: str, project: str, config: str) -> Optional[str]:
     return value or None
 
 
+def _resolve_password_from_reader(
+    reader: Callable[[str, str, str], Optional[str]],
+    project: str,
+    config: str,
+    *,
+    require: bool,
+) -> Optional[str]:
+    for name in _PASSWORD_SECRET_NAMES:
+        value = reader(name, project, config)
+        if value:
+            LOG.debug("Resolved Comet password from Doppler secret %s (%s/%s)", name, project, config)
+            return value
+    if require:
+        raise DopplerAuthError(
+            f"Doppler project {project}/{config} has no GLCOMET_ADMIN_PASSWORD "
+            "(or legacy COMET_ADMIN_PASSWORD / COMET_PASSWORD) secret."
+        )
+    return None
+
+
 def resolve_comet_password(*, require: bool = True) -> Optional[str]:
     """Always fetch the Comet admin password from Doppler CLI. Never reads process env.
 
@@ -127,15 +153,9 @@ def resolve_comet_password(*, require: bool = True) -> Optional[str]:
     project, config = doppler_project_config()
     assert_doppler_authenticated(project, config)
 
-    for name in ("GLCOMET_ADMIN_PASSWORD", "COMET_ADMIN_PASSWORD", "COMET_PASSWORD"):
-        value = _doppler_get_plain(name, project, config)
-        if value:
-            LOG.debug("Resolved Comet password from Doppler secret %s (%s/%s)", name, project, config)
-            return value
-
-    if require:
-        raise DopplerAuthError(
-            f"Doppler project {project}/{config} has no GLCOMET_ADMIN_PASSWORD "
-            "(or legacy COMET_ADMIN_PASSWORD / COMET_PASSWORD) secret."
-        )
-    return None
+    return _resolve_password_from_reader(
+        _doppler_get_plain,
+        project,
+        config,
+        require=require,
+    )
