@@ -11,7 +11,10 @@
         "--",
         "uv",
         "run",
-        "--script",
+        "--locked",
+        "--python",
+        "3.13",
+        "python",
         "./glkvm_mcp.py"
       ]
     }
