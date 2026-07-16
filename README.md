@@ -251,7 +251,7 @@ See [`docs/kvm-core.md`](docs/kvm-core.md) for the KVM core architecture and [`d
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — the Comet ships with a self-signed certificate
-- **No credentials stored** — password is passed per-session or fetched from Doppler CLI (`COMET_PASSWORD`)
+- **No credentials stored** — password is passed per-session or fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`; `COMET_PASSWORD` is a legacy alias only)
 - **Remote access** — use Tailscale (native on Comet) or VPN; do not expose the MCP server's stdio to an untrusted network
 
 ---

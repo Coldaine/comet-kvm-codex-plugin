@@ -5,7 +5,7 @@ Live smoke test against a Comet KVM (read-only).
 Exercises the transport that the MCP server depends on WITHOUT sending any
 keystrokes or mutations to the target:
 
-  1. Connect + authenticate (COMET_PASSWORD from Doppler CLI)
+  1. Connect + authenticate (GLCOMET_ADMIN_PASSWORD from Doppler CLI)
   2. GET /api/info (sysinfo)
   3. Capture one screenshot (proves the HDMI/video pipeline)
 

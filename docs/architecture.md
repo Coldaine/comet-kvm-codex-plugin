@@ -20,7 +20,7 @@ One stdio MCP process composes a universal physical KVM core with a BIOS-aware s
 |---|---|---|
 | MCP composition | Current | `glkvm_mcp.py` registers KVM and BIOS tools on one `FastMCP("comet-kvm")` instance. |
 | Codex plugin packaging | Current | `.codex-plugin/plugin.json` bundles `skills/` + `.mcp.json`; the launcher starts **this repo's** MCP server (not an external upstream package). |
-| Plugin launch | Current | `.mcp.json` launches via `uv run --locked --python 3.13 python ./glkvm_mcp.py`; `kvm_connect` fetches `COMET_PASSWORD` from Doppler CLI. |
+| Plugin launch | Current | `.mcp.json` launches via `uv run --locked --python 3.13 python ./glkvm_mcp.py`; `kvm_connect` fetches `GLCOMET_ADMIN_PASSWORD` from Doppler CLI. |
 | Universal KVM | Current | `src/kvm_core/` owns auth, HTTP/WebSocket transport, HID, screenshots, OCR, logging, and Comet hardware tools. |
 | BIOS sidecar | Current | `src/bios_sidecar/` owns BIOS observation, graph/state, VLM grounding, navigation, mutation, recovery, and trace resources/tools. |
 | Host OCR | Current | Pillow decodes frames; pytesseract returns ordered text and word boxes with a timeout off the asyncio event loop. |
@@ -98,7 +98,7 @@ Blocklisted zones such as firmware flash, secure erase, RAID, boot order, and pa
 - One MCP process owns one physical Comet session; this prevents conflicting HID state and duplicate watchdog/pinger loops.
 - Commands, OCR text, credentials, screenshots, and live traces are not written to diagnostic logs; this limits accidental sensitive-data retention.
 - MCP tool results are the primary agent data path; logs, progress events, and resources cannot silently replace explicit output.
-- Exact SSH, if added, verifies host keys and uses credentials distinct from `COMET_PASSWORD`; this prevents KVM appliance trust from becoming target-host trust.
+- Exact SSH, if added, verifies host keys and uses credentials distinct from the Comet admin password; this prevents KVM appliance trust from becoming target-host trust.
 
 ## Open Architecture Questions
 
