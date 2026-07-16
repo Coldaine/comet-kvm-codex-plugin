@@ -146,7 +146,7 @@ The USB-A 2.0 port can mount external exFAT drives, expanding available storage 
 Primary live path (see [`comet-api.md` verification status](comet-api.md#verification-status)):
 
 1. `POST /api/auth/login` — authentication
-2. `WSS /api/ws` with `stream=false` — keyboard/mouse input over WebSocket
+2. `WSS /api/ws` with `stream=true` — keyboard/mouse input over WebSocket (also keeps the HDMI streamer process up so HTTP snapshots work)
 3. `GET /api/streamer/snapshot` — JPEG frame capture
 4. `GET /api/info` — sysinfo tool
 5. `GET /api/streamer/ocr` — inherited server-OCR discovery observation (not the browser Text Recognition engine)

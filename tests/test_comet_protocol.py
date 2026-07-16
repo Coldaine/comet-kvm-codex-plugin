@@ -41,7 +41,9 @@ def test_real_protocol_login_websocket_capabilities_and_hid_contract():
                 await wait_until(lambda: client.last_pong_at is not None)
                 await wait_until(lambda: "atx_state" in client.server_state)
                 result = await client.send_combo("Ctrl+Alt+Delete")
-                await wait_until(lambda: len(service.ws_messages) >= 7)
+                await wait_until(
+                    lambda: sum(1 for row in service.ws_messages if row.get("event_type") == "key") >= 6
+                )
                 assert client.capabilities["features"]["legacy_server_ocr"] is True
                 assert client.server_state["atx_state"]["enabled"] is True
             finally:
@@ -55,7 +57,7 @@ def test_real_protocol_login_websocket_capabilities_and_hid_contract():
         "passwd": ["secret"],
         "expire": ["0"],
     }
-    assert service.ws_query == {"stream": "false"}
+    assert service.ws_query == {"stream": "true"}
     assert service.ws_headers["Token"] == "token-123"
     assert "auth_token=token-123" in service.ws_headers["Cookie"]
     assert result == {

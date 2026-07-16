@@ -109,7 +109,7 @@ Do not hardcode a “current” GLKVM/KVMD/Redfish triad in clients. Discover at
 
 ### WebSocket
 
-`GET /api/ws` (often `?stream=false` when video is not needed on the socket).
+`GET /api/ws` — use `?stream=true` when HTTP `/api/streamer/snapshot` must work (Comet tears down the streamer when no stream client is connected). `stream=false` is HID-only.
 
 JSON events include `key`, `mouse_button`, `mouse_move`, `mouse_relative`, `mouse_wheel`. Binary event types also exist (opcodes 1–5).
 

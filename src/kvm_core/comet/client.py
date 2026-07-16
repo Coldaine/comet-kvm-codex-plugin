@@ -207,8 +207,12 @@ class CometClient:
 
         parsed = urlparse(self.base_url)
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
-        # Prefer cookie/header auth; keep stream=false. Avoid embedding token in logs.
-        ws_url = f"{ws_scheme}://{parsed.netloc}/api/ws?stream=false"
+        # Prefer cookie/header Token auth (no token in the URL). Use stream=true so
+        # kvmd keeps the HDMI streamer process up for the session — on Comet/RM10,
+        # GET /api/streamer/snapshot returns 503 while streamer is null, and the
+        # streamer tears down as soon as the last stream=true client disconnects.
+        # Binary video frames are drained (ignored) in _receiver_loop.
+        ws_url = f"{ws_scheme}://{parsed.netloc}/api/ws?stream=true"
         additional_headers = {
             "Cookie": f"auth_token={token}",
             "Token": token,

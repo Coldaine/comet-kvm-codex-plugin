@@ -65,7 +65,7 @@ MCP today exposes `GET /api/info` via `comet_sysinfo` / `comet_capabilities`. Co
 
 ### Keyboard/Mouse WebSocket: `WSS /api/ws`
 
-- Typical query: `stream=false` (video via HTTP snapshot, not WS)
+- Typical query: `stream=true` (keeps the HDMI streamer process alive so HTTP `/api/streamer/snapshot` works; binary frames are drained on the socket). `stream=false` is HID-only and leaves `result.streamer` null → snapshot HTTP 503 on Comet/RM10.
 - Auth: cookie / `Token` header; query `auth_token` also accepted by firmware (prefer header/cookie — this client uses header/cookie)
 - Keyboard events: keydown, keyup (with `finish=true` flag)
 - Mouse events: button press/release, absolute move (int16 coordinates), wheel scroll
@@ -86,14 +86,19 @@ GET /api/streamer/ocr
 ```
 
 Snapshot JPEGs are used by `kvm_screenshot`, `kvm_screenshot_to_file`, and
-the host-backed `kvm_ocr_*` tools. The PiKVM fork still contains server-side OCR
-parameters, but GL.iNet firmware 1.9's product UI Text Recognition code crops its
-canvas and runs bundled Tesseract.js/WASM in the controlling browser. A live
-browser recognition succeeded with the server OCR route disabled and no device
-OCR socket/process, proving these are separate paths. The MCP does not call the
-legacy OCR snapshot mode.
+the host-backed `kvm_ocr_*` tools. **Streamer lifecycle (RM10):** kvmd only keeps
+`result.streamer` non-null while at least one WebSocket client is connected with
+`stream=true`. With `stream=false`, snapshot returns HTTP 503 even when HDMI
+in/out LEDs show a live signal. This client connects with `stream=true`.
 
-> **Source:** GLKVM `streamer.py`, `src/kvm_core/comet/client.py`, live probes 2026-07-10. Confidence: **High**.
+The PiKVM fork still contains server-side OCR parameters, but GL.iNet firmware
+1.9's product UI Text Recognition code crops its canvas and runs bundled
+Tesseract.js/WASM in the controlling browser. A live browser recognition
+succeeded with the server OCR route disabled and no device OCR socket/process,
+proving these are separate paths. The MCP does not call the legacy OCR snapshot
+mode.
+
+> **Source:** GLKVM `streamer.py`, `src/kvm_core/comet/client.py`, live probes 2026-07-16. Confidence: **High**.
 
 ### ATX power control
 
@@ -154,10 +159,10 @@ What this project has actually exercised against the LAN Comet (`192.168.0.126`)
 |---------|--------------|--------------|
 | `POST /api/auth/login` | Yes | Authenticated sessions 2026-07-07 / 2026-07-10 |
 | `GET /api/info` | Yes | HTTP 200 authenticated 2026-07-10 |
-| `GET /api/streamer/snapshot` | Yes | JPEG capture via MCP tools |
-| `GET /api/streamer/ocr` | Yes | HTTP 200; `enabled: false` on unit 2026-07-10 |
-| Snapshot OCR (`ocr=true`) | Partial | HTTP 500 while OCR disabled; host Tesseract used |
-| WebSocket HID (keys/mouse) | Yes | Primary input path in normal MCP use |
+| `GET /api/streamer/snapshot` | Yes | JPEG after `stream=true` connect; HTTP 503 if streamer null (2026-07-16) |
+| `GET /api/streamer/ocr` | Yes | HTTP 200; `enabled: false` on unit (legacy server OCR; MCP uses host Tesseract) |
+| Snapshot OCR (`ocr=true`) | N/A for MCP | Product Text Recognition is browser Tesseract.js; MCP does not use legacy OCR snapshot |
+| WebSocket HID + stream | Yes | MCP uses `?stream=true`; pong/receiver healthy; binary frames drained |
 | `GET /api/atx` | Existence only | Not action-tested |
 | `POST /api/atx/power` / `click` | **Not live-tested** | No destructive power tests in smoke |
 | `POST /api/msd/write` + mount lifecycle | **Not live-tested** | Upload not invoked in 2026-07-10 verification |
