@@ -120,7 +120,7 @@ sudo apt-get install tesseract-ocr
 
 The plugin is auto-discovered when the repo is installed as a Codex plugin. Its bundled launcher runs `uv run --locked --python 3.13 python ./glkvm_mcp.py`. `kvm_connect` fetches `GLCOMET_ADMIN_PASSWORD` from the Doppler CLI (`doppler.yaml`); the host must have Doppler installed and authenticated.
 
-**Launcher note:** The bundled [`.mcp.json`](.mcp.json) does not wrap the process in `doppler run` for env injection. Doppler CLI auth on the host is required for password resolution — tracked alongside portable plugin installs in [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
+**Launcher note:** The bundled [`.mcp.json`](.mcp.json) does not wrap the process in `doppler run` for env injection. Doppler CLI auth on the host is required for password resolution. A future portable credential-elicitation path remains a candidate in [`docs/plans/02-mcp-v2-migration-evaluation.md`](docs/plans/02-mcp-v2-migration-evaluation.md).
 
 ### Use as a standalone MCP server
 
