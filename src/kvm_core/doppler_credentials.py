@@ -116,7 +116,10 @@ def _doppler_get_plain(name: str, project: str, config: str) -> Optional[str]:
 
 
 def resolve_comet_password(*, require: bool = True) -> Optional[str]:
-    """Always fetch COMET_PASSWORD from Doppler CLI. Never reads process env.
+    """Always fetch the Comet admin password from Doppler CLI. Never reads process env.
+
+    Canonical Doppler secret: GLCOMET_ADMIN_PASSWORD (secrets_managment/dev).
+    COMET_PASSWORD is accepted only as a legacy alias if present.
 
     The only blocker is Doppler CLI install + authentication to doppler.yaml's
     project/config. Explicit passwords passed to kvm_connect() are separate.
@@ -124,7 +127,7 @@ def resolve_comet_password(*, require: bool = True) -> Optional[str]:
     project, config = doppler_project_config()
     assert_doppler_authenticated(project, config)
 
-    for name in ("COMET_PASSWORD", "GLCOMET_ADMIN_PASSWORD"):
+    for name in ("GLCOMET_ADMIN_PASSWORD", "COMET_PASSWORD"):
         value = _doppler_get_plain(name, project, config)
         if value:
             LOG.debug("Resolved Comet password from Doppler secret %s (%s/%s)", name, project, config)
@@ -132,7 +135,7 @@ def resolve_comet_password(*, require: bool = True) -> Optional[str]:
 
     if require:
         raise DopplerAuthError(
-            f"Doppler project {project}/{config} has no COMET_PASSWORD "
-            "(or legacy GLCOMET_ADMIN_PASSWORD) secret."
+            f"Doppler project {project}/{config} has no GLCOMET_ADMIN_PASSWORD "
+            "(or legacy COMET_PASSWORD) secret."
         )
     return None

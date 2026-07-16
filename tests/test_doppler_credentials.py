@@ -16,7 +16,7 @@ def test_resolve_comet_password_uses_doppler_not_env(monkeypatch):
             password = dc.resolve_comet_password(require=True)
 
     assert password == "from-doppler"
-    assert get_plain.call_args_list[0].args[0] == "COMET_PASSWORD"
+    assert get_plain.call_args_list[0].args[0] == "GLCOMET_ADMIN_PASSWORD"
 
 
 def test_resolve_comet_password_raises_when_doppler_unauthenticated():

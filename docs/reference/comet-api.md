@@ -295,7 +295,7 @@ GL.iNet's PiKVM fork exposes `GET /api/streamer/ocr` with `enabled`, `engine` (`
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — device ships with self-signed certificate; `verify=False` in httpx client
-- **No credentials in repo** — secrets are never committed, logged, or stored in files. `COMET_PASSWORD` is fetched at connect time from the Doppler CLI (`doppler.yaml` → `secrets_managment`/`dev`). Process-env injection is not used for the Comet password.
+- **No credentials in repo** — secrets are never committed, logged, or stored in files. The Comet admin password is fetched at connect time from Doppler CLI as `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `secrets_managment`/`dev`). Process-env injection is not used for that secret.
 - **stdio exposure warning** — do not expose the MCP server's stdio to a remote agent without confirming the target host is on a trusted network
 - **Remote access options:** Tailscale (native integration on Comet Pro), GL.iNet cloud service (`glkvm.com`), or VPN
 
@@ -313,7 +313,7 @@ GL.iNet's PiKVM fork exposes `GET /api/streamer/ocr` with `enabled`, `engine` (`
 | `VLM_MODEL` | no | no | provider default | Model string for the OpenAI-compatible endpoint |
 | `VLM_BASE_URL` | no | no | provider default | Override API endpoint |
 
-Doppler secret name: `COMET_PASSWORD` (legacy alias `GLCOMET_ADMIN_PASSWORD` still accepted in Doppler only).
+Doppler secret name: **`GLCOMET_ADMIN_PASSWORD`** (legacy alias `COMET_PASSWORD` only if you add it later).
 
 #### MCP Client Config Example
 
