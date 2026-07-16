@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-
 from src.kvm_core.server import mcp
+from src.kvm_core.tools_core import _require_client
 
 LOG = logging.getLogger("kvm_core.tools")
 
@@ -82,7 +82,3 @@ async def comet_tailscale_status(target: str | None = None) -> dict:
 async def comet_redfish_power(reset_type: str, target: str | None = None) -> dict:
     """Issue a Redfish ComputerSystem.Reset (On, ForceOff, ForceRestart, PushPowerButton, ...)."""
     return await _require_client(target).redfish_reset(reset_type)
-
-# Deprecated aliases remain registered for backwards compatibility. They are
-# deliberately thin delegates so their behavior stays identical to kvm_*.
-from src.kvm_core.tools_core import _require_client

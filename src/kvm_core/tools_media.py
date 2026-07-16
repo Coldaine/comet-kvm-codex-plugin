@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-
 from src.kvm_core.server import mcp
+from src.kvm_core.tools_core import _require_client
 
 LOG = logging.getLogger("kvm_core.tools")
 
@@ -30,9 +30,6 @@ async def comet_media_upload(local_path: str, image_name: str = "", target: str 
 async def comet_media_state(target: str | None = None) -> dict:
     """Return virtual-media / MSD subsystem state."""
     return await _require_client(target).msd_state()
-
-
-1
 
 
 @mcp.tool(name="comet_media_fetch", annotations={"readOnlyHint": False, "destructiveHint": True})
@@ -68,6 +65,3 @@ async def comet_media_remove(image_name: str, target: str | None = None) -> dict
 async def comet_media_reset(target: str | None = None) -> dict:
     """Reset the MSD subsystem."""
     return await _require_client(target).msd_reset()
-
-
-from src.kvm_core.tools_core import _require_client
