@@ -82,6 +82,22 @@ def set_phase(run_id: str, phase: str) -> Path:
     return path
 
 
+def attach_hwinfo_evidence(run_id: str, search_dir: str) -> Path:
+    from src.bios_sidecar.controller.hwinfo import discover_hwinfo_csv, parse_hwinfo_csv
+    run_id = validate_run_id(run_id)
+    path = RUNS / run_id / "run.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Run ledger not found: {path}")
+        
+    csv_file = discover_hwinfo_csv(search_dir)
+    metrics = parse_hwinfo_csv(csv_file)
+    
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["windows_evidence"] = metrics
+    
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -96,13 +112,19 @@ def main() -> None:
     phase = sub.add_parser("phase")
     phase.add_argument("--run-id", required=True)
     phase.add_argument("--phase", required=True)
+    
+    hwinfo = sub.add_parser("hwinfo")
+    hwinfo.add_argument("--run-id", required=True)
+    hwinfo.add_argument("--search-dir", required=True)
 
     args = parser.parse_args()
     try:
         if args.cmd == "create":
             path = create_run(args.run_id, args.target, args.setting, args.old_value, args.new_value)
-        else:
+        elif args.cmd == "phase":
             path = set_phase(args.run_id, args.phase)
+        elif args.cmd == "hwinfo":
+            path = attach_hwinfo_evidence(args.run_id, args.search_dir)
     except (FileExistsError, FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}")
         raise SystemExit(2) from exc

@@ -7,34 +7,6 @@ from src.bios_sidecar.state.store import SQLiteStore
 
 LOG = logging.getLogger("bios_sidecar.state.capabilities")
 
-# Stable priors/known properties for MSI Click BIOS on Z690
-KNOWN_MUTABILITY_MAP = {
-    "cpu_lite_load_mode": {
-        "canonical_name": "CPU Lite Load Mode",
-        "aliases": ["CPU Lite Load", "CPU Lite Load Control", "CPU Lite Load Mode"],
-        "risk": RiskClass.MEDIUM,
-        "mutation_policy": "supervised_one_setting"
-    },
-    "pl1": {
-        "canonical_name": "Power Limit 1",
-        "aliases": ["Long Duration Power Limit (W)", "PL1", "Power Limit 1"],
-        "risk": RiskClass.HIGH,
-        "mutation_policy": "supervised_one_setting"
-    },
-    "pl2": {
-        "canonical_name": "Power Limit 2",
-        "aliases": ["Short Duration Power Limit (W)", "PL2", "Power Limit 2"],
-        "risk": RiskClass.HIGH,
-        "mutation_policy": "supervised_one_setting"
-    },
-    "cpu_cooler_tuning": {
-        "canonical_name": "CPU Cooler Tuning",
-        "aliases": ["CPU Cooler Tuning", "Cooler Type"],
-        "risk": RiskClass.MEDIUM,
-        "mutation_policy": "supervised_one_setting"
-    }
-}
-
 class CapabilityIndex:
     def __init__(self, store: SQLiteStore):
         self.store = store
@@ -43,22 +15,24 @@ class CapabilityIndex:
 
     def reload_from_store(self):
         self.capabilities = {c.capability_id: c for c in self.store.list_capabilities()}
-        # If empty, pre-initialize based on MSI Click BIOS priors
+        # If empty, pre-initialize based on adapter priors
         if not self.capabilities:
-            for cid, info in KNOWN_MUTABILITY_MAP.items():
+            from src.bios_sidecar.adapters.msi_click_bios import MsiClickBiosAdapter
+            adapter = MsiClickBiosAdapter()
+            for cid, info in adapter.known_capabilities.items():
                 self.capabilities[cid] = CapabilityEntry(
                     capability_id=cid,
                     canonical_name=info["canonical_name"],
                     aliases=info["aliases"],
-                    vendor="msi",
-                    board_family="z690",
+                    vendor=adapter.vendor,
+                    board_family=adapter.families[0] if adapter.families else "generic",
                     paths=[],
                     risk=info["risk"],
                     mutation_policy=info["mutation_policy"],
                     validation={"external_tool": "HWiNFO", "required_after_change": True}
                 )
                 self.store.save_capability(self.capabilities[cid])
-            LOG.info("Pre-initialized capability index with %d MSI Z690 priors", len(self.capabilities))
+            LOG.info("Pre-initialized capability index with %d priors", len(self.capabilities))
 
     def register_discovered_setting(
         self, label: str, value: str, breadcrumb: list[str], node_id: str, control_id: str

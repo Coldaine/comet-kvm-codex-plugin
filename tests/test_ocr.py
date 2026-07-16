@@ -79,3 +79,42 @@ def test_run_text_ocr_rejects_empty_crop():
 
     with pytest.raises(ValueError, match="non-empty region"):
         manager.run_text_ocr(text_image(), crop=(20, 20, 10, 10))
+
+
+def test_expect_tesseract_cmd_line(monkeypatch, tmp_path):
+    import os
+    import sys
+    import subprocess
+    from pathlib import Path
+
+    mock_bin = tmp_path / "tesseract_mock.exe"
+    mock_bin.touch()
+
+    env = os.environ.copy()
+    env["TESSERACT_PATH"] = str(mock_bin)
+
+    res = subprocess.run(
+        [sys.executable, "glkvm_mcp.py", "--expect-tesseract"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=Path(__file__).resolve().parents[1]
+    )
+    assert res.returncode == 0
+    assert "Tesseract OCR is available" in res.stdout
+
+    env["TESSERACT_PATH"] = "invalid_path_to_tesseract_non_existent"
+    # Hide PATH so _find_tesseract_binary cannot fall back to a real
+    # tesseract install (e.g. the one CI provisions) and mask the bad
+    # TESSERACT_PATH this case is meant to exercise.
+    env.pop("TESSERACT_CMD", None)
+    env["PATH"] = ""
+    res2 = subprocess.run(
+        [sys.executable, "glkvm_mcp.py", "--expect-tesseract"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=Path(__file__).resolve().parents[1]
+    )
+    assert res2.returncode == 1
+    assert "ERROR: Tesseract OCR is not available" in res2.stderr or "ERROR: Tesseract OCR is not available" in res2.stdout

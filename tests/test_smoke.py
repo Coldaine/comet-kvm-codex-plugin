@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 SERVER_PATH = os.path.join(REPO_ROOT, "glkvm_mcp.py")
@@ -51,7 +52,6 @@ EXPECTED_TOOLS = {
     "comet_power_state",
     "comet_sysinfo",
     "comet_capabilities",
-    "comet_msd_upload",
     "comet_media_state",
     "comet_media_upload",
     "comet_media_fetch",
@@ -72,16 +72,6 @@ EXPECTED_TOOLS = {
     "comet_redfish_power",
     "kvm_select_target",
     # Deprecated raw aliases remain public compatibility API.
-    "comet_raw_send_text",
-    "comet_raw_send_keys",
-    "comet_raw_hold_key",
-    "comet_raw_release_all",
-    "comet_raw_mouse_move",
-    "comet_raw_mouse_move_pct",
-    "comet_raw_mouse_click",
-    "comet_raw_mouse_scroll",
-    "comet_raw_screenshot",
-    "comet_raw_status",
     # Tier 1 stateful BIOS tools
     "bios_observe_state",
     "bios_crawl_step",
@@ -154,6 +144,32 @@ class SmokeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No Comet password available"):
             asyncio.run(kvm_tools.kvm_connect("192.0.2.1", password=""))
 
+    def test_kvm_connect_fetches_password_from_doppler_when_omitted(self):
+        import src.kvm_core.tools as kvm_tools
+        import src.kvm_core.doppler_credentials as doppler_credentials
+
+        class FakeClient:
+            base_url = "https://192.0.2.1"
+            capabilities = {"features": {}}
+
+        class FakeRuntime:
+            client = FakeClient()
+
+            async def connect(self, host, username, password, target="default", select=True):
+                self.received = (host, username, password, target)
+                return True
+
+            def get_client(self, target=None):
+                return self.client
+
+        runtime = FakeRuntime()
+        with patch.object(doppler_credentials, "resolve_comet_password", return_value="doppler-secret"):
+            with patch("src.kvm_core.tools_core.get_kvm_runtime", return_value=runtime):
+                result = asyncio.run(kvm_tools.kvm_connect("192.0.2.1"))
+
+        self.assertTrue(result["connected"])
+        self.assertEqual(runtime.received, ("192.0.2.1", "admin", "doppler-secret", "default"))
+
     def test_bundled_mcp_launcher_uses_uv_not_doppler_env_injection(self):
         import json
 
@@ -204,7 +220,7 @@ assert not any(name.startswith('src.bios_sidecar') for name in sys.modules), 'si
                 asyncio.run(runtime.vlm_client.close())
                 runtime.store.close()
 
-    def test_msd_upload_preserves_file_read_error_as_cause(self):
+    def test_media_upload_preserves_file_read_error_as_cause(self):
         import src.kvm_core.tools as kvm_tools
         from src.kvm_core.runtime import KVMRuntime, TargetRuntime
         from tests.bios_test_helpers import ScriptedCometClient, installed_kvm_runtime
@@ -217,7 +233,7 @@ assert not any(name.startswith('src.bios_sidecar') for name in sys.modules), 'si
             runtime._sync_selected_client()
             with installed_kvm_runtime(runtime):
                 with self.assertRaises(ValueError) as raised:
-                    asyncio.run(kvm_tools.comet_msd_upload(missing_path, "missing.iso"))
+                    asyncio.run(kvm_tools.comet_media_upload(missing_path, "missing.iso"))
 
         self.assertIsInstance(raised.exception.__cause__, FileNotFoundError)
 

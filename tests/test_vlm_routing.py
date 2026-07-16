@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import pytest
 
+import httpx
 from src.bios_sidecar.perception.vlm_client import VLMClient
 from tests.local_services import OpenAICompatibleService
 
@@ -11,19 +12,18 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def install_mock_transport(
+    client: VLMClient,
+    handler,
+) -> None:
+    run(client.client.aclose())
+    client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
 def test_provider_is_required_instead_of_fabricating_a_parse():
     client = VLMClient(provider="")
     try:
         with pytest.raises(RuntimeError, match="VLM_PROVIDER is required"):
-            run(client.parse_screenshot(b"bytes"))
-    finally:
-        run(client.close())
-
-
-def test_mock_provider_is_rejected():
-    client = VLMClient(provider="mock")
-    try:
-        with pytest.raises(ValueError, match="Unsupported provider: mock"):
             run(client.parse_screenshot(b"bytes"))
     finally:
         run(client.close())
@@ -116,3 +116,47 @@ def test_local_provider_retries_without_response_format():
             assert "response_format" not in service.requests[1]
         finally:
             run(client.close())
+
+
+def test_invalid_vlm_provider_raises_value_error():
+    client = VLMClient(provider="invalid-provider")
+    try:
+        with pytest.raises(ValueError, match="Unsupported provider"):
+            run(client.parse_screenshot(b"image"))
+    finally:
+        run(client.close())
+
+
+def test_mock_vlm_on_live_comet_fails_closed(monkeypatch):
+    class FakeClient:
+        host = "192.168.0.126"
+        base_url = "https://192.168.0.126"
+        def is_connected(self):
+            return True
+
+    class FakeKVM:
+        client = FakeClient()
+
+    import src.kvm_core.runtime
+    monkeypatch.setattr(src.kvm_core.runtime, "get_kvm_runtime", lambda: FakeKVM())
+
+    client = VLMClient(provider="mock")
+    try:
+        with pytest.raises(RuntimeError, match="refusing to run bios_\\* tools on fabricated VLM output"):
+            run(client.parse_screenshot(b"image"))
+    finally:
+        run(client.close())
+
+
+def test_vlm_provider_failure_returns_unparseable_state():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="Internal Server Error")
+
+    client = VLMClient(provider="ollama")
+    install_mock_transport(client, handler)
+    try:
+        res = run(client.parse_screenshot(b"image"))
+        assert res["screen_title"] == "Unparseable Screen"
+        assert res["entries"] == []
+    finally:
+        run(client.close())
