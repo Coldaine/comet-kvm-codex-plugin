@@ -20,7 +20,8 @@ def parse_hwinfo_csv(csv_path: str) -> Dict[str, Any]:
     
     for row in rows:
         for k, v in row.items():
-            if not v: continue
+            if not v:
+                continue
             try:
                 val = float(v)
             except ValueError:

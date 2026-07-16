@@ -104,6 +104,11 @@ def test_expect_tesseract_cmd_line(monkeypatch, tmp_path):
     assert "Tesseract OCR is available" in res.stdout
 
     env["TESSERACT_PATH"] = "invalid_path_to_tesseract_non_existent"
+    # Hide PATH so _find_tesseract_binary cannot fall back to a real
+    # tesseract install (e.g. the one CI provisions) and mask the bad
+    # TESSERACT_PATH this case is meant to exercise.
+    env.pop("TESSERACT_CMD", None)
+    env["PATH"] = ""
     res2 = subprocess.run(
         [sys.executable, "glkvm_mcp.py", "--expect-tesseract"],
         capture_output=True,

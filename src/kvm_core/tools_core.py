@@ -195,25 +195,17 @@ def _ocr_crop(left: int, top: int, right: int, bottom: int) -> tuple[int, int, i
 
 @mcp.tool(name="kvm_ocr_status", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
 async def kvm_ocr_status() -> dict:
-    """Report native Comet OCR and host Tesseract availability."""
-    client = _require_client()
+    """Report OCR backends that are callable by this MCP server."""
     r = get_kvm_runtime()
-    try:
-        device = await client.get_ocr_state(refresh=True)
-    except Exception as exc:
-        LOG.warning("Native OCR capability probe failed: %s", type(exc).__name__)
-        device = {"enabled": False, "error": "capability probe failed"}
     host = r.ocr_mgr.get_status()
-    if device.get("enabled"):
-        recommended = "comet-native"
-    elif host.get("available"):
-        recommended = "host-tesseract"
-    else:
-        recommended = "unavailable"
     return {
-        "device": device,
         "host": host,
-        "recommended_text_engine": recommended,
+        "recommended_text_engine": "host-tesseract" if host.get("available") else "unavailable",
+        "product_ui_ocr": {
+            "engine": "tesseract.js",
+            "execution": "controlling-browser",
+            "available_to_mcp": False,
+        },
     }
 
 
@@ -221,40 +213,20 @@ async def kvm_ocr_status() -> dict:
 async def kvm_ocr_text(
     psm: int = 6,
     languages: str = "",
-    prefer_native: bool = True,
     left: int = -1,
     top: int = -1,
     right: int = -1,
     bottom: int = -1,
 ) -> dict:
-    """Return visible screen text through native OCR when available, else host Tesseract.
+    """Capture the visible screen and return text through host Tesseract.
 
-    This text-only path preserves terminal spacing and avoids word-box work. Crop
-    coordinates are pixels; leave all four at -1 for the full frame.
+    The GL.iNet 1.9 Text Recognition feature is browser-side Tesseract.js and is
+    not a device API. This MCP path captures the frame directly. Crop coordinates
+    are pixels; leave all four at -1 for the full frame.
     """
     client = _require_client()
     r = get_kvm_runtime()
     crop = _ocr_crop(left, top, right, bottom)
-    device_state = None
-    fallback_reason = "native OCR not requested"
-
-    if prefer_native:
-        try:
-            device_state = await client.get_ocr_state()
-            if device_state.get("enabled"):
-                text = (await client.get_native_ocr_text(languages, crop)).rstrip()
-                return {
-                    "engine": f"comet-native:{device_state.get('engine', 'unknown')}",
-                    "text": text,
-                    "lines": text.splitlines(),
-                    "crop": list(crop) if crop else None,
-                    "device": device_state,
-                }
-            fallback_reason = "device OCR is disabled"
-        except Exception as exc:
-            LOG.warning("Native OCR read failed; using host fallback: %s", type(exc).__name__)
-            fallback_reason = "native OCR request failed"
-
     validate_psm(psm)
     image_bytes = await client.get_screenshot(preview=False)
     host = await asyncio.to_thread(r.ocr_mgr.run_text_ocr, image_bytes, psm, languages, crop)
@@ -263,8 +235,6 @@ async def kvm_ocr_text(
     host.update({
         "engine": "host-tesseract",
         "crop": list(crop) if crop else None,
-        "device": device_state,
-        "fallback_reason": fallback_reason,
     })
     return host
 
