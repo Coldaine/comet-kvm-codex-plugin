@@ -13,7 +13,8 @@ Working notes that are **not** project authority. Prefer [`docs/NORTH_STAR.md`](
 
 | Doc | Kind | Open when you need… |
 |-----|------|---------------------|
-| [`glkvm-api-surface.md`](glkvm-api-surface.md) | **Upstream API facts** | Endpoint inventory, request shapes, auth methods, discovery GETs, source links into `gl-inet/glkvm` |
+| [`glkvm-api-surface.md`](glkvm-api-surface.md) | **Curated upstream API facts** | Important request shapes, auth methods, discovery GETs, and exact commit permalinks |
+| [`docs/reference/glkvm-api/`](../reference/glkvm-api/README.md) | **Generated upstream corpus** | All 200 HTTP registrations, 12 inbound WebSocket registrations, pinned sources, and project endpoint coverage |
 | [`oob-proxmox-tailscale-vision.md`](oob-proxmox-tailscale-vision.md) | **Ops vision / judgment** | Comet as OOB control plane with Proxmox + Tailscale; recovery ladder; agent permissions; phases |
 | [`glkvm-client-audit-2026-07-15.md`](glkvm-client-audit-2026-07-15.md) | **Dated audit snapshot** | What a 2026-07-15 source review claimed about this repo vs firmware (no fixes in that file) |
 
@@ -21,14 +22,16 @@ Project-facing companions:
 
 - [`docs/reference/comet-api.md`](../reference/comet-api.md) — summary of contracts this repo cares about + MCP tools + live verification status
 - [`docs/reference/comet-hardware.md`](../reference/comet-hardware.md) — RM1 / PoE / Pro hardware facts
+- [`docs/reference/glkvm-api/project-endpoint-coverage.csv`](../reference/glkvm-api/project-endpoint-coverage.csv) — every native endpoint used by the production client, with separate source, registration, discovery, exercise, hardware, contract-test, and live-qualification fields
 
 ## Homes map (facts vs vision vs audit)
 
 ```text
 Pasted writeup / research dump
-├── Upstream facts ────────► glkvm-api-surface.md
-│                            (+ summarized in reference/comet-api.md,
-│                             hardware in reference/comet-hardware.md)
+├── Upstream facts ────────► glkvm-api-surface.md (curated)
+│                            + reference/glkvm-api/ (generated corpus)
+│                            + summarized in reference/comet-api.md
+│                            + hardware in reference/comet-hardware.md
 ├── Ops judgment ──────────► oob-proxmox-tailscale-vision.md
 └── Repo-vs-firmware audit ► glkvm-client-audit-2026-07-15.md
 

@@ -1,19 +1,34 @@
 # GLKVM / Comet native API surface
 
-> **Kind:** Research catalog — **API facts only**  
-> **Not:** Tailscale ACL advice, Proxmox factory runbooks, agent permission policy, or repo audit remediation (see sibling research docs).  
-> **Companion:** Project-facing summary in [`docs/reference/comet-api.md`](../reference/comet-api.md).  
-> **Authority:** Firmware source under [`gl-inet/glkvm`](https://github.com/gl-inet/glkvm) (`kvmd/apps/kvmd/api/`). No official OpenAPI.  
-> **Version pins:** None. Prefer discovery GETs on the connected unit. Public identifiers observed in research (firmware/source labels, KVMD daemon version, Redfish root) change over time — query the device.  
-> **Spot-checked:** 2026-07-15 against `gl-inet/glkvm` `main` handlers (confidence noted per section).
+> **Kind:** Research catalog — **API facts only**
+> **Not:** Tailscale ACL advice, Proxmox factory runbooks, agent permission policy, or repo audit remediation (see sibling research docs).
+> **Companions:** Project-facing summary in [`docs/reference/comet-api.md`](../reference/comet-api.md); complete generated corpus in [`docs/reference/glkvm-api/`](../reference/glkvm-api/README.md).
+> **Authority:** [`gl-inet/glkvm@9bd8ad11ba03d220401b0b6a4208bbfd84ed6107`](https://github.com/gl-inet/glkvm/tree/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107). No official OpenAPI.
+> **Evidence pin:** Source facts and permalinks in this catalog use that exact commit. Runtime clients still discover the connected unit rather than assuming its model, firmware, wiring, or enabled subsystems match the snapshot.
+> **Reviewed:** 2026-07-16 (confidence noted per section).
 
 Nginx exposes these under `/api/...` (and `/redfish/...` separately). Internal handlers register paths without the `/api` prefix (e.g. `@exposed_http("GET", "/atx")` → `GET /api/atx`).
+
+## Complete generated corpus
+
+The pinned inventory contains **200 unique HTTP method/path registrations** and
+**12 unique inbound WebSocket event registrations** extracted from
+`kvmd/apps/kvmd/api/*.py` **and** `kvmd/apps/kvmd/server.py`:
+
+- [`http-endpoints.csv`](../reference/glkvm-api/http-endpoints.csv)
+- [`websocket-events.csv`](../reference/glkvm-api/websocket-events.csv)
+- [`sources.json`](../reference/glkvm-api/sources.json)
+
+The CSVs establish handler presence in source. They do not establish that
+optional hardware exists, that a route is usable on every model, or that this
+project has exercised it. Project-specific status stays in
+[`project-endpoint-coverage.csv`](../reference/glkvm-api/project-endpoint-coverage.csv).
 
 ## Confidence legend
 
 | Mark | Meaning |
 |------|---------|
-| **High** | Handler read on 2026-07-15; query/body shape confirmed in source |
+| **High** | Handler read at the pinned commit; query/body shape confirmed in source |
 | **Medium** | Routes enumerated from source; params not fully traced |
 | **Low** | Inventory presence only; shape inferred from PiKVM/community notes |
 
@@ -125,7 +140,8 @@ Server emits subsystem `*_state` events, `pong`, and `kickout`. Clients should d
 
 ## Streamer / inherited server OCR / snapshot
 
-**Confidence: High** for snapshot/OCR handlers in `streamer.py`. **Medium** for broader stream-quality controls (may live in related modules / UI paths).
+**Confidence: High** — snapshot/OCR handlers are in `api/streamer.py`; stream
+parameter and reset handlers are on `KvmdServer` in `server.py`.
 
 | Method | Path | Shape |
 |--------|------|-------|
@@ -133,6 +149,8 @@ Server emits subsystem `*_state` events, `pong`, and `kickout`. Clients should d
 | GET | `/api/streamer/snapshot` | JPEG bytes by default. Query: `save`, `load`, `allow_offline`, `preview`, `preview_max_width`, `preview_max_height`, `preview_quality`. With `ocr=true`, returns OCR JSON instead of JPEG; crop via `ocr_left`/`ocr_top`/`ocr_right`/`ocr_bottom`, langs via `ocr_langs` |
 | DELETE | `/api/streamer/snapshot` | Clear saved snapshot |
 | GET | `/api/streamer/ocr` | `{ "ocr": <server OCR state> }` |
+| POST | `/api/streamer/set_params` | Query controls include quality, FPS, resolution, format/bitrate/GOP, zero-delay, encoder mode, and GL WebRTC; validation remains firmware-defined |
+| POST | `/api/streamer/reset` | Reset the streamer process |
 
 GL.iNet firmware 1.9's product UI **Text Recognition** path is not this server
 handler. The served web bundle crops the canvas and calls Tesseract.js
@@ -341,26 +359,26 @@ Several GLKVM routes change state on GET (MSD partition connect/disconnect/forma
 
 ## Source map
 
-Handlers live under:
-
-https://github.com/gl-inet/glkvm/tree/main/kvmd/apps/kvmd/api
+Handlers were reviewed at the pinned commit. The complete per-route file and
+line permalinks are in the generated CSVs.
 
 | Topic | File |
 |-------|------|
-| Auth | [`auth.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/auth.py) |
-| HID | [`hid.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/hid.py) |
-| Streamer/OCR | [`streamer.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/streamer.py) |
-| ATX | [`atx.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/atx.py) |
-| MSD | [`msd.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/msd.py) |
-| WOL | [`wol.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/wol.py) |
-| Redfish | [`redfish.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/redfish.py) |
-| Recorder | [`recorder.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/recorder.py) |
-| Metrics | [`export.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/export.py) |
-| Tailscale | [`tailscale.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/tailscale.py) |
-| Upgrade | [`upgrade.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/upgrade.py) |
-| System | [`system.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/system.py) |
-| Info | [`info.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/info.py) |
-| GPIO | [`ugpio.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/ugpio.py) |
-| Fingerbot | [`fingerbot.py`](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/fingerbot.py) |
+| Auth | [`auth.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/auth.py) |
+| HID | [`hid.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/hid.py) |
+| Streamer/OCR | [`streamer.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/streamer.py) |
+| Stream controls / WebSocket | [`server.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/server.py) |
+| ATX | [`atx.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/atx.py) |
+| MSD | [`msd.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/msd.py) |
+| WOL | [`wol.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/wol.py) |
+| Redfish | [`redfish.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/redfish.py) |
+| Recorder | [`recorder.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/recorder.py) |
+| Metrics | [`export.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/export.py) |
+| Tailscale | [`tailscale.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/tailscale.py) |
+| Upgrade | [`upgrade.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/upgrade.py) |
+| System | [`system.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/system.py) |
+| Info | [`info.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/info.py) |
+| GPIO | [`ugpio.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/ugpio.py) |
+| Fingerbot | [`fingerbot.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/fingerbot.py) |
 
 Related: [PiKVM API docs](https://docs.pikvm.org/api/) (ancestral contract), [GL.iNet KVM docs](https://docs.gl-inet.com/kvm/).
