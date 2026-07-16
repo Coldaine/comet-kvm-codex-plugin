@@ -20,6 +20,7 @@ LAUNCHER_DOCS = [
 ]
 TEXT_SURFACES = LAUNCHER_DOCS + [
     REPO_ROOT / "docs" / "workflows" / "live-hardware-qualification.md",
+    REPO_ROOT / "docs" / "plans" / "02-mcp-v2-migration-evaluation.md",
     REPO_ROOT / "scripts" / "comet_smoke_test.py",
 ]
 

@@ -13,7 +13,7 @@ This plan evaluates whether and when to migrate — not an implementation schedu
 
 | v2 feature | Problem it solves here |
 |---|---|
-| **Elicitation (URL mode)** | Collect `COMET_PASSWORD` out-of-band instead of hardcoding Doppler in `.mcp.json` for plugin distribution |
+| **Elicitation (URL mode)** | Collect the Comet admin password out-of-band instead of hardcoding Doppler in `.mcp.json` for plugin distribution. In the current Doppler-backed path, that password is stored as `GLCOMET_ADMIN_PASSWORD`. |
 | **Progress notifications** (`ctx.report_progress`) | Long `bios_crawl_region`, observe, and VLM tool calls give clients real progress instead of silent multi-minute waits |
 | **Resource subscriptions** (`notify_resource_updated`) | Agents subscribe to `bios://state/current`, `bios://graph/current`, `bios://capabilities/current` instead of polling `bios_observe_state` |
 | **Structured `MCPError` in tools** | Policy blocks, crawl failures, and sync drift surfaced as typed errors |
