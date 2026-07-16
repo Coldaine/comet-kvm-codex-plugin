@@ -82,7 +82,7 @@ The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verificatio
 
 ## D-K6 — PEP 723 script deployment remains the target
 
-`glkvm_mcp.py` remains the single-script MCP entry point intended for `uv run --script`. The PEP 723 metadata includes the sidecar dependencies, including `instructor` and `litellm`, so script-only launches resolve the same runtime surface as the project environment.
+`glkvm_mcp.py` remains the composition entry point. Production launchers must use `uv run --locked --python 3.13 python ./glkvm_mcp.py` so they honor the reviewed lockfile; `uv run --script` intentionally is not supported because it ignores that lockfile. The PEP 723 metadata is retained only for metadata-aware tooling and matches the runtime dependencies.
 
 ## D-K7 — Terminal output uses explicit, bounded transports
 

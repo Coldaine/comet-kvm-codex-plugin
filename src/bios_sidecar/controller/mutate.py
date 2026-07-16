@@ -147,7 +147,7 @@ class BiosMutator:
             4. Confirm with Enter only if that check passes (fail-closed otherwise).
         """
         # 1. Ground current state.
-        state = await self.observer.observe_state(client, run_id, device_id)
+        await self.observer.observe_state(client, run_id, device_id)
 
         # 3. Send F10 and wait for the confirmation modal.
         await client.send_combo("F10")

@@ -1,10 +1,9 @@
 from __future__ import annotations
 import asyncio
-import base64
 import logging
 import time
 import json
-from typing import Optional, Dict, List, Tuple
+from typing import Optional
 from urllib.parse import urlparse
 import httpx
 import websockets

@@ -3,8 +3,8 @@ import uuid
 import logging
 from typing import List, Set, Optional, Tuple
 from dataclasses import dataclass
-from src.bios_sidecar.domain.models import BiosState, StateNode, GraphEdge, EdgeAction, EdgeEvidence
-from src.bios_sidecar.domain.enums import StateKind, ControlRole
+from src.bios_sidecar.domain.models import BiosState, GraphEdge, EdgeAction, EdgeEvidence
+from src.bios_sidecar.domain.enums import ControlRole
 from src.bios_sidecar.controller.observe import StateObserver
 from src.bios_sidecar.controller.settle import ScreenSettler
 from src.kvm_core.comet.client import CometClient

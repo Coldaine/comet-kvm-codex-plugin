@@ -3,8 +3,7 @@ import os
 import json
 import logging
 import asyncio
-from typing import Dict, Any, List, Optional
-from mcp.server.fastmcp import Image
+from typing import Optional
 from src.kvm_core.server import mcp
 from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
 

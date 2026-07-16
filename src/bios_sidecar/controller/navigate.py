@@ -1,8 +1,7 @@
 from __future__ import annotations
 import logging
-from typing import List, Optional, Tuple
-from src.bios_sidecar.domain.models import BiosState, GraphEdge
-from src.bios_sidecar.domain.enums import ControlRole
+from typing import Optional, Tuple
+from src.bios_sidecar.domain.models import BiosState
 from src.bios_sidecar.controller.observe import StateObserver
 from src.bios_sidecar.controller.settle import ScreenSettler
 from src.kvm_core.comet.client import CometClient

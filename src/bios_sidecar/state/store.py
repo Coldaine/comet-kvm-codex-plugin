@@ -4,7 +4,7 @@ import json
 import os
 import logging
 import threading
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Optional
 from src.bios_sidecar.domain.enums import EventClass
 from src.bios_sidecar.domain.models import BiosState, StateNode, GraphEdge, CapabilityEntry, TraceEvent, EdgeAction, EdgeEvidence
 

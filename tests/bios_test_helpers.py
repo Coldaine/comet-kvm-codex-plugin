@@ -9,7 +9,7 @@ from PIL import Image as PILImage
 
 import src.kvm_core.runtime as kvm_runtime_mod
 from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
-from src.bios_sidecar.domain.enums import ControlRole, RiskClass, RuntimeState, StateKind
+from src.bios_sidecar.domain.enums import ControlRole, RiskClass, StateKind
 from src.bios_sidecar.domain.models import (
     ActionPolicies,
     BiosMetadata,

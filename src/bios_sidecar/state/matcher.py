@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 from src.bios_sidecar.domain.models import StateNode
 from src.bios_sidecar.state.graph import BiosGraph
 from src.bios_sidecar.state.hashing import hamming_distance

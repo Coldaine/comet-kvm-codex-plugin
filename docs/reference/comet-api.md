@@ -23,7 +23,7 @@
                     └── disabled / fail ──── fallback ────────────────┘
 ```
 
-The MCP server uses `glkvm_mcp.py` as a PEP 723 composition entry point and keeps implementation under `src/kvm_core/` and `src/bios_sidecar/`. It is launched via `uv run --script ./glkvm_mcp.py` and runs over stdio. The KVM core maintains a persistent WebSocket connection to the Comet for low-latency input and uses HTTP for screenshots and authentication.
+The MCP server uses `glkvm_mcp.py` as a PEP 723 composition entry point and keeps implementation under `src/kvm_core/` and `src/bios_sidecar/`. It is launched via `uv run --locked --python 3.13 python ./glkvm_mcp.py` and runs over stdio. The KVM core maintains a persistent WebSocket connection to the Comet for low-latency input and uses HTTP for screenshots and authentication.
 
 > **Source:** `glkvm_mcp.py` (PEP 723 metadata and composition), `src/kvm_core/server.py`, and `src/kvm_core/runtime.py`. Verified 2026-07-10.
 
@@ -287,7 +287,7 @@ The server reads these from its environment. They can be injected via shell expo
 | `COMET_DISABLE_BIOS_SIDECAR` | no | no | unset | Set to `1` to skip loading `bios_sidecar` (loaded by default; dependency is one-way: sidecar → kvm_core) |
 | `VLM_API_KEY` | **yes** | for VLM | — | OpenAI-compatible API key (OpenRouter, OpenAI, or set to any value for local Ollama) |
 | `VLM_PROVIDER` | no | no | `mock` | `openrouter` \| `ollama` \| `vllm` \| `openai` \| `mock` |
-| `VLM_MODEL` | no | no | provider default | Model string routed by litellm (e.g. `openrouter/qwen/qwen-2-vl-72b-instruct`) |
+| `VLM_MODEL` | no | no | provider default | Model string sent directly to the configured OpenAI-compatible endpoint (e.g. `openrouter/qwen/qwen-2-vl-72b-instruct`) |
 | `VLM_BASE_URL` | no | no | provider default | Override API endpoint (e.g. `http://localhost:11434/v1` for Ollama) |
 
 #### MCP Client Config Example
@@ -309,7 +309,7 @@ The server reads these from its environment. They can be injected via shell expo
 }
 ```
 
-The bundled plugin launcher uses `doppler run -p secrets_managment -c dev -- uv run --script ./glkvm_mcp.py`, so agents can omit the password from `kvm_connect`. Standalone clients may instead inject `COMET_PASSWORD` by another secure mechanism or pass the password in the tool call.
+The bundled plugin launcher uses `doppler run -p secrets_managment -c dev -- uv run --locked --python 3.13 python ./glkvm_mcp.py`, so agents can omit the password from `kvm_connect`. Standalone clients may instead inject `COMET_PASSWORD` by another secure mechanism or pass the password in the tool call.
 
 **Launcher roadmap:** The bundled [`.mcp.json`](../../.mcp.json) hardcodes Doppler for local dev. A portable `uv` + `COMET_PASSWORD` launcher (or MCP v2 elicitation) is planned for distributable installs — [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
 

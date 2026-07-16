@@ -9,12 +9,12 @@ on:
 
 jobs:
   test:
-    name: Compile + full test suite
+    name: Quality gate (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -26,8 +26,11 @@ jobs:
       - name: Install dependencies from lockfile
         run: uv sync --frozen --group dev
 
-      - name: Syntax check (compileall)
-        run: uv run python -m compileall glkvm_mcp.py src/
+      - name: Lint
+        run: uv run ruff check .
 
-      - name: Full test suite
-        run: uv run pytest tests -v
+      - name: Compile
+        run: uv run python -m compileall -q glkvm_mcp.py src/
+
+      - name: Test suite
+        run: uv run pytest tests -q
