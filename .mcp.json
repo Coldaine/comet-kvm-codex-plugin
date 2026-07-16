@@ -1,15 +1,8 @@
 {
   "mcpServers": {
     "comet-kvm": {
-      "command": "doppler",
+      "command": "uv",
       "args": [
-        "run",
-        "-p",
-        "secrets_managment",
-        "-c",
-        "dev",
-        "--",
-        "uv",
         "run",
         "--locked",
         "--python",

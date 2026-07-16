@@ -40,7 +40,7 @@ Response: Sets `auth_token` cookie; may return `two_step_required` for 2FA
 ```
 
 - Default username: `admin`
-- Password is passed per-session via `kvm_connect` or injected into the MCP process as `COMET_PASSWORD` — no credentials are stored server-side
+- Password is passed per-session via `kvm_connect`, or fetched from Doppler CLI (`COMET_PASSWORD` in `doppler.yaml`'s project/config) — never from process environment, never stored server-side
 - The client stores the cookie token and sends it as the HTTP `Token` header on subsequent requests
 - WebSocket auth uses `Cookie: auth_token=...` and `Token` headers (not a query-string token)
 - Clean disconnect calls `POST /api/auth/logout`
@@ -295,25 +295,25 @@ GL.iNet's PiKVM fork exposes `GET /api/streamer/ocr` with `enabled`, `engine` (`
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — device ships with self-signed certificate; `verify=False` in httpx client
-- **No credentials in repo** — secrets are never committed, logged, or stored in files. They are injected as environment variables at process start, typically through the MCP client config `env` dict.
+- **No credentials in repo** — secrets are never committed, logged, or stored in files. `COMET_PASSWORD` is fetched at connect time from the Doppler CLI (`doppler.yaml` → `secrets_managment`/`dev`). Process-env injection is not used for the Comet password.
 - **stdio exposure warning** — do not expose the MCP server's stdio to a remote agent without confirming the target host is on a trusted network
 - **Remote access options:** Tailscale (native integration on Comet Pro), GL.iNet cloud service (`glkvm.com`), or VPN
 
-### Environment Variables
+### Credentials and environment
 
-The server reads these from its environment. They can be injected via shell export, `.env`, MCP client config (`env` in `StdioTransport`), or Doppler.
+`kvm_connect` without an explicit `password` always calls the Doppler CLI. The blocker is: Doppler installed + authenticated to the project/config in `doppler.yaml`. Optional non-secret overrides:
 
 | Variable | Secret? | Required | Default | Description |
 |---|---|---|---|---|
-| `COMET_PASSWORD` | **yes** | for env-backed connection | — | Preferred Comet KVM admin password variable |
-| `GLCOMET_ADMIN_PASSWORD` | **yes** | no | — | Legacy fallback name for the same Comet admin password |
-| `COMET_HOST` | no | no | `192.168.0.126` | LAN IP of the Comet |
+| `COMET_HOST` | no | no | `192.168.0.126` | LAN IP of the Comet (live tests / scripts) |
 | `COMET_USERNAME` | no | no | `admin` | Comet login username |
-| `COMET_DISABLE_BIOS_SIDECAR` | no | no | unset | Set to `1` to skip loading `bios_sidecar` (loaded by default; dependency is one-way: sidecar → kvm_core) |
-| `VLM_API_KEY` | **yes** | for VLM | — | OpenAI-compatible API key (OpenRouter, OpenAI, or set to any value for local Ollama) |
+| `COMET_DISABLE_BIOS_SIDECAR` | no | no | unset | Set to `1` to skip loading `bios_sidecar` |
+| `VLM_API_KEY` | **yes** | for VLM | — | OpenAI-compatible API key |
 | `VLM_PROVIDER` | no | no | `mock` | `openrouter` \| `ollama` \| `vllm` \| `openai` \| `mock` |
-| `VLM_MODEL` | no | no | provider default | Model string sent directly to the configured OpenAI-compatible endpoint (e.g. `openrouter/qwen/qwen-2-vl-72b-instruct`) |
-| `VLM_BASE_URL` | no | no | provider default | Override API endpoint (e.g. `http://localhost:11434/v1` for Ollama) |
+| `VLM_MODEL` | no | no | provider default | Model string for the OpenAI-compatible endpoint |
+| `VLM_BASE_URL` | no | no | provider default | Override API endpoint |
+
+Doppler secret name: `COMET_PASSWORD` (legacy alias `GLCOMET_ADMIN_PASSWORD` still accepted in Doppler only).
 
 #### MCP Client Config Example
 
@@ -322,23 +322,15 @@ The server reads these from its environment. They can be injected via shell expo
   "mcpServers": {
     "comet-kvm": {
       "command": "uv",
-      "args": ["run", "glkvm_mcp.py"],
-      "env": {
-        "COMET_PASSWORD": "your-password-here",
-        "COMET_HOST": "192.168.0.126",
-        "VLM_API_KEY": "sk-or-...",
-        "VLM_PROVIDER": "openrouter"
-      }
+      "args": ["run", "--locked", "--python", "3.13", "python", "./glkvm_mcp.py"]
     }
   }
 }
 ```
 
-The bundled plugin launcher uses `doppler run -p secrets_managment -c dev -- uv run --locked --python 3.13 python ./glkvm_mcp.py`, so agents can omit the password from `kvm_connect`. Standalone clients may instead inject `COMET_PASSWORD` by another secure mechanism or pass the password in the tool call.
+The host must have Doppler CLI logged in (`doppler login`). The bundled [`.mcp.json`](../../.mcp.json) launches with `uv run --locked --python 3.13 python ./glkvm_mcp.py` and does **not** wrap the process in `doppler run` for env injection.
 
-**Launcher roadmap:** The bundled [`.mcp.json`](../../.mcp.json) hardcodes Doppler for local dev. A portable `uv` + `COMET_PASSWORD` launcher (or MCP v2 elicitation) is planned for distributable installs — [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
-
-> **Source:** `src/kvm_core/tools.py` (`kvm_connect`), `.mcp.json`, `doppler.yaml`, and `README.md#security`. Verified 2026-07-10.
+> **Source:** `src/kvm_core/doppler_credentials.py`, `src/kvm_core/tools.py` (`kvm_connect`), `.mcp.json`, `doppler.yaml`. Verified 2026-07-16.
 
 ## Runtime Composition Assessment
 

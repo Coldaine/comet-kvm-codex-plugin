@@ -37,5 +37,4 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
           COMET_HOST: ${{ inputs.comet-host }}
-          RUN_LIVE_COMET_SMOKE: "1"
-        run: doppler run -p secrets_managment -c dev -- uv run --locked --python 3.13 pytest tests/live/test_live_smoke.py -q
+        run: uv run --locked --python 3.13 pytest tests/live/test_live_smoke.py -q

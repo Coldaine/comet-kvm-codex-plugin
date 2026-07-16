@@ -118,9 +118,9 @@ sudo apt-get install tesseract-ocr
 
 ### Use in Codex
 
-The plugin is auto-discovered when the repo is installed as a Codex plugin. Its bundled launcher uses Doppler to inject the Comet password, then runs `glkvm_mcp.py` through the reviewed lockfile with `uv run --locked --python 3.13 python ./glkvm_mcp.py`.
+The plugin is auto-discovered when the repo is installed as a Codex plugin. Its bundled launcher runs `uv run --locked --python 3.13 python ./glkvm_mcp.py`. `kvm_connect` fetches `COMET_PASSWORD` from the Doppler CLI (`doppler.yaml`); the host must have Doppler installed and authenticated.
 
-**Launcher note:** The bundled [`.mcp.json`](.mcp.json) hardcodes Doppler (`secrets_managment/dev`) for local development. A portable `uv` + `COMET_PASSWORD` launcher (or MCP v2 elicitation for out-of-band secrets) is planned for distributable plugin installs — tracked in [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
+**Launcher note:** The bundled [`.mcp.json`](.mcp.json) does not wrap the process in `doppler run` for env injection. Doppler CLI auth on the host is required for password resolution — tracked alongside portable plugin installs in [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
 
 ### Use as a standalone MCP server
 
@@ -250,7 +250,7 @@ See [`docs/kvm-core.md`](docs/kvm-core.md) for the KVM core architecture and [`d
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — the Comet ships with a self-signed certificate
-- **No credentials stored** — password is passed per-session or injected into the MCP process as `COMET_PASSWORD`
+- **No credentials stored** — password is passed per-session or fetched from Doppler CLI (`COMET_PASSWORD`)
 - **Remote access** — use Tailscale (native on Comet) or VPN; do not expose the MCP server's stdio to an untrusted network
 
 ---

@@ -149,15 +149,15 @@ class SmokeTest(unittest.TestCase):
             msg=f"kvm_connect username should default to 'admin', got {username_default!r}",
         )
 
-    def test_kvm_connect_explicit_empty_password_does_not_use_environment(self):
+    def test_kvm_connect_explicit_empty_password_is_rejected(self):
         import src.kvm_core.tools as kvm_tools
 
-        with patch.dict(os.environ, {"COMET_PASSWORD": "injected-secret"}):
-            with self.assertRaisesRegex(ValueError, "No Comet password was provided"):
-                asyncio.run(kvm_tools.kvm_connect("192.0.2.1", password=""))
+        with self.assertRaisesRegex(ValueError, "No Comet password available"):
+            asyncio.run(kvm_tools.kvm_connect("192.0.2.1", password=""))
 
-    def test_kvm_connect_uses_environment_when_password_is_omitted(self):
+    def test_kvm_connect_fetches_password_from_doppler_when_omitted(self):
         import src.kvm_core.tools as kvm_tools
+        import src.kvm_core.doppler_credentials as doppler_credentials
 
         class FakeClient:
             base_url = "https://192.0.2.1"
@@ -174,26 +174,23 @@ class SmokeTest(unittest.TestCase):
                 return self.client
 
         runtime = FakeRuntime()
-        with patch.dict(os.environ, {"COMET_PASSWORD": "test-secret"}, clear=True):
+        with patch.object(doppler_credentials, "resolve_comet_password", return_value="doppler-secret"):
             with patch.object(kvm_tools, "get_kvm_runtime", return_value=runtime):
                 result = asyncio.run(kvm_tools.kvm_connect("192.0.2.1"))
 
         self.assertTrue(result["connected"])
-        self.assertEqual(runtime.received, ("192.0.2.1", "admin", "test-secret", "default"))
+        self.assertEqual(runtime.received, ("192.0.2.1", "admin", "doppler-secret", "default"))
 
-    def test_bundled_mcp_launcher_injects_doppler_environment(self):
+    def test_bundled_mcp_launcher_uses_uv_not_doppler_env_injection(self):
         import json
 
         with open(MCP_CONFIG_PATH, encoding="utf-8") as config_file:
             server = json.load(config_file)["mcpServers"]["comet-kvm"]
 
-        self.assertEqual(server["command"], "doppler")
+        self.assertEqual(server["command"], "uv")
         self.assertEqual(
             server["args"],
-            [
-                "run", "-p", "secrets_managment", "-c", "dev", "--",
-                "uv", "run", "--locked", "--python", "3.13", "python", "./glkvm_mcp.py",
-            ],
+            ["run", "--locked", "--python", "3.13", "python", "./glkvm_mcp.py"],
         )
 
     def test_kvm_core_tools_do_not_import_sidecar(self):

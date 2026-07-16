@@ -58,16 +58,21 @@ async def kvm_connect(
 ) -> dict:
     """Connect to a GLKVM device on LAN and authenticate.
 
-    When no password is supplied, use a credential injected into this MCP
-    process instead of exposing the credential in a tool call.
+    When password is omitted, fetch COMET_PASSWORD from the Doppler CLI using
+    doppler.yaml (secrets_managment/dev). Does not read process environment.
     Optional target id enables multi-Comet sessions.
     """
     if password is None:
-        password = os.environ.get("COMET_PASSWORD") or os.environ.get("GLCOMET_ADMIN_PASSWORD")
+        from src.kvm_core.doppler_credentials import DopplerAuthError, resolve_comet_password
+
+        try:
+            password = resolve_comet_password(require=True)
+        except DopplerAuthError as exc:
+            raise ValueError(str(exc)) from exc
     if not password:
         raise ValueError(
-            "No Comet password was provided. Pass password explicitly or inject "
-            "COMET_PASSWORD/GLCOMET_ADMIN_PASSWORD into the MCP process."
+            "No Comet password available. Pass password explicitly or ensure "
+            "Doppler CLI is logged in and COMET_PASSWORD exists in the configured project."
         )
     r = get_kvm_runtime()
     ok = await r.connect(host=host, username=username, password=password, target=target)
