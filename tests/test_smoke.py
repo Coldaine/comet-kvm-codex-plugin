@@ -160,7 +160,13 @@ class SmokeTest(unittest.TestCase):
             server = json.load(config_file)["mcpServers"]["comet-kvm"]
 
         self.assertEqual(server["command"], "doppler")
-        self.assertEqual(server["args"][:7], ["run", "-p", "secrets_managment", "-c", "dev", "--", "uv"])
+        self.assertEqual(
+            server["args"],
+            [
+                "run", "-p", "secrets_managment", "-c", "dev", "--",
+                "uv", "run", "--locked", "--python", "3.13", "python", "./glkvm_mcp.py",
+            ],
+        )
 
     def test_kvm_core_tools_do_not_import_sidecar(self):
         code = """
