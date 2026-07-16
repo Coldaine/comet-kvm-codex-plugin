@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 
 import httpx
 import pytest
@@ -11,6 +12,14 @@ from src.bios_sidecar.perception.vlm_client import VLMClient
 
 def run(coro):
     return asyncio.run(coro)
+
+
+def install_mock_transport(
+    client: VLMClient,
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> None:
+    run(client.client.aclose())
+    client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
 def test_mock_default_is_deterministic():
@@ -75,7 +84,7 @@ def test_openai_compatible_request_uses_schema_and_validates_response():
         })}}]})
 
     client = VLMClient(provider="ollama", model="ollama/test-model")
-    client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    install_mock_transport(client, handler)
     try:
         result = run(client.parse_screenshot(b"image"))
         assert result["screen_title"] == "Main"
@@ -104,7 +113,7 @@ def test_local_provider_retries_without_response_format():
         })}}]})
 
     client = VLMClient(provider="vllm")
-    client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    install_mock_transport(client, handler)
     try:
         assert run(client.parse_screenshot(b"image"))["screen_title"] == "Main"
         assert len(requests) == 2

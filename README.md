@@ -70,7 +70,7 @@ comet-kvm-codex-plugin/
 }
 ```
 
-`.mcp.json` starts `glkvm_mcp.py` (via Doppler + `uv run --script` in this repo's launcher). The server code that runs is this project's — `kvm_core` plus `bios_sidecar` (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip) on one `FastMCP("comet-kvm")` process. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa.
+`.mcp.json` starts `glkvm_mcp.py` (via Doppler + `uv run --locked --python 3.13 python ./glkvm_mcp.py` in this repo's launcher). The server code that runs is this project's — `kvm_core` plus `bios_sidecar` (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip) on one `FastMCP("comet-kvm")` process. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa.
 
 ---
 
@@ -118,7 +118,7 @@ sudo apt-get install tesseract-ocr
 
 ### Use in Codex
 
-The plugin is auto-discovered when the repo is installed as a Codex plugin. Its bundled launcher uses Doppler to inject the Comet password, then runs `glkvm_mcp.py` via `uv run --script` with dependencies auto-installed from PEP 723 inline metadata.
+The plugin is auto-discovered when the repo is installed as a Codex plugin. Its bundled launcher uses Doppler to inject the Comet password, then runs `glkvm_mcp.py` through the reviewed lockfile with `uv run --locked --python 3.13 python ./glkvm_mcp.py`.
 
 **Launcher note:** The bundled [`.mcp.json`](.mcp.json) hardcodes Doppler (`secrets_managment/dev`) for local development. A portable `uv` + `COMET_PASSWORD` launcher (or MCP v2 elicitation for out-of-band secrets) is planned for distributable plugin installs — tracked in [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
 
@@ -131,7 +131,7 @@ Add to any MCP client config:
   "mcpServers": {
     "comet-kvm": {
       "command": "uv",
-      "args": ["run", "--script", "/path/to/glkvm_mcp.py"]
+      "args": ["run", "--locked", "--python", "3.13", "python", "/path/to/glkvm_mcp.py"]
     }
   }
 }
