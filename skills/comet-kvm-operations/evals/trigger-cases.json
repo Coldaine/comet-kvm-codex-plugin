@@ -1,0 +1,70 @@
+{
+  "skill": "comet-kvm-operations",
+  "purpose": "Description-selection cases with near misses for Comet, KVM, WOL, API, BIOS, and Tailscale vocabulary.",
+  "cases": [
+    {
+      "query": "Connect to the Comet on oob-pve01 and show me the console.",
+      "should_trigger": true
+    },
+    {
+      "query": "Use the GLKVM to reboot the hung Proxmox node.",
+      "should_trigger": true
+    },
+    {
+      "query": "Mount this Proxmox ISO on pve02 through the Comet and boot it.",
+      "should_trigger": true
+    },
+    {
+      "query": "Read the POST error on the machine attached to the Comet.",
+      "should_trigger": true
+    },
+    {
+      "query": "Wake the server using the Comet's WOL support.",
+      "should_trigger": true
+    },
+    {
+      "query": "Record the console while this host boot-loops.",
+      "should_trigger": true
+    },
+    {
+      "query": "Check the Comet's Tailscale status and capabilities.",
+      "should_trigger": true
+    },
+    {
+      "query": "Use the Comet to enter BIOS and enable IOMMU.",
+      "should_trigger": true
+    },
+    {
+      "query": "Type this repair command into the recovery shell through the KVM.",
+      "should_trigger": true
+    },
+    {
+      "query": "Reboot my Proxmox node through its normal management API.",
+      "should_trigger": false
+    },
+    {
+      "query": "Review the comet_atx_power implementation in this repository.",
+      "should_trigger": false
+    },
+    {
+      "query": "Research the current GLKVM API endpoints.",
+      "should_trigger": false
+    },
+    {
+      "query": "Which KVM device should I buy for my homelab?",
+      "should_trigger": false
+    },
+    {
+      "query": "Explain how Wake-on-LAN works.",
+      "should_trigger": false
+    },
+    {
+      "query": "What is Tailscale subnet routing?",
+      "should_trigger": false
+    },
+    {
+      "query": "Analyze this HWiNFO log without operating the KVM.",
+      "should_trigger": false
+    }
+  ]
+}

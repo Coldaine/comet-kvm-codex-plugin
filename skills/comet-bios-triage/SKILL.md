@@ -1,54 +1,54 @@
 ---
 name: comet-bios-triage
-description: Use when operating a GL.iNet Comet/GLKVM through MCP for BIOS, pre-OS, recovery, or visible console workflows, especially MSI Z690 CPU power/voltage tuning followed by Windows HWiNFO logging and analysis. Triggers include Comet KVM, GLKVM, BIOS driving, UEFI navigation, console OCR, CPU Lite Load, MSI Z690, HWiNFO thermal triage, and KVM-assisted undervolt testing.
+description: >
+  Inspect, map, change, verify, and save BIOS or UEFI settings through a
+  GL.iNet Comet or GLKVM-compatible KVM. Use when the intended outcome is
+  firmware configuration, BIOS menu cartography, setting validation,
+  save-and-reboot behavior, or explicit MSI CPU power, voltage, Lite Load,
+  LLC, CEP, or HWiNFO-backed firmware tuning. Do not use for ordinary console
+  viewing, OCR, power control, Wake-on-LAN, virtual media, installer booting,
+  operating-system recovery, Proxmox administration, or generic pre-boot
+  interaction.
 ---
 
 # Comet BIOS Triage
 
-Use the Comet MCP tools as hands and eyes, not as a blind macro engine.
+Use semantic `bios_*` tools as the firmware control layer. Use the
+`comet-kvm-operations` skill for target selection, generic screenshots, raw
+keyboard or mouse input, power, media, boot observation, and recovery outside
+firmware semantics.
 
-Before changing BIOS settings, verify your context:
-- Ensure the stateful KVM tools are connected
-- Consult the embedded reference guides on MSI Z690 workflows and HWiNFO run loops
+Read only the reference that matches the requested firmware outcome:
 
-Rules:
+- For BIOS observation, cartography, navigation, mutation, save, or recovery,
+  read [stateful control](references/stateful-control-model.md).
+- For explicit MSI Z690 power, voltage, Lite Load, LLC, or CEP work, also read
+  [MSI Z690 workflow](references/msi-z690-bios-workflow.md).
+- For an explicitly requested HWiNFO-backed experiment, also read
+  [HWiNFO run loop](references/hwinfo-run-loop.md).
 
-- Never use blind key sequences for BIOS changes.
-- Always capture a screenshot before and after each setting change.
-- Change exactly one BIOS variable per run.
-- Confirm the visible old value and new value before saving.
-- Run `kvm_release_all` after any failed or interrupted input sequence.
-- Do not continue after WHEA errors, crashes, score collapse, severe throttling, or clock-stretching.
-- Use the run ledger for every experiment.
+Do not preload board-specific or workload-specific references for unrelated
+BIOS work. The MCP tool schemas are authoritative for exact arguments and
+returned fields.
 
-## Choose the cheapest reliable perception tool
+## Firmware operating contract
 
-Before depending on text reads, call `kvm_ocr_status()`. It reports whether host Tesseract is callable by the MCP and identifies the GL.iNet product UI's browser-only Tesseract.js engine so the two paths are not confused.
+1. Resolve the intended target and call `bios_observe_state` before planning a
+   firmware action.
+2. Use `bios_propose_setting_change` before `bios_apply_setting_change`.
+3. Change one firmware variable per experiment. Confirm the visible old value
+   and verified new value before saving.
+4. Call `bios_save_and_reboot` only when saving is part of the requested
+   outcome, then observe the reboot and resulting firmware or operating-system
+   state.
+5. After failed or interrupted input, call `kvm_release_all`, re-observe, and
+   continue from the actual state rather than replaying a blind key sequence.
 
-Use this order:
+Never rely on an approval-token or hidden policy engine; this server does not
+provide one. Stop after WHEA errors, crashes, performance collapse, severe
+throttling, clock-stretching, unexpected firmware state, or unverified input.
 
-1. **Visible terminal, shell, POST text, or recovery text:** call `kvm_ocr_text()`. It captures one frame and runs host Tesseract. Default `psm=6` and `preserve_interword_spaces=1` suit terminal text. Supply pixel crop coordinates when the terminal occupies only part of the screen.
-2. **Text coordinates or confidence are required:** call `kvm_ocr_screenshot(...)`. It uses host pytesseract word boxes.
-3. **Click a visible label:** call `kvm_ocr_click(...)`. Treat an OCR error as a failed action; do not convert it into "text not found."
-4. **Layout, icons, BIOS semantics, or ambiguous OCR:** call `kvm_screenshot()` or the semantic `bios_*` observation tools. OCR is a text extractor, not a substitute for visual state verification.
+## Result
 
-Do not call the inherited `/api/streamer/ocr` route and describe it as GL.iNet
-Text Recognition. Firmware 1.9's product UI crops its browser canvas and runs
-Tesseract.js/WASM in the controlling browser. This MCP cannot reuse that worker;
-its OCR tools require host Tesseract.
-
-Do not call the Comet HTTP OCR endpoint directly. The MCP tools probe capability, normalize the GL.iNet JSON response, apply native crop/language parameters, and handle the verified host fallback.
-
-Do not assume native OCR status for any device or after a firmware change; use `kvm_ocr_status()`.
-
-## Visible console command loop
-
-For a command line reached through pixels rather than a real SSH transport:
-
-1. `kvm_ocr_text()` to capture the prompt/baseline.
-2. `kvm_send_text(command)`.
-3. `kvm_send_keys("Enter")`.
-4. `kvm_ocr_text()` to receive visible output directly as `text` and `lines` in the tool result.
-5. Read again only while output is visibly changing; use a crop to reduce latency and noise.
-
-This path cannot guarantee bytes that scrolled off the HDMI viewport or an exact exit status. Do not describe OCR as SSH stdout. If an approved exact target-shell transport exists, prefer it for ordinary network-reachable Linux command execution and reserve KVM OCR for BIOS, recovery, network-down, or otherwise pixel-only states.
+Report the target, initial firmware state, setting changed, visible old and new
+values, save decision, reboot verification, and any instability or ambiguity.

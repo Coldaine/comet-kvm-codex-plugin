@@ -3,6 +3,7 @@
 > **Purpose:** Prove the corrected Comet protocol and BIOS sidecar against disposable hardware before trusting ATX, MSD, mutation, or save/reboot on a valuable node.
 > **Status:** Manual lane — not part of default CI.
 > **Prerequisite:** Comet reachable (LAN or Tailscale), Doppler `GLCOMET_ADMIN_PASSWORD`, ATX board installed for power tests.
+> **Source baseline:** Generated handler inventory in [`docs/reference/glkvm-api/`](../reference/glkvm-api/README.md), pinned to `gl-inet/glkvm@9bd8ad11ba03d220401b0b6a4208bbfd84ed6107`. The live unit may differ; record its discovered version and capabilities.
 
 ## Safety gate
 
@@ -30,13 +31,32 @@ Or manually via MCP / curl after `kvm_connect`:
 
 1. `kvm_connect(host=..., target="pve-lab")`
 2. `comet_capabilities(refresh=true)`
-3. `kvm_screenshot` / `kvm_ocr_text`
-4. `comet_power_state` (read only)
-5. `comet_media_state`
-6. `comet_tailscale_status`
-7. `kvm_disconnect`
+3. `kvm_status` — verify the WebSocket is healthy (`ws_open=true`); the client
+   always connects with `stream=true` internally, which is not separately
+   observable from tool output
+4. `kvm_screenshot` / `kvm_ocr_text`
+5. `comet_power_state` (read only)
+6. `comet_media_state`
+7. `comet_recorder_state`
+8. `comet_tailscale_status`
+9. `comet_metrics`
+10. `kvm_disconnect`
 
-**Pass:** capabilities profile populated; snapshot returns JPEG; logout completes without error.
+The inherited `/api/streamer/ocr` state is discovery evidence only. GL.iNet's
+product Text Recognition runs browser-side Tesseract.js, while `kvm_ocr_*` uses
+host Tesseract; do not record one as qualification of another.
+
+**Pass:** capabilities profile populated; `ws_open=true` and the streamer
+stays alive for the duration of the session; snapshot returns JPEG; read-only
+calls return their expected media type; logout completes without error.
+
+Retain model, installed firmware, KVMD/platform data, resolution/video presence,
+legacy server-OCR state, ATX enabled/LED state, MSD capacity/free space,
+recorder availability, Tailscale state/addresses, and the exact routes that
+succeeded or failed. Update
+[`project-endpoint-coverage.csv`](../reference/glkvm-api/project-endpoint-coverage.csv)
+only from retained evidence: `handler_present` is not `discovered`, and
+`discovered` is not `exercised` or physically qualified.
 
 ## Lane B — Reversible HID / media (disposable target powered on)
 
@@ -79,4 +99,10 @@ Or manually via MCP / curl after `kvm_connect`:
 
 ## Sign-off
 
-Record date, Comet firmware (`comet_capabilities`), board model, and which lanes passed in the experiment ledger (`scripts/run_ledger.py`) before promoting the agent to autonomous recovery on fixed nodes.
+Record date, Comet firmware (`comet_capabilities`), board model, generated-source
+commit, individual endpoints exercised, observed physical effects, failure and
+recovery behavior, and which lanes passed in the experiment ledger
+(`scripts/run_ledger.py`) before promoting the agent to autonomous recovery on
+fixed nodes. A feature is qualified only when the request contract, physical
+effect, resulting state, failure behavior, recovery, retained evidence, and
+repeatability have all been demonstrated.
