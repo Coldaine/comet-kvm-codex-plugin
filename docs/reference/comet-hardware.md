@@ -2,8 +2,8 @@
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
 > **Status:** Verified from public datasheets, GL.iNet docs, and GitHub issues.
-> **Compiled:** 2026-07-07
-> **Purpose:** Ground design decisions about on-device map storage, state-engine deployment, and plugin packaging in verified hardware facts rather than assumptions.
+> **Compiled:** 2026-07-07 · **Revised:** 2026-07-15 (RM1 vs Pro facts)
+> **Purpose:** Hardware facts for map storage, packaging, and model differences. No network-ops or Tailscale topology advice (see [`docs/research/oob-proxmox-tailscale-vision.md`](../research/oob-proxmox-tailscale-vision.md) if needed).
 
 ## Device Family
 
@@ -13,15 +13,28 @@ GL.iNet sells three Comet KVM variants, all running a PiKVM-fork Linux firmware 
 |-------|-----|-----|-----|---------|---------|---------------------|
 | Comet | GL-RM1 | Quad-core ARM Cortex-A7 @ 1.5GHz | 1GB DDR3 | 8GB eMMC | Gigabit Ethernet | Base model, smallest |
 | Comet PoE | GL-RM1PE | Quad-core ARM Cortex-A7 | 1GB DDR3 | 32GB eMMC | Gigabit Ethernet (PoE) | Power-over-Ethernet, larger storage |
-| Comet Pro | GL-RM10 | Quad-core ARM Cortex-A53 | 1GB DDR3L | 32GB eMMC | Wi-Fi 6 + Ethernet | Touchscreen, Wi-Fi, 4K@30fps |
+| Comet Pro | GL-RM10 | Quad-core ARM Cortex-A53 | 1GB DDR3L | 32GB eMMC | Wi-Fi 6 + Ethernet | Touchscreen, Wi-Fi, 4K@30fps capture class |
 
-**This project targets the base Comet (GL-RM1)** unless otherwise noted. The PoE and Pro variants have more storage (32GB) but are not the primary target.
+**This project’s documented LAN target is the base Comet (GL-RM1)** at `192.168.0.126` unless otherwise noted. The same `/api` surface applies across the family; optional hardware (ATX board, Fingerbot, Wi-Fi, touchscreen) and storage size differ by SKU. Prefer `GET /api/system/capability` and `/api/upgrade/version` to learn the connected unit.
+
+### RM1 vs RM10 (facts only)
+
+| Fact | GL-RM1 (Comet) | GL-RM10 (Comet Pro) |
+|------|----------------|---------------------|
+| SoC class | Cortex-A7 | Cortex-A53 |
+| eMMC | 8GB | 32GB |
+| Usable media storage (order of magnitude) | ~5–6GB free on `/userdata/media` in a documented root `df` (see below) | Reviewers commonly report roughly mid-20s GB usable for ISOs after system overhead — confirm with `df` / `GET /api/msd` on the unit |
+| Wireless | Ethernet primary (no Wi-Fi 6 SKU claim on base) | Wi-Fi 6 + Ethernet |
+| Local UI | No built-in touchscreen | Touchscreen (setup, status, lock) |
+| HDMI capture class | 1080p-class product positioning | Product materials cite 4K@30fps-class capture |
+| Access modes | Browser UI; cloud / app options per GL.iNet docs | Same family APIs; product materials emphasize Tailscale among remote-access options |
 
 > **Sources:**
 > - GL-RM1 datasheet (PDF): `static.gl-inet.com/www/images/products/datasheet/rm1_datasheet_20250616.pdf` — accessed 2026-07-07
 > - GL-RM1 product page: `gl-inet.com/en-us/products/gl-rm1` — accessed 2026-07-07
 > - Comet PoE datasheet (PDF): `static.gl-inet.com/www/images/products/datasheet/rm1pe_datasheet_20251110.pdf` — accessed 2026-07-07
 > - Comet Pro product page: `gl-inet.com/en-us/products/gl-rm10` — accessed 2026-07-07
+> - GL.iNet KVM Docs — Comet Pro overview: `docs.gl-inet.com/kvm/en/user_guide/gl-rm10/product_overview/` — accessed 2026-07-15
 > - CNX Software review (2025-07-13): `cnx-software.com/2025/07/13/review-of-gl-inet-comet-gl-rm1-kvm-over-ip-solution-and-atx-power-control-board/`
 
 ## Physical Interfaces (GL-RM1)
@@ -38,17 +51,23 @@ GL.iNet sells three Comet KVM variants, all running a PiKVM-fork Linux firmware 
 
 > **Source:** GL.iNet KVM Docs — Comet (GL-RM1) Product Overview: `docs.gl-inet.com/kvm/en/user_guide/gl-rm1/product_overview/` — accessed 2026-07-07
 
+## Physical Interfaces (GL-RM10 / Comet Pro)
+
+Product package and overview materials list Ethernet, HDMI cables, USB-A↔C and USB-C↔C cables, USB-A power adapter, touchscreen, Wi-Fi setup, cloud/network status on the home screen, and a factory-reset pinhole. Same KVM role as RM1 (HDMI capture + USB HID to target) with larger eMMC, wireless, and a local display. ATX control still requires the separate ATX add-on board wired to the target motherboard.
+
+> **Source:** GL.iNet KVM Docs — Comet Pro (GL-RM10) Product Overview — accessed 2026-07-15
+
 ## Operating System & Firmware
 
 - **OS:** Linux 6.1 (PiKVM-fork, `kvmd` daemon)
-- **Firmware line:** 1.x (current 1.8.2+ as of 2026-03; `glkvm_mcp.py` targets 1.9.0+ for the stuck-key fix)
-- **Web access:** Browser-based, no app required. Also supports cloud service (`glkvm.com`), GL KVM app, and Tailscale integration.
-- **Self-signed certificate:** TLS verification must be disabled on the client side (the device ships with a self-signed cert). `glkvm_mcp.py` sets `verify=False` on its httpx client.
+- **Firmware line:** 1.x family; discover exact build via `GET /api/upgrade/version` and `GET /api/info` on the unit (do not pin a triple as client authority)
+- **Web access:** Browser-based UI; GL.iNet also documents cloud service (`glkvm.com`), mobile/app access, and overlay-network options depending on model/firmware
+- **Self-signed certificate:** Device ships with a self-signed cert; this MCP’s httpx client uses `verify=False`
 
 > **Sources:**
-> - `glkvm_mcp.py` line 320: `httpx.AsyncClient(verify=False, ...)` — verified 2026-07-07
-> - GL-RM1 product page (Wi-Fi / Tailscale / cloud access modes)
-> - CVE-2026-32291 (CVE.report): `cve.report/CVE-2026-32291` — firmware version context
+> - `src/kvm_core/comet/client.py` (`httpx.AsyncClient(verify=False, ...)`) — verified on main 2026-07-15
+> - Product pages / GL.iNet KVM docs for access modes
+> - CVE-2026-32291 (CVE.report): `cve.report/CVE-2026-32291` — firmware version context for UART issue (fixed in 1.8.2)
 
 ## On-Device Storage Layout (Verified)
 
@@ -124,22 +143,27 @@ The USB-A 2.0 port can mount external exFAT drives, expanding available storage 
 
 ## What This Project Exercises on the Device
 
-As of the bootstrap commit (`aeae25e`, 2026-07-06), `glkvm_mcp.py` uses exactly three endpoints and does not touch on-device storage:
+Primary live path (see [`comet-api.md` verification status](comet-api.md#verification-status)):
 
 1. `POST /api/auth/login` — authentication
-2. `WSS /api/ws?auth_token=…&stream=false` — keyboard/mouse input over WebSocket
+2. `WSS /api/ws` with `stream=false` — keyboard/mouse input over WebSocket
 3. `GET /api/streamer/snapshot` — JPEG frame capture
+4. `GET /api/info` — sysinfo tool
+5. `GET /api/streamer/ocr` — capability probe (often disabled on the LAN unit)
 
-**On-device storage access (SSH, file write to `/userdata/media`) is NOT yet exercised.** It is verified to exist but requires a probe step in implementation to confirm SSH credentials/access work for this project's use case.
+ATX power actions and MSD ISO upload/mount have **not** been live-qualified in read-only smoke. Fuller firmware inventory: [`docs/research/glkvm-api-surface.md`](../research/glkvm-api-surface.md).
+
+**SSH write to `/userdata/media` is not a required MCP path** — MSD APIs are the supported virtual-media interface. Root shell layout above remains useful for capacity planning.
 
 ## Summary of Design-Relevant Facts
 
 | Fact | Source | Design Impact |
 |------|--------|---------------|
-| 8GB eMMC, ~5.3GB free at `/userdata/media` | gl-inet/glkvm#14 | Maps can persist on-device; ~30MB per board map, 100+ maps fit |
-| Root SSH access confirmed | gl-inet/glkvm#14 | Can write map files directly to device |
+| RM1: 8GB eMMC, ~5.3GB free at `/userdata/media` | gl-inet/glkvm#14 | Maps fit easily on base model |
+| RM10: 32GB eMMC | Product materials | Headroom for multiple installer/rescue ISOs; confirm with `df` / MSD state |
+| Root SSH layout confirmed (RM1) | gl-inet/glkvm#14 | Capacity planning; optional direct file ops |
 | No GPU (Cortex-A7/A53) | Datasheets | VLM interpretation must run on host, not device |
-| USB-A expansion supported | gl-inet/glkvm#14 | Storage ceiling is soft; external drive for large corpora |
-| PiKVM-fork firmware (`kvmd`) | glkvm_mcp.py docstring | API surface is PiKVM-compatible; `override.yaml` for config |
-| Self-signed cert, LAN-only | glkvm_mcp.py, CVE report | TLS verification disabled in MCP server; Tailscale for remote |
-| `glkvm_mcp.py` already runs background asyncio loops | glkvm_mcp.py:180,199 | State engine as 3rd asyncio task is the existing pattern, not new architecture |
+| USB-A expansion supported | gl-inet/glkvm#14 | Soft storage ceiling via external drive |
+| PiKVM-fork firmware (`kvmd`) | Product + glkvm source | Shared `/api` family; `override.yaml` for config |
+| Self-signed cert | Client + CVE context | TLS verify disabled in MCP httpx client |
+| Background asyncio loops in KVM core | `src/kvm_core/comet/client.py` | Transport reliability pattern already present |
