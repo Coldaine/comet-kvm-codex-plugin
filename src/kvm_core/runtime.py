@@ -57,8 +57,10 @@ class KVMRuntime:
             target_id=target_id,
         )
         await client.connect()
+        was_empty = not self.targets
         self.targets[target_id] = TargetRuntime(target_id, client)
-        if select or self.selected_target == target_id or not self.targets:
+        # First connected target becomes selected even when select=False.
+        if select or was_empty or self.selected_target == target_id:
             self.selected_target = target_id
         self._sync_selected_client()
         return True

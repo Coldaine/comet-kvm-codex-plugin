@@ -91,6 +91,26 @@ class TestMutateSaveDialog:
         assert final is post
         assert "reboot_observed" in msg
 
+    def test_unrelated_modal_fail_closed_without_save_keywords(self):
+        mutator = self._mutator()
+        client = FakeCometClient()
+        pre = make_bios_state(screen_title="SETTINGS", modal_present=False)
+        dialog = make_bios_state(
+            state_id="state_modal",
+            screen_title="Network Notice",
+            modal_present=True,
+            modal_type="info",
+        )
+        mutator.observer.observe_state = AsyncMock(side_effect=[pre, dialog])
+
+        ok, final, msg = _run(mutator.save_and_reboot(client, "run", "dev"))
+
+        assert ok is False
+        assert "abort" in msg.lower() or "not detected" in msg.lower()
+        assert client.sent_combos == ["F10"]
+        assert "Enter" not in client.sent_combos
+        assert final is dialog
+
     def test_save_dialog_fail_closed_without_keyword_or_modal(self):
         mutator = self._mutator()
         client = FakeCometClient()

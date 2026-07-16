@@ -56,10 +56,9 @@ class StateObserver:
         if representative is None:
             return live_state
 
-        # Page identity comes from the representative; selection/controls/modal stay live.
+        # Page identity from representative path/title hints; bios + live interaction stay live.
         return replace(
             live_state,
-            bios=representative.bios,
             location=replace(
                 live_state.location,
                 top_module=representative.location.top_module or live_state.location.top_module,

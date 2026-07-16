@@ -43,7 +43,7 @@ Form body: user=admin&passwd=<password>&expire=0
 ```
 
 - Default username: `admin`
-- Password is passed per-session via `kvm_connect`, or fetched from Doppler CLI (`COMET_PASSWORD` / `GLCOMET_ADMIN_PASSWORD` per `doppler.yaml`) — never from process environment, never stored server-side
+- Password is passed per-session via `kvm_connect`, or fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD` per `doppler.yaml`; legacy alias `COMET_PASSWORD` if present) — never from process environment, never stored server-side
 - Success returns `result.token` and sets `auth_token` cookie; may return `two_step_required` / `two_step_token` when two-step login is enabled
 - Firmware accepts (among others): **`Token` header** (preferred), `auth_token` cookie, HTTP Basic, `X-KVMD-User` / `X-KVMD-Passwd`, `auth_token` query (avoid — leaks into logs)
 - This repo's client stores the cookie token and sends the HTTP `Token` header on subsequent requests; WebSocket auth uses `Cookie: auth_token=...` and `Token` headers (not a query-string token)
@@ -172,7 +172,7 @@ This section is **this repo’s tool surface**, not the full firmware catalog. K
 ### Connection
 | Tool | Signature | Annotations | Description |
 |------|-----------|-------------|-------------|
-| `kvm_connect` | `(host, password?, username?)` | write, non-destructive, idempotent | Connect to Comet on LAN; omitted password resolves from the MCP process environment |
+| `kvm_connect` | `(host, password?, username?)` | write, non-destructive, idempotent | Connect to Comet on LAN; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`) |
 | `kvm_disconnect` | `()` | write, non-destructive, idempotent | Close session + cleanup |
 | `kvm_status` | `()` | read-only, non-destructive, idempotent | Report connection state + held keys |
 
@@ -214,7 +214,7 @@ This section is **this repo’s tool surface**, not the full firmware catalog. K
 | `comet_capabilities` | `(refresh?, target?)` | read-only | Connect-time capability profile |
 | `comet_msd_upload` | `(local_path, image_name?, target?)` | write, destructive | Raw streaming MSD upload |
 | `comet_media_*` | — | — | state/upload/fetch/mount/unmount/remove/reset |
-| `comet_wol_*` | — | — | list/scan/wake |
+| `comet_wol_*` | — | — | list/scan (`GET`) / wake (`POST /api/wol/wake`) |
 | `comet_streamer_*` / `comet_recorder_*` | — | — | stream + recording controls |
 | `comet_metrics` | `(target?)` | read-only | Prometheus metrics text |
 | `comet_tailscale_status` | `(target?)` | read-only | Tailscale status |

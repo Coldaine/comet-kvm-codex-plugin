@@ -253,7 +253,13 @@ class CometClient:
         self.pinger_task = asyncio.create_task(self._pinger_loop(), name="comet-pinger")
         self.receiver_task = asyncio.create_task(self._receiver_loop(), name="comet-receiver")
         try:
-            self.capabilities = await self.discover_capabilities()
+            self.capabilities = await asyncio.wait_for(
+                self.discover_capabilities(),
+                timeout=20.0,
+            )
+        except asyncio.CancelledError:
+            await self.disconnect()
+            raise
         except Exception as exc:
             LOG.warning("Capability discovery failed: %s", type(exc).__name__)
             self.capabilities = {"error": type(exc).__name__}
@@ -261,13 +267,29 @@ class CometClient:
         return True
 
     async def _cleanup_failed_connect(self) -> None:
+        for t in (self.watchdog_task, self.pinger_task, self.receiver_task):
+            if t:
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+        self.watchdog_task = None
+        self.pinger_task = None
+        self.receiver_task = None
+        self._ws_healthy = False
+        if self.ws:
+            try:
+                await self.ws.close()
+            except Exception:
+                pass
+            self.ws = None
         if self.http:
             try:
                 await self.http.aclose()
             except Exception:
                 pass
         self.http = None
-        self.ws = None
         self.auth_token = None
 
     async def disconnect(self):
@@ -707,21 +729,30 @@ class CometClient:
             except Exception as exc:
                 return {"ok": False, "error": type(exc).__name__}
 
-        version = await _safe_get("/api/upgrade/version")
-        info = await _safe_get("/api/info", {"fields": "system,meta,extras"})
-        capability = await _safe_get("/api/system/capability")
-        subsystems = {}
-        for name, path in (
-            ("hid", "/api/hid"),
-            ("atx", "/api/atx"),
-            ("msd", "/api/msd"),
-            ("streamer", "/api/streamer"),
-            ("ocr", "/api/streamer/ocr"),
-            ("recorder", "/api/recorder"),
-            ("tailscale", "/api/tailscale/status"),
-            ("wol", "/api/wol/list"),
-        ):
-            subsystems[name] = await _safe_get(path)
+        version, info, capability, *subsystem_results = await asyncio.gather(
+            _safe_get("/api/upgrade/version"),
+            _safe_get("/api/info", {"fields": "system,meta,extras"}),
+            _safe_get("/api/system/capability"),
+            _safe_get("/api/hid"),
+            _safe_get("/api/atx"),
+            _safe_get("/api/msd"),
+            _safe_get("/api/streamer"),
+            _safe_get("/api/streamer/ocr"),
+            _safe_get("/api/recorder"),
+            _safe_get("/api/tailscale/status"),
+            _safe_get("/api/wol/list"),
+        )
+        subsystem_names = (
+            "hid",
+            "atx",
+            "msd",
+            "streamer",
+            "ocr",
+            "recorder",
+            "tailscale",
+            "wol",
+        )
+        subsystems = dict(zip(subsystem_names, subsystem_results))
 
         features = {name: bool(payload.get("ok")) for name, payload in subsystems.items()}
         kvmd = None
@@ -840,10 +871,21 @@ class CometClient:
         return _unwrap_ok_json(r)
 
     async def msd_mount(self, image_name: str, mode: str = "cdrom", read_only: bool = True) -> dict:
-        cdrom = mode.lower() in {"cdrom", "cd", "iso"}
+        mode_l = mode.lower().strip()
+        cdrom_modes = {"cdrom", "cd", "iso"}
+        disk_modes = {"disk", "hdd", "flash", "usb"}
+        if mode_l in cdrom_modes:
+            cdrom = True
+        elif mode_l in disk_modes:
+            cdrom = False
+        else:
+            raise ValueError(
+                f"Unsupported MSD mode '{mode}'. Use one of: "
+                f"{sorted(cdrom_modes | disk_modes)}"
+            )
         params = await self.msd_set_params(image_name, cdrom=cdrom, rw=not read_only)
         connected = await self.msd_set_connected(True)
-        return {"image": image_name, "mode": mode, "read_only": read_only, "params": params, "connected": connected}
+        return {"image": image_name, "mode": mode_l, "read_only": read_only, "params": params, "connected": connected}
 
     async def msd_unmount(self) -> dict:
         return await self.msd_set_connected(False)

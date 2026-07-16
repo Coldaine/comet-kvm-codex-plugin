@@ -45,16 +45,21 @@ class BiosCrawler:
         self._frontier: List[CrawlEdge] = []
         self._backtrack_stack: List[str] = []  # node_ids for backtracking
         self._visited: Set[str] = set()
-        self._explored_actions: Set[Tuple[str, str]] = set()
+        # (node_id, action_key, row_index) — row_index matters for same-page cursor moves
+        self._explored_actions: Set[Tuple[str, str, int]] = set()
         self._depth: int = 0
         self._max_depth: int = 8
         self._exhausted_screens: Set[str] = set()  # screens with no unexplored actions
         self._page_row_index: dict[str, int] = {}
         self._max_actions: int = 200
         self._max_wall_clock_seconds: float = 600.0
-        self._max_repeated_frames: int = 8
         self._actions_taken: int = 0
         self._repeated_same_node: int = 0
+
+    def _explored_key(self, node_id: str, action_key: str, row_index: int = 0) -> Tuple[str, str, int]:
+        if action_key in _SAME_PAGE_ACTIONS:
+            return (node_id, action_key, row_index)
+        return (node_id, action_key, 0)
 
     # DFS crawl loop
 
@@ -107,7 +112,8 @@ class BiosCrawler:
             # Pick highest-value unexplored edge from frontier
             next_edge = self._frontier.pop(0)
             action_key = next_edge.action_key
-            self._explored_actions.add((node_id, action_key))
+            row_before = self._page_row_index.get(node_id, 0)
+            self._explored_actions.add(self._explored_key(node_id, action_key, row_before))
             self._actions_taken += 1
 
             # Backtrack if depth would exceed max
@@ -144,8 +150,10 @@ class BiosCrawler:
             if new_node_id == node_id and action_key in _SAME_PAGE_ACTIONS:
                 self._repeated_same_node += 1
                 self._page_row_index[node_id] = self._page_row_index.get(node_id, 0) + 1
-                if self._repeated_same_node >= self._max_repeated_frames:
-                    LOG.info("DFS: max repeated same-page frames; exhausting screen")
+                max_rows = max(1, len(new_state.controls) or len(state.controls))
+                # Terminate same-page scan on wrap / exhausted rows, not a fixed frame cap.
+                if self._page_row_index[node_id] >= max_rows:
+                    LOG.info("DFS: same-page rows exhausted (%d); marking screen done", max_rows)
                     self._exhausted_screens.add(node_id)
                     self._frontier = [e for e in self._frontier if e.action_key != action_key]
                 # Continue enumerating rows on this page without treating as cycle.
@@ -218,7 +226,8 @@ class BiosCrawler:
 
         self._frontier = [
             candidate for candidate in candidates
-            if (node_id, candidate.action_key) not in self._explored_actions
+            if self._explored_key(node_id, candidate.action_key, row_idx)
+            not in self._explored_actions
         ]
         if not self._frontier:
             LOG.debug("DFS: no unexplored edges on node=%s", node_id[:8])
@@ -280,11 +289,12 @@ class BiosCrawler:
         if self._frontier:
             next_edge = self._frontier.pop(0)
             candidate_key = next_edge.action_key
-            self._explored_actions.add((node_id, candidate_key))
+            row_before = self._page_row_index.get(node_id, 0)
+            self._explored_actions.add(self._explored_key(node_id, candidate_key, row_before))
             LOG.info("DFS step: action=%s depth=%d", candidate_key, next_edge.depth)
         elif self._backtrack_stack:
             candidate_key = "Escape"
-            self._explored_actions.add((node_id, candidate_key))
+            self._explored_actions.add(self._explored_key(node_id, candidate_key))
             LOG.info("DFS step: frontier empty — backtracking")
         else:
             # Try heuristic fallback if no DFS state initialized

@@ -78,9 +78,9 @@ The stale key watchdog and WebSocket pinger are required KVM-core reliability me
 
 ## D-K5 — Security model is LAN-first with per-session password
 
-The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verification is disabled because the device uses a self-signed certificate. The password is supplied per session via `kvm_connect` or fetched from the Doppler CLI (`COMET_PASSWORD` in `secrets_managment`/`dev` per `doppler.yaml`); no Comet password is committed to the repository or read from process environment variables.
+The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verification is disabled because the device uses a self-signed certificate. The password is supplied per session via `kvm_connect` or fetched from the Doppler CLI (`GLCOMET_ADMIN_PASSWORD` in `secrets_managment`/`dev` per `doppler.yaml`); no Comet password is committed to the repository or read from process environment variables.
 
-## D-K6 — PEP 723 script deployment remains the target
+## D-K6 — Locked Python 3.13 deployment
 
 `glkvm_mcp.py` remains the composition entry point. Production launchers must use `uv run --locked --python 3.13 python ./glkvm_mcp.py` so they honor the reviewed lockfile; `uv run --script` intentionally is not supported because it ignores that lockfile. The PEP 723 metadata is retained only for metadata-aware tooling and matches the runtime dependencies.
 

@@ -20,7 +20,7 @@ The server opens one physical I/O session to the Comet.
 | HTTP(S) | Authentication, screenshots, sysinfo, ATX, MSD upload |
 | WebSocket | Keyboard, mouse, and ping frames |
 
-Connections are per-session. `kvm_connect(host, password?, username="admin")` accepts an explicit password or fetches `COMET_PASSWORD` from the Doppler CLI using `doppler.yaml` (`secrets_managment`/`dev`). The process environment is not used for the Comet password. The bundled launcher is plain `uv run --locked --python 3.13 python ./glkvm_mcp.py`; Doppler must be installed and authenticated on the host.
+Connections are per-session. `kvm_connect(host, password?, username="admin")` accepts an explicit password or fetches `GLCOMET_ADMIN_PASSWORD` from the Doppler CLI using `doppler.yaml` (`secrets_managment`/`dev`). The process environment is not used for the Comet password. The bundled launcher is plain `uv run --locked --python 3.13 python ./glkvm_mcp.py`; Doppler must be installed and authenticated on the host.
 
 TLS verification is disabled because the Comet ships with a self-signed certificate. The expected operating model is trusted LAN access, or remote access through Tailscale/VPN rather than direct public exposure.
 
@@ -100,13 +100,13 @@ Destructive or physical-input examples: `kvm_send_text`, `kvm_send_keys`, `kvm_h
 The security model is intentionally narrow.
 
 - LAN-first operation.
-- Per-session password supplied through `kvm_connect`, or fetched from Doppler CLI (`COMET_PASSWORD` secret).
+- Per-session password supplied through `kvm_connect`, or fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD` secret).
 - No stored Comet password in the repository.
 - TLS verification disabled for the Comet's self-signed certificate.
 - Remote operation should use Tailscale or a VPN.
 - Do not expose MCP stdio or the Comet HTTP/WebSocket APIs directly to untrusted networks.
 
-Host, username, and LAN IP are non-sensitive in this repo. `COMET_PASSWORD` is the secret and is managed through Doppler.
+Host, username, and LAN IP are non-sensitive in this repo. `GLCOMET_ADMIN_PASSWORD` is the secret and is managed through Doppler.
 
 ## 9. Command Output Delivery
 

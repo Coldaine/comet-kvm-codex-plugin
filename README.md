@@ -131,7 +131,7 @@ Add to any MCP client config:
   "mcpServers": {
     "comet-kvm": {
       "command": "uv",
-      "args": ["run", "--locked", "--python", "3.13", "python", "/path/to/glkvm_mcp.py"]
+      "args": ["run", "--project", "/path/to/repo", "--locked", "--python", "3.13", "python", "./glkvm_mcp.py"]
     }
   }
 }
@@ -144,7 +144,7 @@ Add to any MCP client config:
 ### Connection
 | Tool | Description |
 |------|-------------|
-| `kvm_connect(host, password?, username?)` | Connect to a Comet device; omitted password resolves from the MCP process environment |
+| `kvm_connect(host, password?, username?)` | Connect to a Comet device; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`) |
 | `kvm_disconnect()` | Close the session |
 | `kvm_status()` | Report connection state and held keys |
 

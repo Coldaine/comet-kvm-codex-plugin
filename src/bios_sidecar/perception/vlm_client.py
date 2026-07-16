@@ -83,7 +83,7 @@ class VLMClient:
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
         for attempt in range(3):
             prompt = user_prompt
-            if attempt == 1:
+            if attempt >= 1:
                 prompt += "\n\nYour previous response was invalid. Return only JSON matching the schema."
             try:
                 parsed = await self._call_api(SYSTEM_PROMPT, prompt, image_b64)

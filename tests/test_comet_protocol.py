@@ -398,3 +398,19 @@ def test_msd_mount_sets_params_then_connects():
     assert calls[0][1] == {"image": "proxmox.iso", "cdrom": "true", "rw": "false"}
     assert calls[1][0] == "/api/msd/set_connected"
     assert calls[1][1] == {"connected": "true"}
+
+
+def test_msd_mount_rejects_unknown_mode():
+    async def run() -> None:
+        client = CometClient("comet.invalid")
+        client.http = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"ok": True, "result": {}})))
+        try:
+            await client.msd_mount("proxmox.iso", mode="tape")
+        finally:
+            await client.http.aclose()
+
+    try:
+        _run(run())
+        assert False, "expected ValueError"
+    except ValueError as exc:
+        assert "Unsupported MSD mode" in str(exc)

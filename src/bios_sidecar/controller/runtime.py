@@ -385,14 +385,9 @@ class StatefulBiosRuntime:
             )
             self.current_state_rec = final
             if ok:
+                # Stay outside SYNCED: OS/boot screens must not unlock BIOS mutate/crawl.
+                # Caller re-enters BIOS and observes before SYNCED is valid again.
                 self.state = RuntimeState.REBOOTING
-                # Evidence already includes reboot observation; mark degraded only if OS not back.
-                if "final_phase" in msg and "os_booted" in msg:
-                    self.state = RuntimeState.SYNCED
-                elif "reboot observed" in msg.lower():
-                    self.state = RuntimeState.DEGRADED
-                else:
-                    self.state = RuntimeState.REBOOTING
             else:
                 self.state = RuntimeState.DEGRADED
             await self.trace.log_event(

@@ -180,7 +180,8 @@ class BiosMutator:
                 modal_state,
                 "No screen transition after F10; aborting without confirm.",
             )
-        if not (modal_present or looks_like_save):
+        # Fail closed: modal_present alone is not enough (unrelated dialogs).
+        if not looks_like_save:
             return (
                 False,
                 modal_state,
@@ -194,7 +195,7 @@ class BiosMutator:
                 if any(kw in low for kw in ("save", "yes", "ok", "confirm", "reset")):
                     selected_action = str(option)
                     break
-        if selected_action is None and modal_present:
+        if selected_action is None:
             selected_action = getattr(modal, "type", None) or "confirm"
 
         await client.send_combo("Enter")
