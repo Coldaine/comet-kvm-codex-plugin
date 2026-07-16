@@ -6,7 +6,7 @@
 | **Forked from** | [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp) (upstream MCP server) |
 | **Relationship** | Selective fork — occasionally review upstream for bug fixes, but this repo diverges strongly and is its own project |
 
-This repository develops and ships a **Comet KVM MCP server** for physical-machine triage, packaged for Codex as a plugin. The MCP server is the product: keyboard/mouse, screenshots, OCR, Comet hardware control, plus BIOS-aware tools (loaded by default; disable with `COMET_DISABLE_BIOS_SIDECAR=1`). The Codex plugin is how that server (and its driver skill) get installed. Not VM orchestration or general-purpose remote desktop.
+This repository develops and ships a **Comet KVM MCP server** for physical-machine operation and triage, packaged for Codex as a plugin. The MCP server is the product: keyboard/mouse, screenshots, OCR, power, virtual media, recovery and appliance diagnostics, plus BIOS-aware tools (loaded by default; disable with `COMET_DISABLE_BIOS_SIDECAR=1`). The Codex plugin installs that server with separate general-operations and BIOS driver skills. Not VM orchestration or general-purpose remote desktop.
 
 **Primary distribution target: Codex.** The MCP server itself is usable from any MCP client; Codex packaging is first. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
 
@@ -20,7 +20,7 @@ A Codex plugin is an installable bundle. For this project that bundle is:
 |---|---|
 | `.codex-plugin/plugin.json` | Manifest — identity + pointers |
 | `.mcp.json` | How Codex launches **this repo's** MCP server |
-| `skills/` | Driver playbooks (e.g. BIOS triage) |
+| `skills/` | General Comet operations and specialized BIOS driver playbooks |
 | `glkvm_mcp.py` + `src/` | The MCP server implementation the launcher runs |
 
 That is the whole plugin shape: **your MCP + skill(s)**. It is not a thin wrapper around upstream. Upstream (`kennypeh85/glkvm-mcp`) was the starting fork; this tree owns and augments the server.
@@ -49,6 +49,7 @@ comet-kvm-codex-plugin/
 │   ├── kvm_core/            # Universal KVM transport, OCR, tools, runtime
 │   └── bios_sidecar/        # BIOS-aware tools (default on; one-way dep on kvm_core)
 ├── skills/                  # Bundled driver skills (plugin payload)
+│   ├── comet-kvm-operations/
 │   └── comet-bios-triage/
 ├── AGENTS.md                # Repo developer guidance (not plugin payload)
 ├── docs/                    # Design / authority docs (not plugin payload)
@@ -90,6 +91,7 @@ See:
 - [`docs/vlm-prompt-contract.md`](docs/vlm-prompt-contract.md) — VLM prompt draft + justification
 - [`docs/reference/comet-hardware.md`](docs/reference/comet-hardware.md) — verified Comet hardware/platform facts
 - [`docs/reference/comet-api.md`](docs/reference/comet-api.md) — verified Comet API/software surface
+- [`docs/reference/glkvm-api/`](docs/reference/glkvm-api/README.md) — pinned 200-route source corpus and project coverage map
 
 ---
 
@@ -175,13 +177,36 @@ Add to any MCP client config:
 | `kvm_ocr_screenshot(search_text?, preview?, psm?)` | Host Tesseract OCR with ordered text/lines plus word coordinates |
 | `kvm_ocr_click(text, button?, count?, search_area?)` | Find text via OCR and click it |
 
-### Comet Hardware
+### Comet appliance and power
 | Tool | Description |
 |------|-------------|
-| `comet_atx_power(action)` | Power on/off/reset through the ATX add-on board |
-| `comet_atx_click(button)` | Momentary power/reset button pulse through the ATX add-on board |
-| `comet_sysinfo()` | Retrieve device metadata and capabilities |
-| `comet_msd_upload(local_path, image_name?)` | Stream a host file to the Comet's MSD image store |
+| `comet_power_state(target?)` | Read ATX power/LED state |
+| `comet_atx_power(action, wait?, target?)` | Power on/off/reset through the ATX add-on board |
+| `comet_atx_click(button, wait?, target?)` | Momentary power/reset button pulse through the ATX add-on board |
+| `comet_sysinfo(target?)` | Retrieve device metadata |
+| `comet_capabilities(refresh?, target?)` | Discover and cache the connected unit's supported subsystems |
+| `comet_streamer_state(target?)` | Read capture/stream state |
+| `comet_streamer_set_params(..., target?)` | Change supported stream parameters |
+| `comet_metrics(target?)` | Read Prometheus appliance metrics |
+| `comet_tailscale_status(target?)` | Read the Comet's Tailscale status |
+| `comet_redfish_power(reset_type, target?)` | Invoke the narrow Redfish power facade |
+
+### Virtual media, WOL, and recording
+
+| Tool | Description |
+|------|-------------|
+| `comet_media_state(target?)` | Read virtual-media inventory and connection state |
+| `comet_media_upload(local_path, image_name?, target?)` | Stream a host file to the Comet image store |
+| `comet_media_fetch(url, image_name, target?)` | Ask the Comet to fetch an image from an approved URL |
+| `comet_media_mount(image_name, cdrom?, rw?, target?)` | Select and connect an image |
+| `comet_media_unmount(target?)` | Disconnect virtual media |
+| `comet_media_remove(image_name, target?)` | Delete a selected image |
+| `comet_media_reset(target?)` | Recover a stuck media subsystem |
+| `comet_wol_list` / `comet_wol_scan` / `comet_wol_wake` | Discover saved targets and send Wake-on-LAN |
+| `comet_recorder_state` / `start` / `stop` | Capture a bounded console recording |
+
+`comet_msd_upload` remains as the legacy upload alias. Exact schemas and the
+complete tool table live in [`docs/reference/comet-api.md`](docs/reference/comet-api.md).
 
 ### BIOS Workflow (sidecar)
 

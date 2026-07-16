@@ -40,6 +40,25 @@ def test_expected_skill_packages_exist() -> None:
     assert {path.name for path in _skill_dirs()} == EXPECTED_SKILLS
 
 
+def test_plugin_and_readme_advertise_both_skill_routes() -> None:
+    manifest = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["skills"] == "./skills/"
+
+    description = " ".join(
+        [
+            manifest["description"],
+            manifest["interface"]["longDescription"],
+            *manifest["interface"]["defaultPrompt"],
+        ]
+    ).lower()
+    for required in ("operations", "recovery", "virtual media", "bios"):
+        assert required in description
+
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    for skill_name in EXPECTED_SKILLS:
+        assert f"{skill_name}/" in readme
+
+
 def test_skill_frontmatter_is_minimal_and_matches_directory() -> None:
     for skill_dir in _skill_dirs():
         frontmatter, body = _frontmatter(skill_dir / "SKILL.md")
