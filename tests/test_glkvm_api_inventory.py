@@ -79,6 +79,7 @@ def test_inventory_extracts_defaults_overrides_paths_and_source_metadata(tmp_pat
         source_root,
         COMMIT,
         tmp_path / "output",
+        allow_head_mismatch=True,
     )
 
     http_rows = _read_csv(http_path)
@@ -132,11 +133,13 @@ def test_inventory_output_is_sorted_and_byte_deterministic(tmp_path: Path):
         source_root,
         COMMIT,
         tmp_path / "first",
+        allow_head_mismatch=True,
     )
     second_http, second_ws = inventory.generate_inventory(
         source_root,
         COMMIT.upper(),
         tmp_path / "second",
+        allow_head_mismatch=True,
     )
 
     assert first_http.read_bytes() == second_http.read_bytes()
@@ -161,6 +164,33 @@ def test_git_head_mismatch_is_rejected_and_cli_override_is_explicit(
     monkeypatch.setattr(inventory, "_git_head", lambda _source_root: OTHER_COMMIT)
 
     with pytest.raises(inventory.InventoryError, match="does not match requested commit"):
+        inventory.generate_inventory(source_root, COMMIT, tmp_path / "rejected")
+
+    output_dir = tmp_path / "allowed"
+    result = inventory.main(
+        [
+            "--source-root",
+            str(source_root),
+            "--commit",
+            COMMIT,
+            "--output-dir",
+            str(output_dir),
+            "--allow-head-mismatch",
+        ]
+    )
+    assert result == 0
+    assert (output_dir / inventory.HTTP_OUTPUT_NAME).is_file()
+    assert (output_dir / inventory.WEBSOCKET_OUTPUT_NAME).is_file()
+
+
+def test_unverifiable_git_head_is_rejected_and_cli_override_is_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    source_root = _write_source_tree(tmp_path / "glkvm")
+    monkeypatch.setattr(inventory, "_git_head", lambda _source_root: None)
+
+    with pytest.raises(inventory.InventoryError, match="Unable to verify source Git HEAD"):
         inventory.generate_inventory(source_root, COMMIT, tmp_path / "rejected")
 
     output_dir = tmp_path / "allowed"
@@ -213,4 +243,6 @@ class BrokenApi:
     )
 
     with pytest.raises(inventory.InventoryError, match=message):
-        inventory.generate_inventory(source_root, COMMIT, tmp_path / "output")
+        inventory.generate_inventory(
+            source_root, COMMIT, tmp_path / "output", allow_head_mismatch=True
+        )

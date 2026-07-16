@@ -16,7 +16,7 @@ When Wake-on-LAN is expected to work, inspect `comet_wol_list` or
 `comet_wol_scan`, then call `comet_wol_wake` for the intended MAC. Verify power
 and video progression.
 
-When ATX control is available:
+When the ATX add-on board is physically installed and wired to the target:
 
 - call `comet_atx_power` with `on` for a powered-off machine;
 - prefer a graceful operating-system shutdown through another available exact

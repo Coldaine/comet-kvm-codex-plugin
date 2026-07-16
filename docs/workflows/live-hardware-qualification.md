@@ -31,7 +31,9 @@ Or manually via MCP / curl after `kvm_connect`:
 
 1. `kvm_connect(host=..., target="pve-lab")`
 2. `comet_capabilities(refresh=true)`
-3. `kvm_status` — verify the WebSocket is healthy and uses `stream=true`
+3. `kvm_status` — verify the WebSocket is healthy (`ws_open=true`); the client
+   always connects with `stream=true` internally, which is not separately
+   observable from tool output
 4. `kvm_screenshot` / `kvm_ocr_text`
 5. `comet_power_state` (read only)
 6. `comet_media_state`
@@ -44,9 +46,9 @@ The inherited `/api/streamer/ocr` state is discovery evidence only. GL.iNet's
 product Text Recognition runs browser-side Tesseract.js, while `kvm_ocr_*` uses
 host Tesseract; do not record one as qualification of another.
 
-**Pass:** capabilities profile populated; `stream=true` keeps the streamer
-alive; snapshot returns JPEG; read-only calls return their expected media type;
-logout completes without error.
+**Pass:** capabilities profile populated; `ws_open=true` and the streamer
+stays alive for the duration of the session; snapshot returns JPEG; read-only
+calls return their expected media type; logout completes without error.
 
 Retain model, installed firmware, KVMD/platform data, resolution/video presence,
 legacy server-OCR state, ATX enabled/LED state, MSD capacity/free space,

@@ -377,6 +377,11 @@ def verify_source_commit(
     allow_head_mismatch: bool = False,
 ) -> None:
     head = _git_head(source_root)
+    if head is None and not allow_head_mismatch:
+        raise InventoryError(
+            "Unable to verify source Git HEAD; "
+            "use --allow-head-mismatch only for an intentional source snapshot override"
+        )
     if head is not None and head != commit and not allow_head_mismatch:
         raise InventoryError(
             f"Source Git HEAD {head} does not match requested commit {commit}; "
