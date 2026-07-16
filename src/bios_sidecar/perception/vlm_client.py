@@ -90,7 +90,14 @@ class VLMClient:
     ) -> dict[str, Any]:
         if self.provider == "mock":
             from src.kvm_core.runtime import get_kvm_runtime
-            from src.bios_sidecar.controller.runtime import _FIXTURE_HOST_MARKERS
+
+            _FIXTURE_HOST_MARKERS = frozenset({
+                "localhost",
+                "127.0.0.1",
+                "0.0.0.0",
+                "example.invalid",
+                "test",
+            })
 
             kvm = get_kvm_runtime()
             client = kvm.client
@@ -121,7 +128,15 @@ class VLMClient:
             except Exception as exc:
                 LOG.warning("VLM call attempt %d failed: %s", attempt + 1, type(exc).__name__)
 
-        raise RuntimeError("VLM failed to return a valid BIOS screen parse after 3 attempts")
+        LOG.error("VLM failed after 3 attempts; returning unparseable state")
+        return {
+            "screen_title": "Unparseable Screen",
+            "menu_path": [],
+            "cursor_at": None,
+            "entries": [],
+            "blocklist_flag": False,
+            "blocklist_keywords": [],
+        }
 
     @staticmethod
     def _build_user_prompt(

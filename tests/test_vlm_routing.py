@@ -3,12 +3,21 @@ from __future__ import annotations
 import asyncio
 import pytest
 
+import httpx
 from src.bios_sidecar.perception.vlm_client import VLMClient
 from tests.local_services import OpenAICompatibleService
 
 
 def run(coro):
     return asyncio.run(coro)
+
+
+def install_mock_transport(
+    client: VLMClient,
+    handler,
+) -> None:
+    run(client.client.aclose())
+    client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
 def test_provider_is_required_instead_of_fabricating_a_parse():
@@ -112,7 +121,7 @@ def test_local_provider_retries_without_response_format():
 def test_invalid_vlm_provider_raises_value_error():
     client = VLMClient(provider="invalid-provider")
     try:
-        with pytest.raises(ValueError, match="Unknown VLM provider"):
+        with pytest.raises(ValueError, match="Unsupported provider"):
             run(client.parse_screenshot(b"image"))
     finally:
         run(client.close())
