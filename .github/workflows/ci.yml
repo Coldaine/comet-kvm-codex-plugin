@@ -34,3 +34,9 @@ jobs:
 
       - name: Test suite
         run: uv run pytest tests -q
+
+      - name: Stdio MCP startup smoke
+        if: matrix.python-version == '3.13'
+        env:
+          RUN_MCP_STDIO_SMOKE: "1"
+        run: uv run --locked --python 3.13 pytest tests/test_mcp_stdio.py -q

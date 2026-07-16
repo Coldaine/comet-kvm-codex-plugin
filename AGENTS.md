@@ -33,6 +33,7 @@ When filling the developer role, do not put driver-agent instructions or VLM pro
 - Keep `upstream` pointing at `kennypeh85/glkvm-mcp` (fetch-only, push disabled). Selectively cherry-pick bug fixes or API improvements when relevant — this repo is not a mirror and does not track upstream releases.
 - VLM perception uses a small direct `httpx` OpenAI-compatible client; do not reintroduce LiteLLM or Instructor unless a concrete provider capability cannot be implemented against the common chat-completions contract.
 - The locked launcher is `uv run --locked --python 3.13 python ./glkvm_mcp.py`; do not use `uv run --script`, which bypasses `uv.lock` and re-resolves dependencies.
+- CI includes an offline stdio MCP startup/list-tools smoke test, mocked Comet protocol tests, and docs/dependency consistency tests. Live Comet verification is manual-only via `.github/workflows/live-smoke.yml` and requires Doppler plus a runner with network access to the Comet.
 
 ## Live Hardware Constraints
 

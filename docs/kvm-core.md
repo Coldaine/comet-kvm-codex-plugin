@@ -9,7 +9,7 @@ The KVM MCP server is the universal physical-control substrate. The BIOS sidecar
 
 The KVM MCP server is a hardened fork of `kennypeh85/glkvm-mcp` that exposes a GL.iNet Comet KVM / GL-RM1 device's keyboard, mouse, screenshot, OCR, and hardware-control capabilities as MCP tools.
 
-It is a stdio MCP server intended to run from `glkvm_mcp.py` with `uv run --script`. The entry point composes universal tools from `src/kvm_core/` and BIOS-aware tools from `src/bios_sidecar/` (loaded by default; `COMET_DISABLE_BIOS_SIDECAR=1` skips sidecar registration) against one shared MCP server. The KVM core owns the physical session; the sidecar delegates to it rather than duplicating transport state.
+It is a stdio MCP server intended to run from `glkvm_mcp.py` with `uv run --locked --python 3.13 python ./glkvm_mcp.py`. The entry point composes universal tools from `src/kvm_core/` and BIOS-aware tools from `src/bios_sidecar/` (loaded by default; `COMET_DISABLE_BIOS_SIDECAR=1` skips sidecar registration) against one shared MCP server. The KVM core owns the physical session; the sidecar delegates to it rather than duplicating transport state.
 
 ## 2. Connection Model
 

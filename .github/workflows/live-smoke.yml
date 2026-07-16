@@ -1,0 +1,41 @@
+name: Live Comet Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label with network access to COMET_HOST"
+        default: "ubuntu-latest"
+        required: true
+        type: string
+      comet-host:
+        description: "Comet host/IP reachable from the selected runner"
+        default: "192.168.0.126"
+        required: true
+        type: string
+
+jobs:
+  live-smoke:
+    name: Read-only live Comet smoke
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+
+      - name: Install dependencies from lockfile
+        run: uv sync --frozen --group dev
+
+      - name: Run read-only live smoke
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          COMET_HOST: ${{ inputs.comet-host }}
+          RUN_LIVE_COMET_SMOKE: "1"
+        run: doppler run -p secrets_managment -c dev -- uv run --locked --python 3.13 pytest tests/live/test_live_smoke.py -q
