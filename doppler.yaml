@@ -4,7 +4,7 @@
 # See docs/reference/comet-api.md for the full env var reference.
 
 setup:
-  project: secrets_managment
+  project: homelab
   config: dev
 
 flags:

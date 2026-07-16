@@ -45,7 +45,7 @@ def test_current_docs_use_lockfile_backed_launcher_not_script_resolver():
     stale_launcher_patterns = [
         "intended to run from `glkvm_mcp.py` with `uv run --script`",
         "launched via `uv run --script",
-        "uses `doppler run -p secrets_managment -c dev -- uv run --script",
+        "uses `doppler run -p homelab -c dev -- uv run --script",
     ]
     for path in LAUNCHER_DOCS:
         text = path.read_text(encoding="utf-8")

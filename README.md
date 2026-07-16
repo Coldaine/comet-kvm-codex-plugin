@@ -101,7 +101,7 @@ See:
 - [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) installed on the host
 - A GL.iNet Comet (GL-RM1) or PiKVM-compatible device on your LAN (firmware 1.9.0+)
 - [uv](https://docs.astral.sh/uv/) for running the MCP server
-- [Doppler CLI](https://docs.doppler.com/docs/install-cli) configured for `secrets_managment/dev` when using the bundled plugin launcher
+- [Doppler CLI](https://docs.doppler.com/docs/install-cli) configured for `homelab/dev` when using the bundled plugin launcher
 
 ### Install Tesseract
 

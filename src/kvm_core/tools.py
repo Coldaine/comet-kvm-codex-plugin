@@ -58,7 +58,7 @@ async def kvm_connect(
     """Connect to a GLKVM device on LAN and authenticate.
 
     When password is omitted, fetch GLCOMET_ADMIN_PASSWORD from the Doppler CLI
-    using doppler.yaml (secrets_managment/dev). Does not read process environment.
+    using doppler.yaml (homelab/dev). Does not read process environment.
     Optional target id enables multi-Comet sessions.
     """
     if password is None:
