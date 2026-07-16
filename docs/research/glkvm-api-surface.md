@@ -74,7 +74,7 @@ Most native JSON routes use:
 | GET | `/api/atx` | ATX LED/power state |
 | GET | `/api/msd` | Mass-storage / image inventory |
 | GET | `/api/streamer` | Capture/stream state |
-| GET | `/api/streamer/ocr` | OCR enabled/engine/languages |
+| GET | `/api/streamer/ocr` | Inherited PiKVM server-OCR enabled/engine/languages; not GL.iNet's browser Text Recognition worker |
 | GET | `/api/recorder` | Recorder state |
 | GET | `/api/tailscale/status` | Tailscale status JSON (when present) |
 | GET | `/api/tailscale/config` | Stored Tailscale config toggles |
@@ -123,7 +123,7 @@ Server emits subsystem `*_state` events, `pong`, and `kickout`. Clients should d
 
 ---
 
-## Streamer / OCR / snapshot
+## Streamer / inherited server OCR / snapshot
 
 **Confidence: High** for snapshot/OCR handlers in `streamer.py`. **Medium** for broader stream-quality controls (may live in related modules / UI paths).
 
@@ -132,7 +132,14 @@ Server emits subsystem `*_state` events, `pong`, and `kickout`. Clients should d
 | GET | `/api/streamer` | Stream state |
 | GET | `/api/streamer/snapshot` | JPEG bytes by default. Query: `save`, `load`, `allow_offline`, `preview`, `preview_max_width`, `preview_max_height`, `preview_quality`. With `ocr=true`, returns OCR JSON instead of JPEG; crop via `ocr_left`/`ocr_top`/`ocr_right`/`ocr_bottom`, langs via `ocr_langs` |
 | DELETE | `/api/streamer/snapshot` | Clear saved snapshot |
-| GET | `/api/streamer/ocr` | `{ "ocr": <ocr state> }` |
+| GET | `/api/streamer/ocr` | `{ "ocr": <server OCR state> }` |
+
+GL.iNet firmware 1.9's product UI **Text Recognition** path is not this server
+handler. The served web bundle crops the canvas and calls Tesseract.js
+`createWorker`/`recognize` in the controlling browser. A live browser recognition
+succeeded with server OCR disabled and no device OCR socket/process. Treat RKNN
+or other server engines as a separate firmware surface, not an intrinsic OCR API
+used by the product UI or this MCP.
 
 ---
 

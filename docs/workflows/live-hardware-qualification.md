@@ -17,9 +17,14 @@ Do **not** run forced power-off or installer mounts against production nodes.
 ## Lane A — Read-only connect (safe anytime)
 
 ```bash
-doppler run -p homelab -c dev -- \
+RUN_LIVE_COMET_SMOKE=1 doppler run -p homelab -c dev -- \
   uv run --locked --python 3.13 pytest tests/live/test_live_smoke.py -q
 ```
+
+The test module skips before reading credentials or opening a socket unless
+`RUN_LIVE_COMET_SMOKE=1` is explicit. The GitHub workflow is manually dispatched
+and fixed to a self-hosted runner carrying both `self-hosted` and `comet-lan` labels;
+it cannot silently fall back to a public hosted runner.
 
 Or manually via MCP / curl after `kvm_connect`:
 

@@ -88,11 +88,15 @@ The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verificatio
 
 MCP tool return values are the primary agent data path. Runtime logs and MCP progress/resource notifications are diagnostics or optional mirrors; they are not command-output transport.
 
-For a pixel-only KVM console, the current primitive flow is `kvm_send_text` → `kvm_send_keys("Enter")` → `kvm_ocr_text()`, whose native-first ordered text is returned directly to the calling agent. A bounded composite `kvm_terminal_run` is **Planned**: it will poll only for the duration of one command, accumulate visible OCR deltas, return the result, and then discard the transcript. An always-on rolling OCR buffer is **Deferred** until recorded workloads prove that the bounded call is insufficient.
+For a pixel-only KVM console, the current primitive flow is `kvm_send_text` → `kvm_send_keys("Enter")` → `kvm_ocr_text()`, whose host-Tesseract ordered text is returned directly to the calling agent. A bounded composite `kvm_terminal_run` is **Planned**: it will poll only for the duration of one command, accumulate visible OCR deltas, return the result, and then discard the transcript. An always-on rolling OCR buffer is **Deferred** until recorded workloads prove that the bounded call is insufficient.
 
 Exact stdout/stderr/exit status requires a real byte-stream transport, not HDMI OCR. A separate AsyncSSH-backed target-shell component is a **Candidate** for machines that are directly reachable on the network. It must keep target credentials separate from the Comet admin password, verify known hosts, and use an allowlist. It does not belong inside `kvm_core` and it cannot replace KVM access for BIOS, recovery, or network-down states.
 
-`kvm_ocr_text` probes the Comet/PiKVM device-side OCR endpoint and uses it for text-only reads when enabled, including its language and crop parameters. It automatically falls back to host Pillow plus pytesseract. The live Comet at `192.168.0.126` reported `enabled: false` with no languages on 2026-07-10, so the fallback is currently selected there. Coordinate-sensitive tools such as `kvm_ocr_click` continue to require host OCR word boxes.
+`kvm_ocr_text` captures the frame and uses host Pillow plus pytesseract. GL.iNet
+firmware 1.9's Text Recognition UI runs Tesseract.js/WASM in the controlling
+browser; it is neither RKNN nor a device API available to this process. The
+inherited PiKVM `/api/streamer/ocr` route remains a discovery-only legacy
+observation and must not be presented as the product UI's OCR engine.
 
 ## D-K8 — Prefer small standard adapters over dependency expansion
 

@@ -28,18 +28,19 @@ Rules:
 
 ## Choose the cheapest reliable perception tool
 
-After `kvm_connect(host)`, call `kvm_ocr_status()` once per connection or after a firmware/configuration change. It reports both the Comet's native OCR state and host Tesseract availability, refreshes the device capability cache, and lets later text reads reuse that result.
+Before depending on text reads, call `kvm_ocr_status()`. It reports whether host Tesseract is callable by the MCP and identifies the GL.iNet product UI's browser-only Tesseract.js engine so the two paths are not confused.
 
 Use this order:
 
-1. **Visible terminal, shell, POST text, or recovery text:** call `kvm_ocr_text()`. It automatically prefers the Comet/PiKVM native OCR endpoint when the device reports it enabled, and otherwise captures one frame and falls back to host Tesseract. On the host fallback, default `psm=6` and `preserve_interword_spaces=1` suit terminal text; the native endpoint controls its own segmentation and does not expose PSM. Supply pixel crop coordinates when the terminal occupies only part of the screen.
-2. **Text coordinates or confidence are required:** call `kvm_ocr_screenshot(...)`. This deliberately uses host pytesseract word boxes; native Comet OCR returns text but not click coordinates.
+1. **Visible terminal, shell, POST text, or recovery text:** call `kvm_ocr_text()`. It captures one frame and runs host Tesseract. Default `psm=6` and `preserve_interword_spaces=1` suit terminal text. Supply pixel crop coordinates when the terminal occupies only part of the screen.
+2. **Text coordinates or confidence are required:** call `kvm_ocr_screenshot(...)`. It uses host pytesseract word boxes.
 3. **Click a visible label:** call `kvm_ocr_click(...)`. Treat an OCR error as a failed action; do not convert it into "text not found."
 4. **Layout, icons, BIOS semantics, or ambiguous OCR:** call `kvm_screenshot()` or the semantic `bios_*` observation tools. OCR is a text extractor, not a substitute for visual state verification.
 
-Do not call the Comet HTTP OCR endpoint directly. The MCP tools probe capability, normalize the GL.iNet JSON response, apply native crop/language parameters, and handle the verified host fallback.
-
-The live Comet at `192.168.0.126` reported native OCR disabled on 2026-07-10, so `kvm_ocr_text()` currently selects host Tesseract there. Do not assume that status for another device or after a firmware change; use `kvm_ocr_status()`.
+Do not call the inherited `/api/streamer/ocr` route and describe it as GL.iNet
+Text Recognition. Firmware 1.9's product UI crops its browser canvas and runs
+Tesseract.js/WASM in the controlling browser. This MCP cannot reuse that worker;
+its OCR tools require host Tesseract.
 
 ## Visible console command loop
 
