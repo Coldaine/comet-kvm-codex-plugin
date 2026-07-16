@@ -204,12 +204,12 @@ class TestMockVlmGuard:
 
 
 # ---------------------------------------------------------------------------
-# 4d — OCR-first: matched screen skips VLM
+# 4d — Page identity reuse still re-extracts live interaction via VLM
 # ---------------------------------------------------------------------------
 
 
-class TestOcrFirstObserve:
-    def test_matched_screen_skips_vlm(self, tmp_path):
+class TestLiveInteractionObserve:
+    def test_matched_screen_still_calls_vlm_for_live_fields(self, tmp_path):
         shot = jpeg_bytes(color=(12, 34, 56))
         runtime, client = build_runtime(tmp_path, screenshot=shot)
         patch_ocr_texts(runtime, ["EZ", "Mode", "Cooler"])
@@ -221,12 +221,28 @@ class TestOcrFirstObserve:
                 runtime.vlm_client,
                 "parse_screenshot",
                 new_callable=AsyncMock,
+                return_value={
+                    "screen_title": "EZ Mode",
+                    "menu_path": ["EZ Mode"],
+                    "cursor_at": 0,
+                    "entries": [
+                        {
+                            "label": "Cooler",
+                            "type": "leaf-enum",
+                            "value": "Auto",
+                            "options": ["Auto", "Enabled"],
+                            "key_to_enter": "Enter",
+                        }
+                    ],
+                    "blocklist_flag": False,
+                    "blocklist_keywords": [],
+                },
             ) as spy:
                 second = _run(runtime.observer.observe_state(client, "run_a", "dev_a"))
-                spy.assert_not_called()
+                spy.assert_called_once()
 
-            assert second.state_id != first.state_id  # fresh observation id
-            assert second.confidence.vlm == 0.0  # reused grounding
+            assert second.state_id != first.state_id
+            assert second.selection.label == "Cooler"
             assert second.frame.perceptual_hash == first.frame.perceptual_hash
         finally:
             cleanup_runtime(runtime)

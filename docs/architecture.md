@@ -20,7 +20,7 @@ One stdio MCP process composes a universal physical KVM core with a BIOS-aware s
 |---|---|---|
 | MCP composition | Current | `glkvm_mcp.py` registers KVM and BIOS tools on one `FastMCP("comet-kvm")` instance. |
 | Codex plugin packaging | Current | `.codex-plugin/plugin.json` bundles `skills/` + `.mcp.json`; the launcher starts **this repo's** MCP server (not an external upstream package). |
-| Plugin launch | Current | `.mcp.json` launches the PEP 723 script through Doppler so `COMET_PASSWORD` stays out of tool calls and Git. |
+| Plugin launch | Current | `.mcp.json` launches via `uv run --locked --python 3.13 python ./glkvm_mcp.py`; `kvm_connect` fetches `COMET_PASSWORD` from Doppler CLI. |
 | Universal KVM | Current | `src/kvm_core/` owns auth, HTTP/WebSocket transport, HID, screenshots, OCR, logging, and Comet hardware tools. |
 | BIOS sidecar | Current | `src/bios_sidecar/` owns BIOS observation, graph/state, VLM grounding, navigation, mutation, recovery, and trace resources/tools. |
 | Host OCR | Current | Pillow decodes frames; pytesseract returns ordered text and word boxes with a timeout off the asyncio event loop. |

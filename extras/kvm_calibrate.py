@@ -14,7 +14,6 @@ Usage:
 """
 import sys
 import struct
-from io import BytesIO
 
 def read_jpeg_size(filepath):
     """Read JPEG dimensions without PIL."""
@@ -123,5 +122,5 @@ if __name__ == '__main__':
     result = overlay_grid(inp, outp)
     if result:
         print(f"Grid overlay written to: {outp}")
-    print(f"\nNow send the grid image to vision model with prompt:")
-    print(f"'Look at the grid overlay. What x% and y% label is nearest to <target element>?'")
+    print("\nNow send the grid image to vision model with prompt:")
+    print("'Look at the grid overlay. What x% and y% label is nearest to <target element>?'")

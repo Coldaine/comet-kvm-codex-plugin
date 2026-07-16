@@ -26,15 +26,18 @@ When filling the developer role, do not put driver-agent instructions or VLM pro
 - Follow `docs/NORTH_STAR.md` as the top-level project authority and `docs/decisions.md` for implementation decisions.
 - Follow `docs/kvm-core.md` for the universal KVM MCP server architecture and the KVM/BIOS sidecar boundary.
 - When working as the developer agent, read the `comet-bios-triage` skill for context, but do not put driver-agent operational rules here.
-- **Do not commit credentials.** The only secret is `COMET_PASSWORD`, managed via Doppler (`doppler.yaml`). Host (`192.168.0.126`) and username (`admin`) are non-sensitive and safe in code/config. See `docs/reference/comet-api.md#security-model`.
+- **Do not commit credentials.** The only Comet secret is Doppler `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `secrets_managment`/`dev`), fetched via Doppler CLI — never process-env injection. Host (`192.168.0.126`) and username (`admin`) are non-sensitive and safe in code/config. See `docs/reference/comet-api.md#security-model`.
 - Do not commit screenshots, HWiNFO logs, or live state files.
 - Use `scripts/comet_preflight.py` for local host checks that do not send KVM actions.
 - Use `scripts/run_ledger.py` to create or update experiment records.
 - Keep `upstream` pointing at `kennypeh85/glkvm-mcp` (fetch-only, push disabled). Selectively cherry-pick bug fixes or API improvements when relevant — this repo is not a mirror and does not track upstream releases.
+- VLM perception uses a small direct `httpx` OpenAI-compatible client; do not reintroduce LiteLLM or Instructor unless a concrete provider capability cannot be implemented against the common chat-completions contract.
+- The locked launcher is `uv run --locked --python 3.13 python ./glkvm_mcp.py`; do not use `uv run --script`, which bypasses `uv.lock` and re-resolves dependencies.
+- CI includes an offline stdio MCP startup/list-tools smoke test, mocked Comet protocol tests, and docs/dependency consistency tests. Live Comet verification is manual-only via `.github/workflows/live-smoke.yml` and requires Doppler plus a runner with network access to the Comet.
 
 ## Live Hardware Constraints
 
 - **Target:** Comet KVM (GL-RM1) at `192.168.0.126` on LAN
 - **ATX power control:** Wrapped by `comet_atx_power` and `comet_atx_click`. These tools require the ATX add-on board to be physically installed and wired to the target.
 - **BIOS entry workflow:** Use ATX reset/power tools when the add-on board is installed; otherwise manually power on the target. The agent polls screenshots until POST is detected, sends the BIOS entry key (`Delete`, `F2`, `Escape`, etc.), then enters BIOS navigation mode.
-- **Credentials:** The only secret is `COMET_PASSWORD`, managed via Doppler (`doppler.yaml`). Host (`192.168.0.126`) and username (`admin`) are non-sensitive and safe in code/config. See `docs/reference/comet-api.md#security-model`.
+- **Credentials:** The only Comet secret is Doppler `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `secrets_managment`/`dev`), fetched via Doppler CLI — never process-env injection. Host (`192.168.0.126`) and username (`admin`) are non-sensitive and safe in code/config. See `docs/reference/comet-api.md#security-model`.

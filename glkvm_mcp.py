@@ -3,12 +3,10 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "mcp[cli]>=1.28,<2",
-#     "websockets>=12",
-#     "httpx>=0.27",
-#     "Pillow>=10",
+#     "websockets>=16.1",
+#     "httpx>=0.28.1",
+#     "Pillow>=12.3.0",
 #     "pytesseract>=0.3.13",
-#     "instructor>=1.5",
-#     "litellm>=1.50",
 # ]
 # ///
 """
@@ -26,7 +24,10 @@ from __future__ import annotations
 import os
 
 from src.kvm_core.server import mcp
-import src.kvm_core.tools  # registers kvm_* and comet_* tools on the shared mcp instance
+
+# Side-effect imports register tools against the shared FastMCP instance.
+import src.kvm_core.tools  # noqa: F401
+
 # BIOS sidecar loads by default (bios_* tools on the same MCP process). Set
 # COMET_DISABLE_BIOS_SIDECAR=1 to skip the import for a KVM-core-only server.
 if os.environ.get("COMET_DISABLE_BIOS_SIDECAR", "").strip().lower() not in (
@@ -34,7 +35,8 @@ if os.environ.get("COMET_DISABLE_BIOS_SIDECAR", "").strip().lower() not in (
     "true",
     "yes",
 ):
-    import src.bios_sidecar.mcp.server  # registers bios_* tools on the shared mcp instance
+    import src.bios_sidecar.mcp.server  # noqa: F401
+
 from src.kvm_core.logging_config import configure_logging
 
 

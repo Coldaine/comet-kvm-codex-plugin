@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from typing import List, Dict, Optional, Any
+from typing import Dict, Optional
 from src.bios_sidecar.domain.models import CapabilityEntry, CapabilityPath
 from src.bios_sidecar.domain.enums import RiskClass
 from src.bios_sidecar.state.store import SQLiteStore

@@ -1,5 +1,4 @@
 from __future__ import annotations
-import json
 
 SYSTEM_PROMPT = """You are a BIOS screen parser. You receive a screenshot of a BIOS/UEFI interface and return a structured JSON description of what is on screen.
 

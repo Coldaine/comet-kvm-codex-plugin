@@ -3,7 +3,7 @@ import uuid
 import datetime
 import json
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any
 from src.bios_sidecar.domain.models import TraceEvent
 from src.bios_sidecar.domain.enums import EventClass
 from src.bios_sidecar.state.store import SQLiteStore

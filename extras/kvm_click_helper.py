@@ -22,8 +22,6 @@ Fallback: difference-imaging for cursor position verification
 """
 import subprocess
 import struct
-import os
-from typing import Optional
 
 def read_jpeg_size(filepath):
     with open(filepath, 'rb') as f:

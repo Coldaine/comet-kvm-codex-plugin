@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Any
 
 class BiosAdapter:
     vendor: str = "generic"
