@@ -78,7 +78,7 @@ The stale key watchdog and WebSocket pinger are required KVM-core reliability me
 
 ## D-K5 — Security model is LAN-first with per-session password
 
-The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verification is disabled because the device uses a self-signed certificate. The password is supplied per session via `kvm_connect` or fetched from the Doppler CLI (`GLCOMET_ADMIN_PASSWORD` in `secrets_managment`/`dev` per `doppler.yaml`); no Comet password is committed to the repository or read from process environment variables.
+The Comet is operated on a trusted LAN or through Tailscale/VPN. TLS verification is disabled because the device uses a self-signed certificate. The password is supplied per session via `kvm_connect` or fetched from the Doppler CLI (`GLCOMET_ADMIN_PASSWORD` in `homelab`/`dev` per `doppler.yaml`); no Comet password is committed to the repository or read from process environment variables.
 
 ## D-K6 — Locked Python 3.13 deployment
 

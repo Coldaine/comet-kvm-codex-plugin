@@ -15,7 +15,8 @@ rather than sitting at BIOS. Safe to run against a live machine.
 Usage:
     uv run scripts/comet_smoke_test.py
 
-Requires Doppler CLI authenticated to secrets_managment/dev (see doppler.yaml).
+Requires Doppler CLI authenticated to homelab/dev (see doppler.yaml).
+Optional: COMET_HOST / COMET_USERNAME override the Doppler defaults.
 """
 from __future__ import annotations
 
@@ -30,12 +31,39 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from src.kvm_core.comet.client import CometClient  # noqa: E402
-from src.kvm_core.doppler_credentials import DopplerAuthError, resolve_comet_password  # noqa: E402
+from src.kvm_core.doppler_credentials import (  # noqa: E402
+    DopplerAuthError,
+    _doppler_get_plain,
+    doppler_project_config,
+    resolve_comet_password,
+)
+
+
+def _resolve_host() -> str:
+    env_host = (os.environ.get("COMET_HOST") or "").strip()
+    if env_host:
+        return env_host
+    project, config = doppler_project_config()
+    try:
+        return (_doppler_get_plain("COMET_HOST", project, config) or "192.168.0.126").strip()
+    except DopplerAuthError:
+        return "192.168.0.126"
+
+
+def _resolve_username() -> str:
+    env_user = (os.environ.get("COMET_USERNAME") or "").strip()
+    if env_user:
+        return env_user
+    project, config = doppler_project_config()
+    try:
+        return (_doppler_get_plain("COMET_ADMIN_USERNAME", project, config) or "admin").strip()
+    except DopplerAuthError:
+        return "admin"
 
 
 async def main() -> int:
-    host = os.environ.get("COMET_HOST", "192.168.0.126")
-    username = os.environ.get("COMET_USERNAME", "admin")
+    host = _resolve_host()
+    username = _resolve_username()
 
     print(f"[smoke] target host   : {host}")
     print(f"[smoke] username      : {username}")

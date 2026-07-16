@@ -20,7 +20,7 @@ The server opens one physical I/O session to the Comet.
 | HTTP(S) | Authentication, screenshots, sysinfo, ATX, MSD upload |
 | WebSocket | Keyboard, mouse, and ping frames |
 
-Connections are per-session. `kvm_connect(host, password?, username="admin")` accepts an explicit password or fetches `GLCOMET_ADMIN_PASSWORD` from the Doppler CLI using `doppler.yaml` (`secrets_managment`/`dev`). The process environment is not used for the Comet password. The bundled launcher is plain `uv run --locked --python 3.13 python ./glkvm_mcp.py`; Doppler must be installed and authenticated on the host.
+Connections are per-session. `kvm_connect(host, password?, username="admin")` accepts an explicit password or fetches `GLCOMET_ADMIN_PASSWORD` from the Doppler CLI using `doppler.yaml` (`homelab`/`dev`). The process environment is not used for the Comet password. The bundled launcher is plain `uv run --locked --python 3.13 python ./glkvm_mcp.py`; Doppler must be installed and authenticated on the host.
 
 TLS verification is disabled because the Comet ships with a self-signed certificate. The expected operating model is trusted LAN access, or remote access through Tailscale/VPN rather than direct public exposure.
 

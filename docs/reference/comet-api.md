@@ -322,7 +322,7 @@ GL.iNet's PiKVM fork exposes `GET /api/streamer/ocr` with `enabled`, `engine` (`
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — device ships with self-signed certificate; `verify=False` in httpx client
-- **No credentials in repo** — secrets are never committed, logged, or stored in files. The Comet admin password is fetched at connect time from Doppler CLI as `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `secrets_managment`/`dev`). Process-env injection is not used for that secret.
+- **No credentials in repo** — secrets are never committed, logged, or stored in files. The Comet admin password is fetched at connect time from Doppler CLI as `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `homelab`/`dev`). Process-env injection is not used for that secret.
 - **stdio exposure warning** — do not expose the MCP server's stdio to a remote agent without confirming the target host is on a trusted network
 - **Remote access options:** Tailscale (supported on Comet models that ship the integration), GL.iNet cloud service (`glkvm.com`), or VPN — topology judgment is **not** documented here; see the [OOB vision](../research/oob-proxmox-tailscale-vision.md) if needed
 

@@ -17,7 +17,7 @@ Do **not** run forced power-off or installer mounts against production nodes.
 ## Lane A — Read-only connect (safe anytime)
 
 ```bash
-doppler run -p secrets_managment -c dev -- \
+doppler run -p homelab -c dev -- \
   uv run --locked --python 3.13 pytest tests/live/test_live_smoke.py -q
 ```
 
