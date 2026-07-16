@@ -2,7 +2,7 @@
 
 > **Purpose:** Prove the corrected Comet protocol and BIOS sidecar against disposable hardware before trusting ATX, MSD, mutation, or save/reboot on a valuable node.
 > **Status:** Manual lane — not part of default CI.
-> **Prerequisite:** Comet reachable (LAN or Tailscale), Doppler `COMET_PASSWORD`, ATX board installed for power tests.
+> **Prerequisite:** Comet reachable (LAN or Tailscale), Doppler `GLCOMET_ADMIN_PASSWORD`, ATX board installed for power tests.
 
 ## Safety gate
 
