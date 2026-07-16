@@ -43,6 +43,18 @@ from src.kvm_core.logging_config import configure_logging
 if __name__ == "__main__":
     import logging
     import warnings
+    import sys
+
+    if "--expect-tesseract" in sys.argv:
+        from src.kvm_core.ocr import OCRManager
+        mgr = OCRManager()
+        status = mgr.get_status()
+        if status["available"]:
+            print(f"Tesseract OCR is available at: {status['command']}")
+            sys.exit(0)
+        else:
+            print("ERROR: Tesseract OCR is not available on this host.")
+            sys.exit(1)
 
     warnings.filterwarnings("ignore", message="Unverified HTTPS request")
     log_path = configure_logging()

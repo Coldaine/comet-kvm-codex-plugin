@@ -7,14 +7,9 @@ description: Use when operating a GL.iNet Comet/GLKVM through MCP for BIOS, pre-
 
 Use the Comet MCP tools as hands and eyes, not as a blind macro engine.
 
-Before changing BIOS settings, read:
-
-- `../../docs/architecture.md` — current BIOS cartography and state-engine design
-- `../../docs/vlm-prompt-contract.md` — current VLM perception contract
-- `../../docs/plans/01-vlm-mcp-integration-plan.md` — VLM-MCP boundary integration plan
-- `references/stateful-control-model.md`
-- `references/msi-z690-bios-workflow.md`
-- `references/hwinfo-run-loop.md`
+Before changing BIOS settings, verify your context:
+- Ensure the stateful KVM tools are connected
+- Consult the embedded reference guides on MSI Z690 workflows and HWiNFO run loops
 
 Rules:
 
@@ -41,6 +36,10 @@ Do not call the inherited `/api/streamer/ocr` route and describe it as GL.iNet
 Text Recognition. Firmware 1.9's product UI crops its browser canvas and runs
 Tesseract.js/WASM in the controlling browser. This MCP cannot reuse that worker;
 its OCR tools require host Tesseract.
+
+Do not call the Comet HTTP OCR endpoint directly. The MCP tools probe capability, normalize the GL.iNet JSON response, apply native crop/language parameters, and handle the verified host fallback.
+
+Do not assume native OCR status for any device or after a firmware change; use `kvm_ocr_status()`.
 
 ## Visible console command loop
 

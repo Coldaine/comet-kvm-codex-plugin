@@ -110,6 +110,9 @@ class StateObserver:
             previous_state=prev_dict,
             last_action=last_action,
         )
+        
+        from src.bios_sidecar.adapters.msi_click_bios import MsiClickBiosAdapter
+        
         state = normalize_bios_state(
             run_id=run_id,
             device_id=device_id,
@@ -120,6 +123,7 @@ class StateObserver:
             resolution=resolution,
             captured_at=now_str,
             ocr_confidence=ocr_confidence,
+            adapter=MsiClickBiosAdapter()
         )
 
         if matched_node and match_confidence >= _MATCH_CONFIDENCE_MIN:

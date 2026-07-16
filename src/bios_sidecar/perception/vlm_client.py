@@ -22,6 +22,7 @@ _PROVIDER_DEFAULTS = {
     "openrouter": ("https://openrouter.ai/api/v1", "qwen/qwen2.5-vl-72b-instruct"),
     "ollama": ("http://localhost:11434/v1", "llama3.2-vision"),
     "vllm": ("http://localhost:8000/v1", "qwen2.5-vl"),
+    "mock": ("", "mock"),
 }
 
 
@@ -87,6 +88,25 @@ class VLMClient:
         previous_state: Optional[dict[str, Any]] = None,
         last_action: Optional[str] = None,
     ) -> dict[str, Any]:
+        if self.provider == "mock":
+            from src.kvm_core.runtime import get_kvm_runtime
+            from src.bios_sidecar.controller.runtime import _FIXTURE_HOST_MARKERS
+
+            kvm = get_kvm_runtime()
+            client = kvm.client
+            if client is not None and client.is_connected():
+                host = (getattr(client, "host", "") or "").lower()
+                base = (getattr(client, "base_url", "") or "").lower()
+                haystack = f"{host} {base}"
+                is_live = not any(marker in haystack for marker in _FIXTURE_HOST_MARKERS)
+                if is_live:
+                    raise RuntimeError(
+                        "VLM_PROVIDER=mock with a live Comet connection — refusing to run "
+                        "bios_* tools on fabricated VLM output. Set VLM_PROVIDER to a real provider "
+                        "(openrouter/ollama/vllm/openai) or disconnect before using mock mode."
+                    )
+            return self._parse_mock(image_bytes)
+
         self._validate_configuration()
 
         user_prompt = self._build_user_prompt(previous_state, last_action)
@@ -164,3 +184,39 @@ class VLMClient:
         if not isinstance(value, dict):
             raise ValueError("VLM response must be a JSON object")
         return value
+
+    @staticmethod
+    def _parse_mock(image_bytes: bytes) -> dict[str, Any]:
+        import hashlib
+
+        screen = int(hashlib.sha256(image_bytes).hexdigest()[:4], 16) % 4
+        screens = [
+            ("EZ Mode", ["EZ Mode"], 0, [
+                {"label": "CPU Cooler Tuning", "type": "leaf-enum", "value": "Water Cooler", "options": ["Box Cooler", "Tower Cooler", "Water Cooler"], "key_to_enter": "Enter"},
+                {"label": "Memory Fast Boot", "type": "leaf-toggle", "value": "Enabled", "options": ["Enabled", "Disabled"], "key_to_enter": "Enter"},
+            ]),
+            ("Advanced SETTINGS", ["SETTINGS"], 1, [
+                {"label": "System Status", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
+                {"label": "Advanced", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
+                {"label": "Boot", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
+                {"label": "Security", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
+            ]),
+            ("Advanced", ["SETTINGS", "Advanced"], 2, [
+                {"label": "PCI Subsystem Settings", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
+                {"label": "ACPI Settings", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
+                {"label": "Integrated Peripherals", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
+            ]),
+            ("PCI Subsystem Settings", ["SETTINGS", "Advanced", "PCI Subsystem Settings"], 1, [
+                {"label": "Above 4G memory/Crypto Currency mining", "type": "leaf-toggle", "value": "Enabled", "options": ["Enabled", "Disabled"], "key_to_enter": "Enter"},
+                {"label": "Re-Size BAR Support", "type": "leaf-enum", "value": "Auto", "options": ["Auto", "Disabled", "Enabled"], "key_to_enter": "Enter"},
+            ]),
+        ]
+        title, path, cursor, entries = screens[screen]
+        return {
+            "screen_title": title,
+            "menu_path": path,
+            "cursor_at": cursor,
+            "entries": entries,
+            "blocklist_flag": False,
+            "blocklist_keywords": [],
+        }

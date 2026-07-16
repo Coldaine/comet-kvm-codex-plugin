@@ -8,6 +8,9 @@ from src.bios_sidecar.domain.models import (
     ActionPolicies, ConfidenceMetrics
 )
 from src.bios_sidecar.domain.enums import StateKind, ControlRole, RiskClass
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.bios_sidecar.adapters.base import BiosAdapter
 
 LOG = logging.getLogger("bios_sidecar.perception.normalize")
 
@@ -48,7 +51,8 @@ def normalize_bios_state(
     perceptual_hash: str,
     resolution: List[int],
     captured_at: str,
-    ocr_confidence: float = 0.95
+    ocr_confidence: float = 0.95,
+    adapter: Optional["BiosAdapter"] = None,
 ) -> BiosState:
     """Combines raw inputs and VLM parses to yield a BiosState domain object."""
     state_id = "state_" + uuid.uuid4().hex[:12]
@@ -65,17 +69,31 @@ def normalize_bios_state(
     # 2. Bios Metadata
     # Try to extract vendor from title or path
     title = vlm_data.get("screen_title") or ""
-    vendor = "msi" if "msi" in title.lower() or "click bios" in title.lower() else "generic"
+    vendor = "generic"
+    board_hint = "unknown"
+    family = "generic_uefi"
+
+    if adapter:
+        vendor = adapter.vendor
+        if vendor == "msi":
+            board_hint = "z690"
+            family = "click_bios"
+    else:
+        if "msi" in title.lower() or "click bios" in title.lower():
+            vendor = "msi"
+            board_hint = "z690"
+            family = "click_bios"
+
     bios = BiosMetadata(
         vendor=vendor,
-        board_hint="z690" if vendor == "msi" else "unknown",
-        family="click_bios" if vendor == "msi" else "generic_uefi",
+        board_hint=board_hint,
+        family=family,
         mode="advanced" if "ez" not in title.lower() else "ez"
     )
 
     # 3. Location Metadata
     menu_path = vlm_data.get("menu_path") or []
-    top_module = menu_path[0] if menu_path else "SETTINGS"
+    top_module = menu_path[0] if menu_path else (adapter.identify_module(title) if adapter else "SETTINGS")
     screen_kind = parse_state_kind(title)
 
     location = LocationMetadata(
@@ -110,11 +128,14 @@ def normalize_bios_state(
             role = ControlRole.INFO
 
         is_selected = (selected_idx is not None and idx == selected_idx)
+        if adapter:
+            label = adapter.normalize_label(label)
 
         # Risk classification
         risk_class = RiskClass.LOW
         lbl_l = label.lower()
-        if any(dw.lower() in lbl_l for dw in DANGEROUS_WORDS):
+        dw_list = adapter.hard_block_keywords if adapter and adapter.hard_block_keywords else DANGEROUS_WORDS
+        if any(dw.lower() in lbl_l for dw in dw_list):
             risk_class = RiskClass.BLOCKED
         elif role == ControlRole.SETTING:
             risk_class = RiskClass.MEDIUM
