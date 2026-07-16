@@ -172,9 +172,10 @@ This section is **this repo’s tool surface**, not the full firmware catalog. K
 ### Connection
 | Tool | Signature | Annotations | Description |
 |------|-----------|-------------|-------------|
-| `kvm_connect` | `(host, password?, username?)` | write, non-destructive, idempotent | Connect to Comet on LAN; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`) |
-| `kvm_disconnect` | `()` | write, non-destructive, idempotent | Close session + cleanup |
-| `kvm_status` | `()` | read-only, non-destructive, idempotent | Report connection state + held keys |
+| `kvm_connect` | `(host, password?, username?, target?)` | write, non-destructive, idempotent | Connect to Comet on LAN; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`); optional `target` enables multi-Comet sessions |
+| `kvm_disconnect` | `(target?)` | write, non-destructive, idempotent | Close one target or all sessions + cleanup |
+| `kvm_select_target` | `(target)` | write, non-destructive, idempotent | Select the active multi-Comet target for subsequent tools |
+| `kvm_status` | `()` | read-only, non-destructive, idempotent | Report connection state + held keys + target list |
 
 ### Keyboard
 | Tool | Signature | Annotations | Description |

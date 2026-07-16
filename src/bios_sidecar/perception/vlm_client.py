@@ -107,7 +107,12 @@ class VLMClient:
     ) -> str:
         hints: list[str] = []
         if previous_state:
-            title = previous_state.get("location", {}).get("screen_title")
+            location = previous_state.get("location")
+            if isinstance(location, dict):
+                title = location.get("screen_title")
+            else:
+                title = None
+            title = title or previous_state.get("screen_title")
             if title:
                 hints.append(f"Previous screen title was: {title}")
         if last_action:

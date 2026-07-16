@@ -144,9 +144,10 @@ Add to any MCP client config:
 ### Connection
 | Tool | Description |
 |------|-------------|
-| `kvm_connect(host, password?, username?)` | Connect to a Comet device; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`) |
-| `kvm_disconnect()` | Close the session |
-| `kvm_status()` | Report connection state and held keys |
+| `kvm_connect(host, password?, username?, target?)` | Connect to a Comet device; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`) |
+| `kvm_disconnect(target?)` | Close one target or all sessions |
+| `kvm_select_target(target)` | Select the active multi-Comet target |
+| `kvm_status()` | Report connection state, held keys, and targets |
 
 ### Keyboard
 | Tool | Description |
