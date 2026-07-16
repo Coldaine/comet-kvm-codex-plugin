@@ -1,0 +1,7 @@
+interface:
+  display_name: "Comet BIOS Triage"
+  short_description: "Inspect and change BIOS settings safely"
+  default_prompt: "Use $comet-bios-triage to inspect and verify one BIOS setting change."
+
+policy:
+  allow_implicit_invocation: true
