@@ -41,20 +41,23 @@ Response: Sets `auth_token` cookie; may return `two_step_required` for 2FA
 
 - Default username: `admin`
 - Password is passed per-session via `kvm_connect` or injected into the MCP process as `COMET_PASSWORD` — no credentials are stored server-side
-- If `auth_token` is not in cookies and `two_step_required` is true, 2FA is needed (not handled in current code)
-- Token is extracted from the `auth_token` cookie and used for subsequent WebSocket and HTTP calls
+- The client stores the cookie token and sends it as the HTTP `Token` header on subsequent requests
+- WebSocket auth uses `Cookie: auth_token=...` and `Token` headers (not a query-string token)
+- Clean disconnect calls `POST /api/auth/logout`
 
-> **Source:** `src/kvm_core/comet/client.py` (`CometClient.connect`). Verified 2026-07-10.
+> **Source:** `src/kvm_core/comet/client.py` (`CometClient.connect` / `disconnect`). Verified against PiKVM/GLKVM handbook 2026-07-15.
 
-### 2. Keyboard/Mouse: `WSS /api/ws?auth_token=<token>&stream=false`
+### 2. Keyboard/Mouse: `WSS /api/ws?stream=false`
 
 WebSocket connection for real-time input:
 - `stream=false` — video stream is not carried over WebSocket; screenshots use the HTTP snapshot endpoint instead
 - Keyboard events: keydown, keyup (with `finish=true` flag)
 - Mouse events: button press/release, absolute move (int16 coordinates), wheel scroll
-- A persistent ping loop (`_pinger_loop`) keeps the connection alive at 1-second intervals
+- Application ping: `{"event_type":"ping","event":{}}` (the `event` object is required)
+- A receiver task drains server events (`*_state`, `pong`, `kickout`) and caches the latest subsystem state
+- Intentional `kvm_hold_key` holds are watchdog-protected until their release deadline
 
-> **Source:** `src/kvm_core/comet/client.py` (WebSocket URL, send helpers, and pinger loop). Verified 2026-07-10.
+> **Source:** PiKVM handbook WebSocket section; `src/kvm_core/comet/client.py`.
 
 ### 3. Screenshot: `GET /api/streamer/snapshot`
 
@@ -83,32 +86,45 @@ These endpoints were checked against the target Comet at `192.168.0.126`. Destru
 
 | Endpoint | Implementation | Live verification | Purpose |
 |---|---|---|---|
-| `GET /api/info` | `comet_sysinfo` | Authenticated HTTP 200 on 2026-07-10 | Device metadata, firmware, and hardware info |
-| `POST /api/atx/*` | `comet_atx_power`, `comet_atx_click` | Endpoint existence only; action not invoked | ATX power/reset control |
-| `POST /api/msd/*` | `comet_msd_upload` | Endpoint existence only; upload not invoked | Upload media under `/userdata/media/` |
+| `GET /api/info` | `comet_sysinfo` / `comet_capabilities` | Authenticated HTTP 200 on 2026-07-10 | Device metadata, firmware, and hardware info |
+| `GET /api/atx` | `comet_power_state` | Endpoint existence only | ATX LED/power state |
+| `POST /api/atx/*` | `comet_atx_power`, `comet_atx_click` | Endpoint existence only; action not invoked | ATX power/reset (query params) |
+| `GET/POST /api/msd/*` | `comet_media_*`, `comet_msd_upload` | Endpoint existence only; upload not invoked | Virtual media lifecycle |
 | `POST /api/gpio/*` | No direct MCP tool | Endpoint existence only | Low-level GPIO for the ATX board |
+| `GET /api/wol/*` | `comet_wol_*` | Not yet live-verified | Wake-on-LAN |
+| `/redfish/v1/...` | `comet_redfish_power` | Not yet live-verified | Narrow Redfish power facade |
 
 ### ATX Power Control (`POST /api/atx/*`)
 
 **Requires the ATX add-on board** — a separate hardware accessory that wires to the motherboard's power/reset headers. Without this board, the API will return an error even when authenticated.
 
-The PiKVM ATX API typically supports:
-- `POST /api/atx/power` with `{"action": "on"|"off"|"reset"}`
-- `POST /api/atx/click` with `{"button": "power"|"reset"}` (momentary press, ~200ms)
+PiKVM/GLKVM ATX uses **query parameters**, not JSON bodies:
 
-MCP tools: `comet_atx_power`, `comet_atx_click` in `src/kvm_core/tools.py`.
+- `POST /api/atx/power?action=on|off|off_hard|reset_hard&wait=true`
+- `POST /api/atx/click?button=power|power_long|reset&wait=true`
+- `GET /api/atx` — read power/LED state
 
-### Mass Storage (`POST /api/msd/*`)
+MCP aliases: `reset` → `reset_hard`, `force_off` → `off_hard`.
 
-The Comet's `/userdata/media` partition (~5.3GB free on the 8GB model) is the write target for MSD operations. This is where BIOS maps and state databases should be persisted per `docs/decisions.md` D4.
+MCP tools: `comet_power_state`, `comet_atx_power`, `comet_atx_click`.
 
-MCP tool: `comet_msd_upload` in `src/kvm_core/tools.py` — uploads a file to `/userdata/media/` for on-device state persistence.
+### Mass Storage (`/api/msd/*`)
+
+Virtual media uses the PiKVM MSD contract:
+
+- `POST /api/msd/write?image=<name>` — raw image body + `Content-Length` (not multipart)
+- `POST /api/msd/write_remote?url=...&image=...` — Comet downloads the image
+- `POST /api/msd/set_params?image=...&cdrom=true&rw=false`
+- `POST /api/msd/set_connected?connected=true|false`
+- `GET /api/msd` — state / image list
+
+MCP tools: `comet_media_state`, `comet_media_upload`, `comet_media_fetch`, `comet_media_mount`, `comet_media_unmount`, `comet_media_remove`, `comet_media_reset` (plus legacy `comet_msd_upload`).
 
 ### System Info (`GET /api/info`)
 
-Returns device metadata: model, firmware version, serial, hardware capabilities. Useful for agent self-discovery.
+Returns device metadata: model, firmware version, serial, hardware capabilities. Connect-time discovery also probes `/api/upgrade/version`, `/api/system/capability`, and subsystem GETs.
 
-MCP tool: `comet_sysinfo` in `src/kvm_core/tools.py`.
+MCP tools: `comet_sysinfo`, `comet_capabilities`.
 
 ### GPIO (`POST /api/gpio/*`)
 
@@ -121,9 +137,10 @@ Low-level GPIO control for the ATX board. Typically not needed directly — the 
 ### Connection
 | Tool | Signature | Annotations | Description |
 |------|-----------|-------------|-------------|
-| `kvm_connect` | `(host, password?, username?)` | write, non-destructive, idempotent | Connect to Comet on LAN; omitted password resolves from the MCP process environment |
-| `kvm_disconnect` | `()` | write, non-destructive, idempotent | Close session + cleanup |
-| `kvm_status` | `()` | read-only, non-destructive, idempotent | Report connection state + held keys |
+| `kvm_connect` | `(host, password?, username?, target?)` | write, non-destructive, idempotent | Connect to Comet; optional multi-target id |
+| `kvm_disconnect` | `(target?)` | write, non-destructive, idempotent | Close one or all sessions |
+| `kvm_status` | `(target?)` | read-only, non-destructive, idempotent | Connection state, held keys, WS health |
+| `kvm_select_target` | `(target)` | write, non-destructive, idempotent | Select default multi-Comet target |
 
 ### Keyboard
 | Tool | Signature | Annotations | Description |
@@ -156,10 +173,18 @@ Low-level GPIO control for the ATX board. Typically not needed directly — the 
 ### Comet Hardware
 | Tool | Signature | Annotations | Description |
 |------|-----------|-------------|-------------|
-| `comet_atx_power` | `(action)` | write, destructive | ATX power on/off/reset (requires add-on board) |
-| `comet_atx_click` | `(button)` | write, destructive | Momentary power/reset pulse |
-| `comet_sysinfo` | `()` | read-only, non-destructive, idempotent | Device metadata and capabilities |
-| `comet_msd_upload` | `(remote_path, local_path)` | write, destructive | Upload file to `/userdata/media/` |
+| `comet_power_state` | `(target?)` | read-only | GET `/api/atx` |
+| `comet_atx_power` | `(action, wait?, target?)` | write, destructive | Query-param ATX power (`reset`→`reset_hard`) |
+| `comet_atx_click` | `(button, wait?, target?)` | write, destructive | `power` / `power_long` / `reset` |
+| `comet_sysinfo` | `(target?)` | read-only | Device metadata |
+| `comet_capabilities` | `(refresh?, target?)` | read-only | Connect-time capability profile |
+| `comet_msd_upload` | `(local_path, image_name?, target?)` | write, destructive | Raw streaming MSD upload |
+| `comet_media_*` | — | — | state/upload/fetch/mount/unmount/remove/reset |
+| `comet_wol_*` | — | — | list/scan/wake |
+| `comet_streamer_*` / `comet_recorder_*` | — | — | stream + recording controls |
+| `comet_metrics` | `(target?)` | read-only | Prometheus metrics text |
+| `comet_tailscale_status` | `(target?)` | read-only | Tailscale status |
+| `comet_redfish_power` | `(reset_type, target?)` | write, destructive | Redfish ComputerSystem.Reset |
 
 ### BIOS Workflow (sidecar)
 | Tool | Signature | Description |

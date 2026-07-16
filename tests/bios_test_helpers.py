@@ -86,6 +86,7 @@ def make_bios_state(
     *,
     state_id: str = "state_test",
     screen_title: str = "Advanced SETTINGS",
+    screen_kind: StateKind = StateKind.MENU_LIST,
     controls: Optional[list[ControlEntry]] = None,
     modal_present: bool = False,
     modal_type: Optional[str] = None,
@@ -112,7 +113,7 @@ def make_bios_state(
         frame=FrameMetadata("shot_1", "sha", phash, [64, 48], "2026-07-12T00:00:00"),
         bios=BiosMetadata("msi", "z690", "click_bios", "advanced"),
         location=LocationMetadata(
-            StateKind.MENU_LIST,
+            screen_kind,
             "SETTINGS",
             ["SETTINGS"],
             screen_title=screen_title,

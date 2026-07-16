@@ -2,10 +2,9 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
-import uuid
 from dataclasses import replace
 from typing import Optional
-from src.bios_sidecar.domain.models import BiosState, StateNode, FrameMetadata, ConfidenceMetrics
+from src.bios_sidecar.domain.models import BiosState, StateNode, ConfidenceMetrics
 from src.kvm_core.comet.client import CometClient
 from src.kvm_core.comet.capture import CaptureManager
 from src.kvm_core.ocr import OCRManager
@@ -36,48 +35,41 @@ class StateObserver:
         self.syncer = syncer
         self.store = store
 
-    def _reuse_matched_state(
+    def _reuse_page_identity(
         self,
         matched_node: StateNode,
+        live_state: BiosState,
         match_confidence: float,
-        *,
-        run_id: str,
-        device_id: str,
-        screenshot_id: str,
-        sha: str,
-        phash: str,
-        resolution: list,
-        captured_at: str,
-        ocr_confidence: float,
-    ) -> Optional[BiosState]:
-        """Clone representative BiosState with the live frame; skip VLM when possible."""
+    ) -> BiosState:
+        """Reuse only stable page identity from the graph; keep live interaction fields."""
         rep_id = matched_node.representative_state_id
         if not rep_id:
-            return None
+            return replace(
+                live_state,
+                confidence=ConfidenceMetrics(
+                    ocr=live_state.confidence.ocr,
+                    vlm=live_state.confidence.vlm,
+                    state=match_confidence,
+                ),
+            )
         representative = self.store.get_bios_state(rep_id)
         if representative is None:
-            LOG.info(
-                "Matched node %s but representative state %s missing; falling back to VLM",
-                matched_node.node_id,
-                rep_id,
-            )
-            return None
+            return live_state
 
+        # Page identity comes from the representative; selection/controls/modal stay live.
         return replace(
-            representative,
-            state_id="state_" + uuid.uuid4().hex[:12],
-            run_id=run_id,
-            device_id=device_id,
-            frame=FrameMetadata(
-                screenshot_id=screenshot_id,
-                sha256=sha,
-                perceptual_hash=phash,
-                resolution=resolution,
-                captured_at=captured_at,
+            live_state,
+            bios=representative.bios,
+            location=replace(
+                live_state.location,
+                top_module=representative.location.top_module or live_state.location.top_module,
+                breadcrumb=list(representative.location.breadcrumb or live_state.location.breadcrumb),
+                screen_title=live_state.location.screen_title or representative.location.screen_title,
+                screen_kind=live_state.location.screen_kind,
             ),
             confidence=ConfidenceMetrics(
-                ocr=ocr_confidence,
-                vlm=0.0,  # skipped — graph match reused prior grounding
+                ocr=live_state.confidence.ocr,
+                vlm=live_state.confidence.vlm,
                 state=match_confidence,
             ),
         )
@@ -91,15 +83,15 @@ class StateObserver:
         last_action: Optional[str] = None
     ) -> BiosState:
         """
-        Capture screenshot + OCR, match the graph first (D7), and call VLM only
-        when grounding a previously unseen screen.
+        Capture screenshot + OCR, match page identity from the graph, and always
+        re-extract live interaction state (selection/controls/modal) via VLM.
         """
         # 1. Capture screenshot and cache it
         img_bytes, screenshot_id, file_path = await self.capture_mgr.capture_frame(client, preview=False)
         sha = calculate_sha256(img_bytes)
         phash = calculate_visual_phash(img_bytes)
 
-        # 2. Run local OCR (primary text source; VLM is grounding-only)
+        # 2. Run local OCR (primary text source; VLM grounds live interaction)
         ocr_res = await asyncio.to_thread(self.ocr_mgr.run_ocr, img_bytes)
         ocr_h = calculate_ocr_hash(ocr_res.get("elements", []))
         ocr_conf = sum(e["confidence"] for e in ocr_res.get("elements", [])) / max(1, len(ocr_res.get("elements", []))) if ocr_res.get("elements") else 90.0
@@ -107,51 +99,37 @@ class StateObserver:
         resolution = [ocr_res.get("width", 1920), ocr_res.get("height", 1080)]
         now_str = datetime.datetime.now().isoformat()
 
-        # 3. Graph match BEFORE VLM (phash + OCR fingerprint; semantic left empty
-        #    until we have structured fields from a prior grounded state).
+        # 3. Graph match for page identity only (never reuse live selection/values/modal)
         matched_node, match_confidence = self.syncer.matcher.match_state(
             phash, ocr_h, semantic_hash=""
         )
-        state: Optional[BiosState] = None
-        if matched_node and match_confidence >= _MATCH_CONFIDENCE_MIN:
-            state = self._reuse_matched_state(
-                matched_node,
-                match_confidence,
-                run_id=run_id,
-                device_id=device_id,
-                screenshot_id=screenshot_id,
-                sha=sha,
-                phash=phash,
-                resolution=resolution,
-                captured_at=now_str,
-                ocr_confidence=ocr_confidence,
-            )
-            if state is not None:
-                LOG.info(
-                    "OCR-first match hit node %s (confidence=%.2f); skipping VLM",
-                    matched_node.node_id,
-                    match_confidence,
-                )
 
-        # 4. Unmatched (or missing representative): VLM ground, then normalize
-        if state is None:
-            prev_dict = previous_state.to_dict() if previous_state else None
-            vlm_res = await self.vlm_client.parse_screenshot(
-                img_bytes,
-                previous_state=prev_dict,
-                last_action=last_action,
+        # 4. Always extract live interaction state from the current frame
+        prev_dict = previous_state.to_dict() if previous_state else None
+        vlm_res = await self.vlm_client.parse_screenshot(
+            img_bytes,
+            previous_state=prev_dict,
+            last_action=last_action,
+        )
+        state = normalize_bios_state(
+            run_id=run_id,
+            device_id=device_id,
+            vlm_data=vlm_res,
+            screenshot_id=screenshot_id,
+            sha256=sha,
+            perceptual_hash=phash,
+            resolution=resolution,
+            captured_at=now_str,
+            ocr_confidence=ocr_confidence,
+        )
+
+        if matched_node and match_confidence >= _MATCH_CONFIDENCE_MIN:
+            LOG.info(
+                "Page identity match node %s (confidence=%.2f); live fields re-extracted",
+                matched_node.node_id,
+                match_confidence,
             )
-            state = normalize_bios_state(
-                run_id=run_id,
-                device_id=device_id,
-                vlm_data=vlm_res,
-                screenshot_id=screenshot_id,
-                sha256=sha,
-                perceptual_hash=phash,
-                resolution=resolution,
-                captured_at=now_str,
-                ocr_confidence=ocr_confidence,
-            )
+            state = self._reuse_page_identity(matched_node, state, match_confidence)
 
         # 5. Persist live observation
         self.store.save_bios_state(state)

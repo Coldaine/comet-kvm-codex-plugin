@@ -1,9 +1,13 @@
 from __future__ import annotations
+
 import asyncio
 import logging
 import time
 import json
-from typing import Optional
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Optional
 from urllib.parse import urlparse
 import httpx
 import websockets
@@ -13,6 +17,8 @@ LOG = logging.getLogger("kvm_core.comet")
 
 # US key mapping
 CHAR_TO_KEY: dict[str, tuple[str, bool]] = {}
+
+
 def _build_keymap() -> dict[str, tuple[str, bool]]:
     m: dict[str, tuple[str, bool]] = {}
     for c in "abcdefghijklmnopqrstuvwxyz":
@@ -42,6 +48,7 @@ def _build_keymap() -> dict[str, tuple[str, bool]]:
     }
     m.update(extras)
     return m
+
 
 CHAR_TO_KEY.update(_build_keymap())
 
@@ -82,6 +89,28 @@ MODIFIER_KEYS = {
     "MetaLeft", "MetaRight",
 }
 
+ATX_POWER_ALIASES = {
+    "reset": "reset_hard",
+    "force_off": "off_hard",
+    "hard_off": "off_hard",
+    "off_hard": "off_hard",
+    "reset_hard": "reset_hard",
+    "on": "on",
+    "off": "off",
+}
+ATX_POWER_ACTIONS = set(ATX_POWER_ALIASES.values())
+ATX_CLICK_BUTTONS = {"power", "power_long", "reset"}
+
+MSD_UPLOAD_TIMEOUT = httpx.Timeout(600.0, connect=30.0)
+
+
+@dataclass
+class HeldKey:
+    pressed_at: float
+    release_deadline: float | None = None
+    watchdog_protected: bool = False
+
+
 def resolve_key_name(name: str) -> str:
     if not name:
         raise ValueError("empty key name")
@@ -89,20 +118,47 @@ def resolve_key_name(name: str) -> str:
         return name
     return KEY_ALIASES.get(name.lower(), name)
 
+
+def _unwrap_ok_json(response: httpx.Response) -> dict[str, Any]:
+    """Parse PiKVM/GLKVM JSON envelope when present."""
+    content_type = response.headers.get("content-type", "").lower()
+    if "json" not in content_type:
+        return {"status": response.status_code, "raw": response.text}
+    payload = response.json()
+    if isinstance(payload, dict) and "result" in payload:
+        return payload.get("result") if payload.get("ok", True) else payload
+    return payload if isinstance(payload, dict) else {"result": payload}
+
+
 class CometClient:
-    def __init__(self, host: str, username: str = "admin", password: str = "", verify_ssl: bool = False):
+    def __init__(
+        self,
+        host: str,
+        username: str = "admin",
+        password: str = "",
+        verify_ssl: bool = False,
+        target_id: str = "default",
+    ):
         self.host = host
         self.username = username
         self.password = password
         self.verify_ssl = verify_ssl
+        self.target_id = target_id
         self.base_url = f"https://{host}" if "://" not in host else host.rstrip("/")
         self.http: Optional[httpx.AsyncClient] = None
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
-        self.held: dict[str, float] = {}  # key -> down_at (monotonic)
+        self.auth_token: Optional[str] = None
+        self.held: dict[str, HeldKey] = {}
         self.send_lock = asyncio.Lock()
         self.watchdog_task: Optional[asyncio.Task] = None
         self.pinger_task: Optional[asyncio.Task] = None
+        self.receiver_task: Optional[asyncio.Task] = None
         self._ocr_state_cache: Optional[dict] = None
+        self.server_state: dict[str, Any] = {}
+        self.last_server_event_at: float | None = None
+        self.last_pong_at: float | None = None
+        self.capabilities: dict[str, Any] = {}
+        self._ws_healthy = False
 
         self.min_down_up_gap = 0.025
         self.inter_char_gap = 0.010
@@ -111,11 +167,21 @@ class CometClient:
         self.watchdog_period = 0.040
         self.ws_ping_period = 1.0
 
+    def _auth_headers(self) -> dict[str, str]:
+        if not self.auth_token:
+            return {}
+        return {"Token": self.auth_token}
+
     async def connect(self) -> bool:
         if self.http is not None:
             await self.disconnect()
 
-        self.http = httpx.AsyncClient(verify=self.verify_ssl, timeout=10.0, follow_redirects=True)
+        self.http = httpx.AsyncClient(
+            verify=self.verify_ssl,
+            timeout=10.0,
+            follow_redirects=True,
+            headers={},
+        )
         try:
             login = await self.http.post(
                 f"{self.base_url}/api/auth/login",
@@ -124,16 +190,31 @@ class CometClient:
             login.raise_for_status()
             token = self.http.cookies.get("auth_token")
             if not token:
+                body = {}
+                try:
+                    body = login.json()
+                except Exception:
+                    pass
+                if isinstance(body, dict) and body.get("result", {}).get("two_step_required"):
+                    raise RuntimeError("two_step_required: complete 2FA before connecting")
                 raise RuntimeError("Login succeeded but no auth_token cookie returned.")
+            self.auth_token = token
+            self.http.headers["Token"] = token
         except Exception as e:
             if self.http:
                 await self.http.aclose()
             self.http = None
+            self.auth_token = None
             raise RuntimeError(f"login failed against {self.base_url}: {e}") from e
 
         parsed = urlparse(self.base_url)
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
-        ws_url = f"{ws_scheme}://{parsed.netloc}/api/ws?auth_token={token}&stream=false"
+        # Prefer cookie/header auth; keep stream=false. Avoid embedding token in logs.
+        ws_url = f"{ws_scheme}://{parsed.netloc}/api/ws?stream=false"
+        additional_headers = {
+            "Cookie": f"auth_token={token}",
+            "Token": token,
+        }
 
         sslctx = None
         if ws_scheme == "wss" and not self.verify_ssl:
@@ -148,21 +229,49 @@ class CometClient:
                 max_size=8 * 1024 * 1024,
                 open_timeout=10.0,
                 ping_interval=None,
+                additional_headers=additional_headers,
             )
+        except TypeError:
+            # Older websockets used extra_headers
+            try:
+                self.ws = await websockets.connect(
+                    ws_url,
+                    ssl=sslctx,
+                    max_size=8 * 1024 * 1024,
+                    open_timeout=10.0,
+                    ping_interval=None,
+                    extra_headers=additional_headers,
+                )
+            except Exception as e:
+                await self._cleanup_failed_connect()
+                raise RuntimeError(f"WebSocket connection failed: {e}") from e
         except Exception as e:
-            if self.http:
-                await self.http.aclose()
-            self.http = None
-            self.ws = None
+            await self._cleanup_failed_connect()
             raise RuntimeError(f"WebSocket connection failed: {e}") from e
 
+        self._ws_healthy = True
         self.watchdog_task = asyncio.create_task(self._watchdog_loop(), name="comet-watchdog")
         self.pinger_task = asyncio.create_task(self._pinger_loop(), name="comet-pinger")
-        LOG.info("Connected to Comet KVM at %s", self.base_url)
+        self.receiver_task = asyncio.create_task(self._receiver_loop(), name="comet-receiver")
+        try:
+            self.capabilities = await self.discover_capabilities()
+        except Exception as exc:
+            LOG.warning("Capability discovery failed: %s", type(exc).__name__)
+            self.capabilities = {"error": type(exc).__name__}
+        LOG.info("Connected to Comet KVM at %s (target=%s)", self.base_url, self.target_id)
         return True
 
+    async def _cleanup_failed_connect(self) -> None:
+        if self.http:
+            try:
+                await self.http.aclose()
+            except Exception:
+                pass
+        self.http = None
+        self.ws = None
+        self.auth_token = None
+
     async def disconnect(self):
-        # Release held keys first
         try:
             async with self.send_lock:
                 for k in list(self.held.keys()):
@@ -175,7 +284,7 @@ class CometClient:
 
         self.held.clear()
 
-        for t in (self.watchdog_task, self.pinger_task):
+        for t in (self.watchdog_task, self.pinger_task, self.receiver_task):
             if t:
                 t.cancel()
                 try:
@@ -185,6 +294,8 @@ class CometClient:
 
         self.watchdog_task = None
         self.pinger_task = None
+        self.receiver_task = None
+        self._ws_healthy = False
 
         if self.ws:
             try:
@@ -193,14 +304,21 @@ class CometClient:
                 pass
             self.ws = None
 
+        if self.http and self.auth_token:
+            try:
+                await self.http.post(f"{self.base_url}/api/auth/logout")
+            except Exception:
+                pass
+
         if self.http:
             try:
                 await self.http.aclose()
             except Exception:
                 pass
             self.http = None
+        self.auth_token = None
         self._ocr_state_cache = None
-        LOG.info("Disconnected from Comet KVM")
+        LOG.info("Disconnected from Comet KVM (target=%s)", self.target_id)
 
     async def get_screenshot(self, preview: bool = True, max_width: int = 1024, quality: int = 60) -> bytes:
         if not self.http:
@@ -269,7 +387,15 @@ class CometClient:
         async with self.send_lock:
             await self._ws_send_key(key, state, finish)
 
-    async def _ws_send_key(self, key: str, state: bool, finish: bool = False):
+    async def _ws_send_key(
+        self,
+        key: str,
+        state: bool,
+        finish: bool = False,
+        *,
+        release_deadline: float | None = None,
+        watchdog_protected: bool = False,
+    ):
         if not self.ws:
             raise RuntimeError("WS disconnected")
         payload = json.dumps({
@@ -278,7 +404,11 @@ class CometClient:
         })
         await self.ws.send(payload)
         if state:
-            self.held[key] = time.monotonic()
+            self.held[key] = HeldKey(
+                pressed_at=time.monotonic(),
+                release_deadline=release_deadline,
+                watchdog_protected=watchdog_protected,
+            )
         else:
             self.held.pop(key, None)
 
@@ -321,8 +451,15 @@ class CometClient:
     async def hold_key(self, key: str, duration_ms: int) -> dict:
         duration_ms = max(1, min(5000, int(duration_ms)))
         canonical = resolve_key_name(key)
+        deadline = time.monotonic() + (duration_ms / 1000.0)
         async with self.send_lock:
-            await self._ws_send_key(canonical, state=True, finish=False)
+            await self._ws_send_key(
+                canonical,
+                state=True,
+                finish=False,
+                release_deadline=deadline,
+                watchdog_protected=True,
+            )
         try:
             await asyncio.sleep(duration_ms / 1000.0)
         finally:
@@ -399,20 +536,34 @@ class CometClient:
         await self._ws_send_key(key, state=False, finish=True)
 
     async def _press_with_modifiers(self, key: str, modifiers: list[str]):
-        for m in modifiers:
-            await self._ws_send_key(m, state=True, finish=False)
-            await asyncio.sleep(self.mod_gap)
-        await self._atomic_press(key)
-        for m in reversed(modifiers):
-            await self._ws_send_key(m, state=False, finish=True)
-            await asyncio.sleep(self.mod_gap)
+        try:
+            for m in modifiers:
+                await self._ws_send_key(m, state=True, finish=False)
+                await asyncio.sleep(self.mod_gap)
+            await self._atomic_press(key)
+        finally:
+            for m in reversed(modifiers):
+                if m in self.held:
+                    try:
+                        await self._ws_send_key(m, state=False, finish=True)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(self.mod_gap)
+
+    def _is_stale_hold(self, key: str, info: HeldKey, now: float) -> bool:
+        if info.watchdog_protected:
+            if info.release_deadline is None:
+                return False
+            # Only force-release well past the intentional deadline.
+            return now > (info.release_deadline + self.stale_s)
+        return (now - info.pressed_at) > self.stale_s
 
     async def _watchdog_loop(self):
         try:
             while True:
                 await asyncio.sleep(self.watchdog_period)
                 now = time.monotonic()
-                stale = [k for k, t in self.held.items() if now - t > self.stale_s]
+                stale = [k for k, info in self.held.items() if self._is_stale_hold(k, info, now)]
                 for k in stale:
                     LOG.warning("watchdog releasing stale key %s", k)
                     try:
@@ -420,7 +571,7 @@ class CometClient:
                             await self._ws_send_key(k, state=False, finish=True)
                     except Exception as e:
                         LOG.error("watchdog send failed for %s: %s", k, e)
-                    self.held.pop(k, None)
+                        self.held.pop(k, None)
         except asyncio.CancelledError:
             return
 
@@ -430,9 +581,43 @@ class CometClient:
                 await asyncio.sleep(self.ws_ping_period)
                 if self.ws:
                     try:
-                        await self.ws.send(json.dumps({"event_type": "ping"}))
+                        await self.ws.send(json.dumps({"event_type": "ping", "event": {}}))
                     except Exception:
+                        self._ws_healthy = False
                         return
+        except asyncio.CancelledError:
+            return
+
+    async def _receiver_loop(self):
+        try:
+            while self.ws is not None:
+                try:
+                    message = await self.ws.recv()
+                except Exception:
+                    self._ws_healthy = False
+                    return
+                self.last_server_event_at = time.monotonic()
+                if isinstance(message, (bytes, bytearray)):
+                    continue
+                try:
+                    data = json.loads(message)
+                except Exception:
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                event_type = data.get("event_type")
+                event = data.get("event")
+                if event_type == "pong":
+                    self.last_pong_at = time.monotonic()
+                    continue
+                if event_type == "kickout":
+                    LOG.warning("Comet WebSocket kickout received")
+                    self._ws_healthy = False
+                    return
+                if isinstance(event_type, str) and event_type.endswith("_state"):
+                    self.server_state[event_type] = event
+                elif isinstance(event_type, str):
+                    self.server_state[event_type] = event
         except asyncio.CancelledError:
             return
 
@@ -440,78 +625,362 @@ class CometClient:
         if self.http is None or self.ws is None:
             return False
         if hasattr(self.ws, "state"):
-            return self.ws.state.name == "OPEN"
-        return not self.ws.closed
+            return self.ws.state.name == "OPEN" and self._ws_healthy
+        return (not self.ws.closed) and self._ws_healthy
 
-    # ── ATX Power Control ──────────────────────────────────────────
+    # ── ATX Power Control (query-param contract) ───────────────────
 
-    async def atx_power(self, action: str) -> dict:
-        """Power on/off/reset the target via ATX board. Requires ATX hardware."""
+    async def atx_state(self) -> dict:
         if not self.http:
             raise RuntimeError("Not connected")
-        valid = {"on", "off", "reset"}
-        if action not in valid:
-            raise ValueError(f"Invalid ATX action '{action}'. Use: {valid}")
+        r = await self.http.get(f"{self.base_url}/api/atx")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def atx_power(self, action: str, wait: bool = True) -> dict:
+        """Power on/off/reset via ATX. Uses query params per PiKVM/GLKVM."""
+        if not self.http:
+            raise RuntimeError("Not connected")
+        action = ATX_POWER_ALIASES.get(action, action)
+        if action not in ATX_POWER_ACTIONS:
+            raise ValueError(f"Invalid ATX action '{action}'. Use: {sorted(ATX_POWER_ACTIONS)}")
         r = await self.http.post(
             f"{self.base_url}/api/atx/power",
-            json={"action": action},
+            params={"action": action, "wait": str(wait).lower()},
         )
         if not r.is_success:
             body = r.text
             if "ATX" in body or "not connected" in body or "not available" in body:
                 raise RuntimeError(f"ATX board not detected or not connected: {body}")
             r.raise_for_status()
-        return {"action": action, "status": r.status_code}
+        return {"action": action, "wait": wait, "status": r.status_code, "result": _unwrap_ok_json(r)}
 
-    async def atx_click(self, button: str) -> dict:
-        """
-        Momentary press of power/reset button (~200ms pulse).
-        Preferred over atx_power for clean reboots.
-        """
+    async def atx_click(self, button: str, wait: bool = True) -> dict:
+        """Momentary ATX button press via query params."""
         if not self.http:
             raise RuntimeError("Not connected")
-        valid = {"power", "reset"}
-        if button not in valid:
-            raise ValueError(f"Invalid ATX button '{button}'. Use: {valid}")
+        if button not in ATX_CLICK_BUTTONS:
+            raise ValueError(f"Invalid ATX button '{button}'. Use: {sorted(ATX_CLICK_BUTTONS)}")
         r = await self.http.post(
             f"{self.base_url}/api/atx/click",
-            json={"button": button},
+            params={"button": button, "wait": str(wait).lower()},
         )
         if not r.is_success:
             r.raise_for_status()
-        return {"button": button, "status": r.status_code}
+        return {"button": button, "wait": wait, "status": r.status_code, "result": _unwrap_ok_json(r)}
 
-    # ── System Info ────────────────────────────────────────────────
+    # ── System Info / Capabilities ─────────────────────────────────
 
-    async def get_sysinfo(self) -> dict:
-        """Retrieve device metadata: model, firmware version, capabilities."""
+    async def get_sysinfo(self, fields: str = "system,meta,extras") -> dict:
         if not self.http:
             raise RuntimeError("Not connected")
-        r = await self.http.get(f"{self.base_url}/api/info")
+        r = await self.http.get(f"{self.base_url}/api/info", params={"fields": fields})
         r.raise_for_status()
-        return r.json()
+        return _unwrap_ok_json(r)
 
-    # ── Mass Storage (on-device file persistence) ──────────────────
-
-    async def msd_upload(self, remote_path: str, data: bytes) -> dict:
-        """
-        Upload a file to the Comet's /userdata/media/ partition.
-        Used for persisting BIOS maps and state databases on-device.
-
-        remote_path: relative path under /userdata/media/
-        """
+    async def get_version(self) -> dict:
         if not self.http:
             raise RuntimeError("Not connected")
-        # Normalize: strip leading slash, prepend userdata/media base
-        remote_path = remote_path.lstrip("/")
-        if not remote_path.startswith("userdata/media/"):
-            remote_path = f"userdata/media/{remote_path}"
+        r = await self.http.get(f"{self.base_url}/api/upgrade/version")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def get_system_capability(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/system/capability")
+        if r.status_code == 404:
+            return {"available": False}
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def discover_capabilities(self) -> dict:
+        """Connect-time capability profile for this Comet."""
+        if not self.http:
+            raise RuntimeError("Not connected")
+
+        async def _safe_get(path: str, params: dict | None = None) -> dict:
+            try:
+                r = await self.http.get(f"{self.base_url}{path}", params=params or {})
+                if not r.is_success:
+                    return {"ok": False, "status": r.status_code}
+                return {"ok": True, "result": _unwrap_ok_json(r)}
+            except Exception as exc:
+                return {"ok": False, "error": type(exc).__name__}
+
+        version = await _safe_get("/api/upgrade/version")
+        info = await _safe_get("/api/info", {"fields": "system,meta,extras"})
+        capability = await _safe_get("/api/system/capability")
+        subsystems = {}
+        for name, path in (
+            ("hid", "/api/hid"),
+            ("atx", "/api/atx"),
+            ("msd", "/api/msd"),
+            ("streamer", "/api/streamer"),
+            ("ocr", "/api/streamer/ocr"),
+            ("recorder", "/api/recorder"),
+            ("tailscale", "/api/tailscale/status"),
+            ("wol", "/api/wol/list"),
+        ):
+            subsystems[name] = await _safe_get(path)
+
+        features = {name: bool(payload.get("ok")) for name, payload in subsystems.items()}
+        kvmd = None
+        model = None
+        firmware = None
+        if info.get("ok") and isinstance(info.get("result"), dict):
+            system = info["result"].get("system") or info["result"]
+            if isinstance(system, dict):
+                kvmd = (system.get("kvmd") or {}).get("version") if isinstance(system.get("kvmd"), dict) else system.get("kvmd")
+        if version.get("ok") and isinstance(version.get("result"), dict):
+            firmware = version["result"].get("version") or version["result"].get("firmware")
+            model = version["result"].get("model") or version["result"].get("board")
+
+        profile = {
+            "target_id": self.target_id,
+            "host": self.base_url,
+            "model": model,
+            "firmware": firmware,
+            "kvmd": kvmd,
+            "features": features,
+            "version": version,
+            "info": info,
+            "capability": capability,
+            "subsystems": subsystems,
+        }
+        self.capabilities = profile
+        return profile
+
+    # ── Mass Storage lifecycle ─────────────────────────────────────
+
+    async def msd_state(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/msd")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def msd_upload_file(self, local_path: str, image_name: str | None = None) -> dict:
+        """Stream a local file as raw body to POST /api/msd/write?image=..."""
+        if not self.http:
+            raise RuntimeError("Not connected")
+        path = Path(local_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"Local media file not found: {local_path}")
+        image = image_name or path.name
+        size = path.stat().st_size
+
+        headers = {
+            **self._auth_headers(),
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(size),
+        }
+
+        async def _body():
+            with path.open("rb") as fh:
+                while True:
+                    chunk = fh.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
 
         r = await self.http.post(
             f"{self.base_url}/api/msd/write",
-            data={"path": remote_path},
-            files={"file": ("blob", data, "application/octet-stream")},
+            params={"image": image},
+            content=_body(),
+            headers=headers,
+            timeout=MSD_UPLOAD_TIMEOUT,
         )
         if not r.is_success:
             r.raise_for_status()
-        return {"path": remote_path, "size": len(data), "status": r.status_code}
+        return {
+            "image": image,
+            "bytes": size,
+            "status": r.status_code,
+            "result": _unwrap_ok_json(r),
+        }
+
+    async def msd_fetch_remote(self, url: str, image_name: str) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(
+            f"{self.base_url}/api/msd/write_remote",
+            params={"url": url, "image": image_name},
+            timeout=MSD_UPLOAD_TIMEOUT,
+        )
+        if not r.is_success:
+            r.raise_for_status()
+        # May be NDJSON progress; return text when not JSON.
+        try:
+            return {"image": image_name, "url": url, "result": _unwrap_ok_json(r)}
+        except Exception:
+            return {"image": image_name, "url": url, "raw": r.text, "status": r.status_code}
+
+    async def msd_set_params(self, image: str, cdrom: bool = True, rw: bool = False) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(
+            f"{self.base_url}/api/msd/set_params",
+            params={
+                "image": image,
+                "cdrom": str(cdrom).lower(),
+                "rw": str(rw).lower(),
+            },
+        )
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def msd_set_connected(self, connected: bool) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(
+            f"{self.base_url}/api/msd/set_connected",
+            params={"connected": str(connected).lower()},
+        )
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def msd_mount(self, image_name: str, mode: str = "cdrom", read_only: bool = True) -> dict:
+        cdrom = mode.lower() in {"cdrom", "cd", "iso"}
+        params = await self.msd_set_params(image_name, cdrom=cdrom, rw=not read_only)
+        connected = await self.msd_set_connected(True)
+        return {"image": image_name, "mode": mode, "read_only": read_only, "params": params, "connected": connected}
+
+    async def msd_unmount(self) -> dict:
+        return await self.msd_set_connected(False)
+
+    async def msd_remove(self, image_name: str) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(
+            f"{self.base_url}/api/msd/remove",
+            params={"image": image_name},
+        )
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def msd_reset(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(f"{self.base_url}/api/msd/reset")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    # Backward-compatible name used by older tools/tests.
+    async def msd_upload(self, remote_path: str, data: bytes) -> dict:
+        """Deprecated: prefer msd_upload_file. Writes bytes via raw MSD protocol."""
+        if not self.http:
+            raise RuntimeError("Not connected")
+        image = Path(remote_path).name or "upload.bin"
+        headers = {
+            **self._auth_headers(),
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(len(data)),
+        }
+        r = await self.http.post(
+            f"{self.base_url}/api/msd/write",
+            params={"image": image},
+            content=data,
+            headers=headers,
+            timeout=MSD_UPLOAD_TIMEOUT,
+        )
+        if not r.is_success:
+            r.raise_for_status()
+        return {"image": image, "path": remote_path, "size": len(data), "status": r.status_code}
+
+    # ── WOL / recorder / metrics / stream / tailscale ──────────────
+
+    async def wol_list(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/wol/list")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def wol_scan(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/wol/scan")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def wol_wake(self, mac: str) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(f"{self.base_url}/api/wol/wake", params={"mac": mac})
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def streamer_state(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/streamer")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def streamer_set_params(self, **params: Any) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        query = {k: str(v).lower() if isinstance(v, bool) else str(v) for k, v in params.items() if v is not None}
+        r = await self.http.post(f"{self.base_url}/api/streamer/set_params", params=query)
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def recorder_state(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/recorder")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def recorder_start(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(f"{self.base_url}/api/recorder/start")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def recorder_stop(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(f"{self.base_url}/api/recorder/stop")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def prometheus_metrics(self) -> str:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/export/prometheus/metrics")
+        r.raise_for_status()
+        return r.text
+
+    async def tailscale_status(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/tailscale/status")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def tailscale_config(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/api/tailscale/config")
+        r.raise_for_status()
+        return _unwrap_ok_json(r)
+
+    async def redfish_system(self) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.get(f"{self.base_url}/redfish/v1/Systems/0")
+        r.raise_for_status()
+        return r.json()
+
+    async def redfish_reset(self, reset_type: str) -> dict:
+        if not self.http:
+            raise RuntimeError("Not connected")
+        r = await self.http.post(
+            f"{self.base_url}/redfish/v1/Systems/0/Actions/ComputerSystem.Reset",
+            json={"ResetType": reset_type},
+        )
+        r.raise_for_status()
+        return {"reset_type": reset_type, "status": r.status_code}

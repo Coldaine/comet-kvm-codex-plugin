@@ -14,11 +14,8 @@ from src.kvm_core.ocr import validate_psm
 LOG = logging.getLogger("kvm_core.tools")
 
 
-def _require_client():
-    r = get_kvm_runtime()
-    if r.client is None or not r.client.is_connected():
-        raise RuntimeError("Not connected. Call kvm_connect first.")
-    return r.client
+def _require_client(target: str | None = None):
+    return get_kvm_runtime().get_client(target)
 
 
 def _safe_screenshot_path(requested_path: str) -> Path:
@@ -33,12 +30,37 @@ def _safe_screenshot_path(requested_path: str) -> Path:
     return destination
 
 
+def resolve_screenshot_ref(screenshot_ref: str) -> Path:
+    """Resolve an opaque screenshot id/name strictly under the screenshot cache."""
+    requested = Path(screenshot_ref)
+    if requested.is_absolute() or ".." in requested.parts:
+        raise ValueError("invalid screenshot reference")
+    root = Path(get_kvm_runtime().capture_mgr.cache_dir).resolve()
+    candidates = [
+        (root / requested).resolve(),
+        (root / f"{screenshot_ref}.jpg").resolve(),
+        (root / requested.name).resolve(),
+    ]
+    for candidate in candidates:
+        if root != candidate and root not in candidate.parents:
+            continue
+        if candidate.is_file() and candidate.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+            return candidate
+    raise FileNotFoundError(f"Screenshot ref not found in cache: {screenshot_ref}")
+
+
 @mcp.tool(name="kvm_connect", annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
-async def kvm_connect(host: str, password: str | None = None, username: str = "admin") -> dict:
+async def kvm_connect(
+    host: str,
+    password: str | None = None,
+    username: str = "admin",
+    target: str = "default",
+) -> dict:
     """Connect to a GLKVM device on LAN and authenticate.
 
     When no password is supplied, use a credential injected into this MCP
     process instead of exposing the credential in a tool call.
+    Optional target id enables multi-Comet sessions.
     """
     if password is None:
         password = os.environ.get("COMET_PASSWORD") or os.environ.get("GLCOMET_ADMIN_PASSWORD")
@@ -48,16 +70,23 @@ async def kvm_connect(host: str, password: str | None = None, username: str = "a
             "COMET_PASSWORD/GLCOMET_ADMIN_PASSWORD into the MCP process."
         )
     r = get_kvm_runtime()
-    ok = await r.connect(host=host, username=username, password=password)
-    return {"connected": ok, "host": r.client.base_url, "message": "ok"}
+    ok = await r.connect(host=host, username=username, password=password, target=target)
+    client = r.get_client(target)
+    return {
+        "connected": ok,
+        "host": client.base_url,
+        "target": target,
+        "capabilities": client.capabilities,
+        "message": "ok",
+    }
 
 
 @mcp.tool(name="kvm_disconnect", annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
-async def kvm_disconnect() -> dict:
-    """Close the WebSocket and HTTP session."""
+async def kvm_disconnect(target: str | None = None) -> dict:
+    """Close WebSocket/HTTP session for one target, or all targets when omitted."""
     r = get_kvm_runtime()
-    await r.disconnect()
-    return {"connected": False, "message": "disconnected"}
+    await r.disconnect(target)
+    return {"connected": False, "target": target, "targets": r.list_targets(), "message": "disconnected"}
 
 
 @mcp.tool(name="kvm_send_text", annotations={"readOnlyHint": False, "destructiveHint": True})
@@ -277,51 +306,218 @@ async def kvm_ocr_click(text: str, button: str = "left", count: int = 1, search_
 
 
 @mcp.tool(name="kvm_status", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
-async def kvm_status() -> dict:
+async def kvm_status(target: str | None = None) -> dict:
     """Report current active connection status."""
     r = get_kvm_runtime()
-    if r.client is None or not r.client.is_connected():
-        return {"connected": False, "host": "", "held_keys": [], "ws_open": False}
+    try:
+        client = r.get_client(target)
+    except RuntimeError:
+        return {
+            "connected": False,
+            "host": "",
+            "held_keys": [],
+            "ws_open": False,
+            "selected_target": r.selected_target,
+            "targets": r.list_targets(),
+        }
     return {
         "connected": True,
-        "host": r.client.base_url,
-        "held_keys": list(r.client.held.keys()),
-        "ws_open": r.client.is_connected()
+        "host": client.base_url,
+        "target": client.target_id,
+        "held_keys": list(client.held.keys()),
+        "ws_open": client.is_connected(),
+        "last_server_event_at": client.last_server_event_at,
+        "last_pong_at": client.last_pong_at,
+        "server_state_keys": sorted(client.server_state.keys()),
+        "capabilities": client.capabilities,
+        "selected_target": r.selected_target,
+        "targets": r.list_targets(),
     }
 
 
+@mcp.tool(name="kvm_select_target", annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True})
+async def kvm_select_target(target: str) -> dict:
+    """Select the default Comet target for subsequent tool calls."""
+    r = get_kvm_runtime()
+    selected = r.select_target(target)
+    return {"selected_target": selected, "targets": r.list_targets()}
+
+
+@mcp.tool(name="comet_power_state", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_power_state(target: str | None = None) -> dict:
+    """Read ATX power/LED state via GET /api/atx."""
+    client = _require_client(target)
+    return await client.atx_state()
+
+
 @mcp.tool(name="comet_atx_power", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_atx_power(action: str) -> dict:
-    """Power on/off/reset the target via ATX board. Action: 'on', 'off', 'reset'."""
-    client = _require_client()
-    return await client.atx_power(action)
+async def comet_atx_power(action: str, wait: bool = True, target: str | None = None) -> dict:
+    """ATX power action via query params. Actions: on, off, off_hard, reset_hard (aliases: reset, force_off)."""
+    client = _require_client(target)
+    return await client.atx_power(action, wait=wait)
 
 
 @mcp.tool(name="comet_atx_click", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_atx_click(button: str) -> dict:
-    """Momentary press of power/reset button ('power' or 'reset', ~200ms pulse)."""
-    client = _require_client()
-    return await client.atx_click(button)
+async def comet_atx_click(button: str, wait: bool = True, target: str | None = None) -> dict:
+    """Momentary ATX button press: power, power_long, or reset."""
+    client = _require_client(target)
+    return await client.atx_click(button, wait=wait)
 
 
 @mcp.tool(name="comet_sysinfo", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
-async def comet_sysinfo() -> dict:
+async def comet_sysinfo(target: str | None = None) -> dict:
     """Retrieve device metadata: model, firmware version, capabilities."""
-    client = _require_client()
+    client = _require_client(target)
     return await client.get_sysinfo()
 
 
-@mcp.tool(name="comet_msd_upload", annotations={"readOnlyHint": False, "destructiveHint": True})
-async def comet_msd_upload(remote_path: str, local_path: str) -> dict:
-    """Upload a local file to the Comet's /userdata/media/ partition for on-device persistence."""
-    client = _require_client()
-    try:
-        with open(local_path, "rb") as f:
-            data = f.read()
-    except Exception as e:
-        raise ValueError(f"Failed to read local file {local_path}: {e}") from e
-    return await client.msd_upload(remote_path, data)
+@mcp.tool(name="comet_capabilities", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_capabilities(refresh: bool = False, target: str | None = None) -> dict:
+    """Return connect-time capability profile (model/firmware/features)."""
+    client = _require_client(target)
+    if refresh or not client.capabilities:
+        return await client.discover_capabilities()
+    return client.capabilities
 
+
+@mcp.tool(name="comet_msd_upload", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_msd_upload(local_path: str, image_name: str = "", target: str | None = None) -> dict:
+    """Upload a local image via raw POST /api/msd/write?image=... (streamed).
+
+    Legacy callers may pass image_name empty to use the local basename.
+    """
+    client = _require_client(target)
+    path = Path(local_path)
+    if not path.is_file():
+        err = FileNotFoundError(local_path)
+        raise ValueError(f"Failed to read local file {local_path}: {err}") from err
+    try:
+        return await client.msd_upload_file(local_path, image_name or None)
+    except FileNotFoundError as e:
+        raise ValueError(f"Failed to read local file {local_path}: {e}") from e
+
+
+@mcp.tool(name="comet_media_state", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_media_state(target: str | None = None) -> dict:
+    """Return virtual-media / MSD subsystem state."""
+    return await _require_client(target).msd_state()
+
+
+@mcp.tool(name="comet_media_upload", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_media_upload(local_path: str, image_name: str = "", target: str | None = None) -> dict:
+    """Stream a local ISO/image onto the Comet MSD storage."""
+    return await comet_msd_upload(local_path, image_name, target)
+
+
+@mcp.tool(name="comet_media_fetch", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_media_fetch(url: str, image_name: str, target: str | None = None) -> dict:
+    """Ask the Comet to download an image from URL onto MSD storage."""
+    return await _require_client(target).msd_fetch_remote(url, image_name)
+
+
+@mcp.tool(name="comet_media_mount", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_media_mount(
+    image_name: str,
+    mode: str = "cdrom",
+    read_only: bool = True,
+    target: str | None = None,
+) -> dict:
+    """Select an MSD image and connect it to the target."""
+    return await _require_client(target).msd_mount(image_name, mode=mode, read_only=read_only)
+
+
+@mcp.tool(name="comet_media_unmount", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_media_unmount(target: str | None = None) -> dict:
+    """Disconnect the virtual media drive from the target."""
+    return await _require_client(target).msd_unmount()
+
+
+@mcp.tool(name="comet_media_remove", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_media_remove(image_name: str, target: str | None = None) -> dict:
+    """Delete a stored MSD image."""
+    return await _require_client(target).msd_remove(image_name)
+
+
+@mcp.tool(name="comet_media_reset", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_media_reset(target: str | None = None) -> dict:
+    """Reset the MSD subsystem."""
+    return await _require_client(target).msd_reset()
+
+
+@mcp.tool(name="comet_wol_list", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_wol_list(target: str | None = None) -> dict:
+    """List Wake-on-LAN entries known to the Comet."""
+    return await _require_client(target).wol_list()
+
+
+@mcp.tool(name="comet_wol_scan", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_wol_scan(target: str | None = None) -> dict:
+    """ARP-scan the local segment for WOL candidates."""
+    return await _require_client(target).wol_scan()
+
+
+@mcp.tool(name="comet_wol_wake", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_wol_wake(mac: str, target: str | None = None) -> dict:
+    """Send a Wake-on-LAN packet for the given MAC."""
+    return await _require_client(target).wol_wake(mac)
+
+
+@mcp.tool(name="comet_streamer_state", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_streamer_state(target: str | None = None) -> dict:
+    """Return HDMI streamer state and parameters."""
+    return await _require_client(target).streamer_state()
+
+
+@mcp.tool(name="comet_streamer_set_params", annotations={"readOnlyHint": False, "destructiveHint": False})
+async def comet_streamer_set_params(
+    quality: int | None = None,
+    desired_fps: int | None = None,
+    resolution: str | None = None,
+    target: str | None = None,
+) -> dict:
+    """Update stream quality/fps/resolution when supported."""
+    return await _require_client(target).streamer_set_params(
+        quality=quality,
+        desired_fps=desired_fps,
+        resolution=resolution,
+    )
+
+
+@mcp.tool(name="comet_recorder_state", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_recorder_state(target: str | None = None) -> dict:
+    """Return recorder subsystem state."""
+    return await _require_client(target).recorder_state()
+
+
+@mcp.tool(name="comet_recorder_start", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_recorder_start(target: str | None = None) -> dict:
+    """Start H.264 console recording on the Comet."""
+    return await _require_client(target).recorder_start()
+
+
+@mcp.tool(name="comet_recorder_stop", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_recorder_stop(target: str | None = None) -> dict:
+    """Stop console recording."""
+    return await _require_client(target).recorder_stop()
+
+
+@mcp.tool(name="comet_metrics", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_metrics(target: str | None = None) -> dict:
+    """Fetch Prometheus metrics text from the Comet."""
+    text = await _require_client(target).prometheus_metrics()
+    return {"metrics": text, "bytes": len(text.encode("utf-8"))}
+
+
+@mcp.tool(name="comet_tailscale_status", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})
+async def comet_tailscale_status(target: str | None = None) -> dict:
+    """Read Tailscale status from the Comet appliance."""
+    return await _require_client(target).tailscale_status()
+
+
+@mcp.tool(name="comet_redfish_power", annotations={"readOnlyHint": False, "destructiveHint": True})
+async def comet_redfish_power(reset_type: str, target: str | None = None) -> dict:
+    """Issue a Redfish ComputerSystem.Reset (On, ForceOff, ForceRestart, PushPowerButton, ...)."""
+    return await _require_client(target).redfish_reset(reset_type)
 
 # Deprecated aliases remain registered for backwards compatibility. They are
 # deliberately thin delegates so their behavior stays identical to kvm_*.

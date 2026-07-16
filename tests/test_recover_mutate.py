@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 from src.bios_sidecar.controller.mutate import BiosMutator
 from src.bios_sidecar.controller.recover import BiosRecoveryHandler
 from src.bios_sidecar.controller.settle import ScreenSettler
-from src.bios_sidecar.domain.enums import ControlRole, RiskClass
+from src.bios_sidecar.domain.enums import ControlRole, RiskClass, StateKind
 from src.bios_sidecar.domain.models import ControlEntry
 from tests.bios_test_helpers import FakeCometClient, make_bios_state
 
@@ -45,15 +45,24 @@ class TestMutateSaveDialog:
         dialog = make_bios_state(
             state_id="state_save",
             screen_title="Save & Exit Setup",
+            screen_kind=StateKind.SAVE_CHANGES_MODAL,
             modal_present=False,
         )
-        mutator.observer.observe_state = AsyncMock(side_effect=[pre, dialog])
+        post = make_bios_state(
+            state_id="state_post",
+            screen_title="POST",
+            screen_kind=StateKind.POST_SCREEN,
+        )
+        mutator.observer.observe_state = AsyncMock(side_effect=[pre, dialog, post])
 
-        ok, final, msg = _run(mutator.save_and_reboot(client, "run", "dev"))
+        ok, final, msg = _run(
+            mutator.save_and_reboot(client, "run", "dev", reboot_observe_seconds=2.0)
+        )
 
         assert ok is True
         assert "confirmed" in msg.lower()
-        assert final is dialog
+        assert "reboot observed" in msg.lower()
+        assert final is post
         assert client.sent_combos == ["F10", "Enter"]
 
     def test_save_dialog_modal_present_pass_confirms_enter(self):
@@ -66,13 +75,21 @@ class TestMutateSaveDialog:
             modal_present=True,
             modal_type="confirm",
         )
-        mutator.observer.observe_state = AsyncMock(side_effect=[pre, dialog])
+        post = make_bios_state(
+            state_id="state_nosignal",
+            screen_title="",
+            screen_kind=StateKind.NO_SIGNAL,
+        )
+        mutator.observer.observe_state = AsyncMock(side_effect=[pre, dialog, post])
 
-        ok, final, msg = _run(mutator.save_and_reboot(client, "run", "dev"))
+        ok, final, msg = _run(
+            mutator.save_and_reboot(client, "run", "dev", reboot_observe_seconds=2.0)
+        )
 
         assert ok is True
         assert client.sent_combos == ["F10", "Enter"]
-        assert final is not None
+        assert final is post
+        assert "reboot_observed" in msg
 
     def test_save_dialog_fail_closed_without_keyword_or_modal(self):
         mutator = self._mutator()

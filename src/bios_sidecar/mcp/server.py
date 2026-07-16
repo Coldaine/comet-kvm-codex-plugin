@@ -179,17 +179,8 @@ async def bios_export_trace() -> dict:
 
 def _resolve_screenshot_ref(screenshot_ref: str) -> str:
     """Resolve a screenshot cache id or relative name to an absolute path."""
-    r = get_runtime()
-    cache_dir = r.capture_mgr.cache_dir
-    candidates = [
-        os.path.join(cache_dir, screenshot_ref),
-        os.path.join(cache_dir, f"{screenshot_ref}.jpg"),
-        os.path.join(cache_dir, os.path.basename(screenshot_ref)),
-    ]
-    for path in candidates:
-        if os.path.isfile(path):
-            return path
-    raise FileNotFoundError(f"Screenshot ref not found in cache: {screenshot_ref}")
+    from src.kvm_core.tools import resolve_screenshot_ref
+    return str(resolve_screenshot_ref(screenshot_ref))
 
 
 @mcp.tool(name="kvm_vlm_parse", annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True})

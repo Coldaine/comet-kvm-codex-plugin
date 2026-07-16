@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import logging
 from typing import Optional, Any, Dict, Tuple
 from src.bios_sidecar.domain.models import BiosState
@@ -135,31 +136,50 @@ class BiosMutator:
         client: CometClient,
         run_id: str,
         device_id: str,
+        *,
+        reboot_observe_seconds: float = 12.0,
     ) -> Tuple[bool, Optional[BiosState], str]:
         """
         Commit staged BIOS changes to NVRAM and reboot.
 
         Flow:
-            1. Observe current state.
-            2. Send F10, capture the confirmation modal.
-            3. Check for a save/confirm dialog via screen-title keywords
-               (save/confirm/reset/reboot/exit) or modal.present.
-            4. Confirm with Enter only if that check passes (fail-closed otherwise).
+            1. Observe current page.
+            2. Send F10 and require a screen transition into a save/confirm modal.
+            3. Confirm with Enter only when modal evidence is present.
+            4. Observe reboot evidence (no_signal / POST / boot target).
         """
-        # 1. Ground current state.
-        await self.observer.observe_state(client, run_id, device_id)
+        from src.bios_sidecar.domain.enums import StateKind
 
-        # 3. Send F10 and wait for the confirmation modal.
+        pre_state = await self.observer.observe_state(client, run_id, device_id)
+        pre_title = (pre_state.location.screen_title or "").strip().lower()
+        pre_kind = pre_state.location.screen_kind
+
         await client.send_combo("F10")
         await self.settler.wait_for_settle(client)
         modal_state = await self.observer.observe_state(client, run_id, device_id)
 
-        # 5. Verify a save/confirmation dialog is actually present before confirming.
         title = (modal_state.location.screen_title or "").lower()
-        modal_present = getattr(modal_state.modal, "present", False)
+        modal = modal_state.modal
+        modal_present = bool(getattr(modal, "present", False))
+        modal_type = (getattr(modal, "type", None) or "").lower()
+        modal_message = (getattr(modal, "message", None) or "").lower()
+        kind = modal_state.location.screen_kind
         looks_like_save = any(
-            kw in title for kw in ("save", "confirm", "reset", "reboot", "exit")
+            kw in f"{title} {modal_type} {modal_message}"
+            for kw in ("save", "confirm", "reset", "reboot", "exit")
+        ) or kind in {StateKind.SAVE_CHANGES_MODAL, StateKind.CONFIRMATION_MODAL}
+
+        transitioned = (
+            (modal_state.location.screen_title or "").strip().lower() != pre_title
+            or kind != pre_kind
+            or modal_present
         )
+        if not transitioned:
+            return (
+                False,
+                modal_state,
+                "No screen transition after F10; aborting without confirm.",
+            )
         if not (modal_present or looks_like_save):
             return (
                 False,
@@ -167,9 +187,55 @@ class BiosMutator:
                 "Save confirmation dialog not detected after F10; aborting without confirm.",
             )
 
-        # 6. Confirm the save.
+        selected_action = None
+        if getattr(modal, "options", None):
+            for option in modal.options:
+                low = str(option).lower()
+                if any(kw in low for kw in ("save", "yes", "ok", "confirm", "reset")):
+                    selected_action = str(option)
+                    break
+        if selected_action is None and modal_present:
+            selected_action = getattr(modal, "type", None) or "confirm"
+
         await client.send_combo("Enter")
         await self.settler.wait_for_settle(client)
 
-        LOG.info("Save confirmed for run %s; target is rebooting.", run_id)
-        return True, modal_state, "Save confirmed. Target committing changes and rebooting."
+        reboot_observed = False
+        post_detected = False
+        final_phase = "unknown"
+        final_state = modal_state
+        deadline = asyncio.get_event_loop().time() + reboot_observe_seconds
+        while asyncio.get_event_loop().time() < deadline:
+            final_state = await self.observer.observe_state(client, run_id, device_id)
+            kind = final_state.location.screen_kind
+            if kind == StateKind.NO_SIGNAL:
+                reboot_observed = True
+                final_phase = "no_signal"
+                break
+            elif kind == StateKind.POST_SCREEN:
+                reboot_observed = True
+                post_detected = True
+                final_phase = "post"
+                break
+            elif kind in {StateKind.BOOT_MENU, StateKind.OS_BOOTED}:
+                reboot_observed = True
+                final_phase = kind.value
+                break
+            await asyncio.sleep(0.75)
+
+        evidence = {
+            "confirmed": True,
+            "modal_text": getattr(modal, "message", None) or title,
+            "selected_action": selected_action,
+            "reboot_observed": reboot_observed,
+            "post_detected": post_detected,
+            "final_phase": final_phase,
+        }
+        LOG.info("Save/reboot evidence for run %s: %s", run_id, evidence)
+        if not reboot_observed:
+            return (
+                False,
+                final_state,
+                f"Save confirmed but reboot not observed within {reboot_observe_seconds}s: {evidence}",
+            )
+        return True, final_state, f"Save confirmed and reboot observed: {evidence}"

@@ -47,6 +47,7 @@ class RuntimeState(str, Enum):
     RECOVERING = "RECOVERING"
     BLOCKED = "BLOCKED"
     DEGRADED = "DEGRADED"
+    REBOOTING = "REBOOTING"
 
 class EventClass(str, Enum):
     SESSION_CONNECTED = "SESSION_CONNECTED"

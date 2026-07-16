@@ -67,6 +67,10 @@ _TRANSITION_MATRIX = {
         "save_and_reboot": RuntimeState.MUTATING,
         "abort_and_recover": RuntimeState.RECOVERING,
     },
+    RuntimeState.REBOOTING: {
+        "observe_state": RuntimeState.OBSERVING,
+        "abort_and_recover": RuntimeState.RECOVERING,
+    },
     RuntimeState.RECOVERING: {
         "observe_state": RuntimeState.OBSERVING,
     },
@@ -380,7 +384,17 @@ class StatefulBiosRuntime:
                 self.client, self.run_id, self.device_id
             )
             self.current_state_rec = final
-            self.state = RuntimeState.SYNCED if ok else RuntimeState.DEGRADED
+            if ok:
+                self.state = RuntimeState.REBOOTING
+                # Evidence already includes reboot observation; mark degraded only if OS not back.
+                if "final_phase" in msg and "os_booted" in msg:
+                    self.state = RuntimeState.SYNCED
+                elif "reboot observed" in msg.lower():
+                    self.state = RuntimeState.DEGRADED
+                else:
+                    self.state = RuntimeState.REBOOTING
+            else:
+                self.state = RuntimeState.DEGRADED
             await self.trace.log_event(
                 run_id=self.run_id,
                 event_type=EventClass.ACTION_EXECUTED,

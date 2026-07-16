@@ -49,8 +49,29 @@ EXPECTED_TOOLS = {
     "kvm_status",
     "comet_atx_power",
     "comet_atx_click",
+    "comet_power_state",
     "comet_sysinfo",
+    "comet_capabilities",
     "comet_msd_upload",
+    "comet_media_state",
+    "comet_media_upload",
+    "comet_media_fetch",
+    "comet_media_mount",
+    "comet_media_unmount",
+    "comet_media_remove",
+    "comet_media_reset",
+    "comet_wol_list",
+    "comet_wol_scan",
+    "comet_wol_wake",
+    "comet_streamer_state",
+    "comet_streamer_set_params",
+    "comet_recorder_state",
+    "comet_recorder_start",
+    "comet_recorder_stop",
+    "comet_metrics",
+    "comet_tailscale_status",
+    "comet_redfish_power",
+    "kvm_select_target",
     # Deprecated raw aliases remain public compatibility API.
     "comet_raw_send_text",
     "comet_raw_send_keys",
@@ -138,12 +159,19 @@ class SmokeTest(unittest.TestCase):
     def test_kvm_connect_uses_environment_when_password_is_omitted(self):
         import src.kvm_core.tools as kvm_tools
 
-        class FakeRuntime:
-            client = type("Client", (), {"base_url": "https://192.0.2.1"})()
+        class FakeClient:
+            base_url = "https://192.0.2.1"
+            capabilities = {"features": {}}
 
-            async def connect(self, host, username, password):
-                self.received = (host, username, password)
+        class FakeRuntime:
+            client = FakeClient()
+
+            async def connect(self, host, username, password, target="default", select=True):
+                self.received = (host, username, password, target)
                 return True
+
+            def get_client(self, target=None):
+                return self.client
 
         runtime = FakeRuntime()
         with patch.dict(os.environ, {"COMET_PASSWORD": "test-secret"}, clear=True):
@@ -151,7 +179,7 @@ class SmokeTest(unittest.TestCase):
                 result = asyncio.run(kvm_tools.kvm_connect("192.0.2.1"))
 
         self.assertTrue(result["connected"])
-        self.assertEqual(runtime.received, ("192.0.2.1", "admin", "test-secret"))
+        self.assertEqual(runtime.received, ("192.0.2.1", "admin", "test-secret", "default"))
 
     def test_bundled_mcp_launcher_injects_doppler_environment(self):
         import json
@@ -213,7 +241,7 @@ assert not any(name.startswith('src.bios_sidecar') for name in sys.modules), 'si
             missing_path = os.path.join(temp_dir, "missing.iso")
             with patch.object(kvm_tools, "_require_client", return_value=object()):
                 with self.assertRaises(ValueError) as raised:
-                    asyncio.run(kvm_tools.comet_msd_upload("images/missing.iso", missing_path))
+                    asyncio.run(kvm_tools.comet_msd_upload(missing_path, "missing.iso"))
 
         self.assertIsInstance(raised.exception.__cause__, FileNotFoundError)
 
