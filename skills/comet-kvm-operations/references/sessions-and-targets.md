@@ -8,9 +8,11 @@ initial machine-state discovery.
 Start with `kvm_status`. Reuse an existing session only when its target
 unambiguously matches the requested machine.
 
-When a new session is required, call `kvm_connect` with a stable `target` name
-that identifies the physical host, such as `pve01` or `nas02`, rather than
-accumulating anonymous default sessions.
+When a new session is required, resolve the Comet's network host first, then
+call `kvm_connect(host=..., target=...)`. The required `host` identifies the
+Comet appliance; `target` is only the stable logical session name for the
+attached machine, such as `pve01` or `nas02`. Never substitute the logical
+target name for an unknown Comet host.
 
 When multiple sessions exist:
 
@@ -18,6 +20,11 @@ When multiple sessions exist:
 - pass an explicit `target` to Comet-specific tools that accept it;
 - never assume the selected target is correct when the request names another
   machine or is ambiguous.
+
+Selected-target tools such as screenshots, OCR, HID input, and `bios_*` do not
+take a target in the current schema. Select once, then call them with only their
+documented arguments. Use `kvm_disconnect(target=...)` when closing one
+completed session so unrelated sessions remain active.
 
 Use the connection capability profile to decide whether ATX, virtual media,
 OCR, recording, and other subsystems are available. Call

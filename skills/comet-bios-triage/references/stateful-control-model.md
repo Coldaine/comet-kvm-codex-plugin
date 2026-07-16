@@ -18,19 +18,19 @@ observation tools, not navigators.
 ## Map or navigate
 
 Use `bios_crawl_step` for a single inspectable cartography transition. Use
-`bios_crawl_region` only for a bounded region and review its block or failure
-result before continuing.
+`bios_crawl_region(max_depth=...)` only for a bounded region and review its
+block or failure result before continuing.
 
-Use `bios_navigate_to` only when the requested destination exists in the stored
-graph. After navigation, call `bios_observe_state` and confirm the expected
-screen and selected control before proposing a change.
+Use `bios_navigate_to(target_node_id=...)` only when the requested destination
+exists in the stored graph. After navigation, call `bios_observe_state` and
+confirm the expected screen and selected control before proposing a change.
 
 ## Change and verify
 
-1. Call `bios_propose_setting_change` with the exact capability and desired
-   value.
+1. Call `bios_propose_setting_change(capability_id=..., desired_value=...)` with
+   the exact capability and desired value.
 2. Confirm the proposal matches the requested setting and current target.
-3. Call `bios_apply_setting_change` once.
+3. Call `bios_apply_setting_change(capability_id=..., desired_value=...)` once.
 4. Re-observe and verify the visible new value. Do not stage another variable in
    the same experiment.
 5. Call `bios_save_and_reboot` only when saving is explicitly in scope and the

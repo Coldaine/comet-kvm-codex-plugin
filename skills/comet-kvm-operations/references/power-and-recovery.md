@@ -21,7 +21,7 @@ When ATX control is available:
 - call `comet_atx_power` with `on` for a powered-off machine;
 - prefer a graceful operating-system shutdown through another available exact
   interface when the system still responds;
-- use `comet_atx_click` with the normal power button when a physical button
+- use `comet_atx_click(button="power")` when a normal physical power-button
   action is appropriate;
 - use `comet_atx_power` with `reset_hard` only for a confirmed hang, explicit
   hardware-reset request, or bounded boot retry;
