@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies from lockfile
         run: uv sync --frozen --group dev
 
+      - name: Install real OCR engine
+        run: sudo apt-get update && sudo apt-get install --yes tesseract-ocr fonts-dejavu-core
+
       - name: Lint
         run: uv run ruff check .
 

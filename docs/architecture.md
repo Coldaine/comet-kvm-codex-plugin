@@ -24,7 +24,7 @@ One stdio MCP process composes a universal physical KVM core with a BIOS-aware s
 | Universal KVM | Current | `src/kvm_core/` owns auth, HTTP/WebSocket transport, HID, screenshots, OCR, logging, and Comet hardware tools. |
 | BIOS sidecar | Current | `src/bios_sidecar/` owns BIOS observation, graph/state, VLM grounding, navigation, mutation, recovery, and trace resources/tools. |
 | Host OCR | Current | Pillow decodes frames; pytesseract returns ordered text and word boxes with a timeout off the asyncio event loop. |
-| Native-first text OCR | Current | `kvm_ocr_text` probes Comet OCR, uses it when enabled, and falls back to host Tesseract; the live unit currently reports native OCR disabled. |
+| MCP text OCR | Current | `kvm_ocr_text` captures a frame and runs host Tesseract. GL.iNet's product UI Text Recognition is browser-side Tesseract.js and is not a device/API backend for this process. |
 | Bounded KVM command observer | Planned | One tool call polls visible terminal output for one command, returns it, and discards the transcript. |
 | Exact target shell | Candidate | Optional AsyncSSH companion for network-reachable targets; separate credentials and trust policy. |
 | Always-on OCR transcript | Deferred | Avoid background cost, sensitive-text retention, and false claims of complete scrollback. |
@@ -66,7 +66,7 @@ The VLM is a stateless perception service called by the BIOS sidecar. It returns
 The Comet provides HDMI capture plus USB HID and hardware-control APIs. It does not expose the controlled computer's shell byte stream. Therefore:
 
 - BIOS, POST, recovery, installers, and network-down systems use KVM screenshots/OCR for output and HID for input.
-- `kvm_ocr_text()` returns visible terminal text directly in the tool result, preferring native device OCR and automatically falling back to host Tesseract.
+- `kvm_ocr_text()` captures the visible frame, runs host Tesseract, and returns terminal text directly in the tool result.
 - Output that scrolls off-screen before capture cannot be reconstructed reliably from a later screenshot.
 - The Comet's own administration terminal, where present, is a shell on the KVM appliance—not the controlled computer.
 

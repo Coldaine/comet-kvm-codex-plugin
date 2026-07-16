@@ -15,23 +15,12 @@ from src.bios_sidecar.controller.crawl import BiosCrawler
 from src.bios_sidecar.controller.navigate import BiosNavigator
 from src.bios_sidecar.controller.mutate import BiosMutator
 from src.bios_sidecar.controller.recover import BiosRecoveryHandler
-from src.kvm_core.runtime import get_kvm_runtime
+from src.kvm_core.runtime import KVMRuntime, get_kvm_runtime
 from src.bios_sidecar.trace.ledger import TraceLedger
 from src.bios_sidecar.adapters.base import BiosAdapter
 from src.bios_sidecar.adapters.msi_click_bios import MsiClickBiosAdapter
 
 LOG = logging.getLogger("bios_sidecar.controller.runtime")
-
-# Hosts/URLs treated as non-live fixtures so unit tests can keep VLM_PROVIDER=mock.
-_FIXTURE_HOST_MARKERS = (
-    "192.0.2.",       # TEST-NET-1
-    "198.51.100.",    # TEST-NET-2
-    "203.0.113.",     # TEST-NET-3
-    "127.0.0.1",
-    "localhost",
-    "example.com",
-    "test.invalid",
-)
 
 # ── State machine transition matrix ────────────────────────────────
 # Maps (current_state, method_name) → allowed
@@ -86,8 +75,10 @@ class StatefulBiosRuntime:
         self,
         db_path: str = "state/bios_sidecar.db",
         screenshot_cache: str = "state/screenshots",
-        vlm_provider: str = "mock",
+        vlm_provider: Optional[str] = None,
         adapter: Optional[BiosAdapter] = None,
+        kvm_runtime: Optional[KVMRuntime] = None,
+        vlm_client: Optional[VLMClient] = None,
     ):
         self.state = RuntimeState.UNCONFIGURED
 
@@ -98,8 +89,12 @@ class StatefulBiosRuntime:
         self.store = SQLiteStore(db_path=db_path)
 
         # 2. Key managers/subsystems — delegate transport/capture/OCR to KVM core
-        self.kvm = get_kvm_runtime(screenshot_cache=screenshot_cache)
-        self.vlm_client = VLMClient(provider=vlm_provider)
+        if kvm_runtime is not None:
+            kvm_runtime.set_screenshot_cache(screenshot_cache)
+            self.kvm = kvm_runtime
+        else:
+            self.kvm = get_kvm_runtime(screenshot_cache=screenshot_cache)
+        self.vlm_client = vlm_client or VLMClient(provider=vlm_provider)
 
         # 3. State indexing
         self.graph = BiosGraph(store=self.store)
@@ -168,33 +163,6 @@ class StatefulBiosRuntime:
             )
         return allowed[method_name]
 
-    def _is_live_comet_connected(self) -> bool:
-        """True when a real Comet session is up (not a test fixture host)."""
-        client = self.client
-        if client is None or not client.is_connected():
-            return False
-        host = (getattr(client, "host", "") or "").lower()
-        base = (getattr(client, "base_url", "") or "").lower()
-        haystack = f"{host} {base}"
-        return not any(marker in haystack for marker in _FIXTURE_HOST_MARKERS)
-
-    def refuse_mock_vlm_on_live(self) -> None:
-        """
-        Hard-fail bios_* observation/mutation paths when mock VLM would drive a live Comet.
-
-        Mock mode remains valid for offline unit tests (disconnected or fixture hosts).
-        Guard lives here — not inside VLMClient — so tests can still call the mock parser.
-        """
-        if getattr(self.vlm_client, "provider", None) != "mock":
-            return
-        if not self._is_live_comet_connected():
-            return
-        raise RuntimeError(
-            "VLM_PROVIDER=mock with a live Comet connection — refusing to run "
-            "bios_* tools on fabricated VLM output. Set VLM_PROVIDER to a real provider "
-            "(openrouter/ollama/vllm/openai) or disconnect before using mock mode."
-        )
-
     async def attach_to_kvm(self) -> bool:
         """Initialize BIOS-sidecar state around an existing KVM core session."""
         if self.client is None or not self.client.is_connected():
@@ -239,7 +207,6 @@ class StatefulBiosRuntime:
 
     async def observe_state(self) -> BiosState:
         await self.attach_to_kvm()
-        self.refuse_mock_vlm_on_live()
         self._guard_transition("observe_state")
 
         self.state = RuntimeState.OBSERVING
@@ -263,7 +230,6 @@ class StatefulBiosRuntime:
 
     async def crawl_step(self) -> Tuple[BiosState, Optional[GraphEdge], str]:
         await self.attach_to_kvm()
-        self.refuse_mock_vlm_on_live()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("crawl_step")
@@ -298,7 +264,6 @@ class StatefulBiosRuntime:
         Full DFS crawl of the current BIOS region using frontier + backtracking.
         """
         await self.attach_to_kvm()
-        self.refuse_mock_vlm_on_live()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("crawl_region")
@@ -328,7 +293,6 @@ class StatefulBiosRuntime:
 
     async def navigate_to(self, target_node_id: str) -> Tuple[bool, Optional[BiosState], str]:
         await self.attach_to_kvm()
-        self.refuse_mock_vlm_on_live()
         if self.state != RuntimeState.SYNCED or self.current_state_rec is None:
             await self.observe_state()
         self._guard_transition("navigate_to")
@@ -353,7 +317,6 @@ class StatefulBiosRuntime:
         self, capability_id: str, desired_value: str
     ) -> Tuple[bool, Optional[BiosState], str]:
         await self.attach_to_kvm()
-        self.refuse_mock_vlm_on_live()
         self._guard_transition("apply_setting_change")
         self.state = RuntimeState.MUTATING
         try:
@@ -376,7 +339,6 @@ class StatefulBiosRuntime:
 
     async def save_and_reboot(self) -> Tuple[bool, Optional[BiosState], str]:
         await self.attach_to_kvm()
-        self.refuse_mock_vlm_on_live()
         self._guard_transition("save_and_reboot")
         self.state = RuntimeState.MUTATING
         try:

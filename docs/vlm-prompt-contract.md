@@ -129,7 +129,7 @@ This ensures a single unparseable screen doesn't block the entire crawl. Gaps ar
 
 ## Open Questions (Not Yet Resolved)
 
-1. **Which VLM?** **Resolved.** Provider routing lives in [`src/bios_sidecar/perception/vlm_client.py`](../src/bios_sidecar/perception/vlm_client.py) (`openrouter` / `ollama` / `vllm` / `openai` / `mock`). Configure via `VLM_PROVIDER`, `VLM_MODEL`, `VLM_BASE_URL`, and `VLM_API_KEY` — see the env var table in [`docs/reference/comet-api.md`](reference/comet-api.md#environment-variables).
+1. **Which VLM?** **Resolved.** Provider routing lives in [`src/bios_sidecar/perception/vlm_client.py`](../src/bios_sidecar/perception/vlm_client.py) (`openrouter` / `ollama` / `vllm` / `openai`). Configure via `VLM_PROVIDER`, `VLM_MODEL`, `VLM_BASE_URL`, and `VLM_API_KEY` — see the env var table in [`docs/reference/comet-api.md`](reference/comet-api.md#environment-variables). Missing credentials or unsupported providers fail closed; no fabricated parse is returned.
 2. **Few-shot examples?** The current prompt is zero-shot. Adding 2-3 BIOS screenshot → JSON examples might improve parse accuracy on the first crawl. Not yet decided.
 3. **Image resolution?** The Comet can capture at various resolutions/qualities. What resolution does the VLM need for reliable parsing? Not yet tested.
 4. **OCR hint?** Should the VLM receive Tesseract OCR output alongside the image as a robustness hint? OCR is already available via `kvm_ocr_screenshot`. Not yet decided.

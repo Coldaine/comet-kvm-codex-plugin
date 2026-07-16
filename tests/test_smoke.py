@@ -19,7 +19,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 SERVER_PATH = os.path.join(REPO_ROOT, "glkvm_mcp.py")
@@ -155,32 +154,6 @@ class SmokeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No Comet password available"):
             asyncio.run(kvm_tools.kvm_connect("192.0.2.1", password=""))
 
-    def test_kvm_connect_fetches_password_from_doppler_when_omitted(self):
-        import src.kvm_core.tools as kvm_tools
-        import src.kvm_core.doppler_credentials as doppler_credentials
-
-        class FakeClient:
-            base_url = "https://192.0.2.1"
-            capabilities = {"features": {}}
-
-        class FakeRuntime:
-            client = FakeClient()
-
-            async def connect(self, host, username, password, target="default", select=True):
-                self.received = (host, username, password, target)
-                return True
-
-            def get_client(self, target=None):
-                return self.client
-
-        runtime = FakeRuntime()
-        with patch.object(doppler_credentials, "resolve_comet_password", return_value="doppler-secret"):
-            with patch.object(kvm_tools, "get_kvm_runtime", return_value=runtime):
-                result = asyncio.run(kvm_tools.kvm_connect("192.0.2.1"))
-
-        self.assertTrue(result["connected"])
-        self.assertEqual(runtime.received, ("192.0.2.1", "admin", "doppler-secret", "default"))
-
     def test_bundled_mcp_launcher_uses_uv_not_doppler_env_injection(self):
         import json
 
@@ -219,24 +192,30 @@ assert not any(name.startswith('src.bios_sidecar') for name in sys.modules), 'si
         with tempfile.TemporaryDirectory() as temp_dir:
             initial_cache = os.path.join(temp_dir, "initial-screenshots")
             requested_cache = os.path.join(temp_dir, "requested-screenshots")
-            with patch.object(
-                kvm_runtime,
-                "_runtime",
-                kvm_runtime.KVMRuntime(screenshot_cache=initial_cache),
-            ):
-                runtime = StatefulBiosRuntime(
-                    db_path=":memory:",
-                    screenshot_cache=requested_cache,
-                )
-
+            core = kvm_runtime.KVMRuntime(screenshot_cache=initial_cache)
+            runtime = StatefulBiosRuntime(
+                db_path=":memory:",
+                screenshot_cache=requested_cache,
+                kvm_runtime=core,
+            )
+            try:
                 self.assertEqual(runtime.capture_mgr.cache_dir, requested_cache)
+            finally:
+                asyncio.run(runtime.vlm_client.close())
+                runtime.store.close()
 
     def test_msd_upload_preserves_file_read_error_as_cause(self):
         import src.kvm_core.tools as kvm_tools
+        from src.kvm_core.runtime import KVMRuntime, TargetRuntime
+        from tests.bios_test_helpers import ScriptedCometClient, installed_kvm_runtime
 
         with tempfile.TemporaryDirectory() as temp_dir:
             missing_path = os.path.join(temp_dir, "missing.iso")
-            with patch.object(kvm_tools, "_require_client", return_value=object()):
+            runtime = KVMRuntime(screenshot_cache=os.path.join(temp_dir, "shots"))
+            client = ScriptedCometClient()
+            runtime.targets["default"] = TargetRuntime("default", client)
+            runtime._sync_selected_client()
+            with installed_kvm_runtime(runtime):
                 with self.assertRaises(ValueError) as raised:
                     asyncio.run(kvm_tools.comet_msd_upload(missing_path, "missing.iso"))
 

@@ -1,109 +1,81 @@
+from __future__ import annotations
+
 import io
+from pathlib import Path
 
-import pytesseract
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
-from src.kvm_core.ocr import OCRManager
+from src.kvm_core.ocr import OCRManager, ordered_lines, word_elements
 
 
-def _jpeg_bytes() -> bytes:
-    image = Image.new("RGB", (200, 100), "white")
+RECORDED_TESSERACT_TSV = {
+    "text": ["hello", "world", "READY", ""],
+    "conf": ["90", "80", "96", "-1"],
+    "left": [10, 60, 15, 0],
+    "top": [10, 10, 50, 0],
+    "width": [40, 50, 75, 0],
+    "height": [10, 10, 12, 0],
+    "page_num": [1, 1, 1, 1],
+    "block_num": [1, 1, 1, 1],
+    "par_num": [1, 1, 1, 1],
+    "line_num": [1, 1, 2, 0],
+}
+
+
+def text_image(text: str = "COMET READY 42") -> bytes:
+    image = Image.new("RGB", (800, 180), "white")
+    draw = ImageDraw.Draw(image)
+    candidates = [
+        Path("C:/Windows/Fonts/arial.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ]
+    font_path = next((path for path in candidates if path.is_file()), None)
+    if font_path is None:
+        pytest.skip("No stable TrueType test font installed")
+    font = ImageFont.truetype(str(font_path), 64)
+    draw.text((24, 45), text, fill="black", font=font)
     output = io.BytesIO()
-    image.save(output, format="JPEG")
+    image.save(output, format="PNG")
     return output.getvalue()
 
 
-def test_run_ocr_returns_ordered_text_and_coordinates(monkeypatch):
+def test_recorded_tsv_is_converted_to_ordered_lines_and_coordinates():
+    assert ordered_lines(RECORDED_TESSERACT_TSV) == ["hello world", "READY"]
+
+    elements = word_elements(RECORDED_TESSERACT_TSV, 200, 100)
+    assert [element["text"] for element in elements] == ["hello", "world", "READY"]
+    assert elements[0]["pixel"] == [30, 15]
+    assert elements[0]["x_pct"] == 15.0
+
+
+def test_recorded_tsv_search_filters_without_rewriting_coordinates():
+    elements = word_elements(RECORDED_TESSERACT_TSV, 200, 100, "ready")
+    assert elements == [{
+        "text": "READY",
+        "confidence": 96.0,
+        "x_pct": 26.0,
+        "y_pct": 56.0,
+        "pixel": [52, 56],
+        "box": [15, 50, 75, 12],
+    }]
+
+
+def test_real_tesseract_recognizes_generated_console_text():
     manager = OCRManager()
-    manager.tesseract_bin = "tesseract"
-    data = {
-        "text": ["hello", "world"],
-        "conf": ["90", "80"],
-        "left": [10, 60],
-        "top": [10, 10],
-        "width": [40, 50],
-        "height": [10, 10],
-        "page_num": [1, 1],
-        "block_num": [1, 1],
-        "par_num": [1, 1],
-        "line_num": [1, 1],
-    }
-    seen = {}
+    if not manager.get_status()["available"]:
+        pytest.skip("Tesseract binary is not installed")
 
-    def fake_image_to_data(*args, **kwargs):
-        seen.update(kwargs)
-        return data
+    result = manager.run_ocr(text_image(), psm=7)
 
-    monkeypatch.setattr(pytesseract, "image_to_data", fake_image_to_data)
-
-    result = manager.run_ocr(_jpeg_bytes(), psm=6)
-
-    assert result["text"] == "hello world"
-    assert result["lines"] == ["hello world"]
-    assert [element["text"] for element in result["elements"]] == ["hello", "world"]
-    assert seen["config"] == "--psm 6"
-    assert seen["timeout"] == 15
-    assert (result["width"], result["height"]) == (200, 100)
-
-
-def test_run_ocr_rediscovers_tesseract_without_restart(monkeypatch):
-    manager = OCRManager()
-    manager.tesseract_bin = None
-    monkeypatch.setattr(manager, "_find_tesseract_binary", lambda: "new-tesseract")
-    monkeypatch.setattr(
-        pytesseract,
-        "image_to_data",
-        lambda *args, **kwargs: {
-            "text": ["ready"],
-            "conf": ["90"],
-            "left": [10],
-            "top": [10],
-            "width": [40],
-            "height": [10],
-            "page_num": [1],
-            "block_num": [1],
-            "par_num": [1],
-            "line_num": [1],
-        },
-    )
-
-    result = manager.run_ocr(_jpeg_bytes())
-
-    assert result["tesseract_found"] is True
-    assert result["text"] == "ready"
-
-
-def test_run_text_ocr_preserves_spacing_and_crop(monkeypatch):
-    manager = OCRManager()
-    manager.tesseract_bin = "tesseract"
-    seen = {}
-
-    def fake_image_to_string(image, **kwargs):
-        seen.update(kwargs)
-        seen["size"] = image.size
-        return "name      value\nrow       42\n"
-
-    monkeypatch.setattr(pytesseract, "image_to_string", fake_image_to_string)
-
-    result = manager.run_text_ocr(
-        _jpeg_bytes(),
-        psm=6,
-        languages="eng, deu",
-        crop=(10, 5, 110, 55),
-    )
-
-    assert result["text"] == "name      value\nrow       42"
-    assert result["lines"] == ["name      value", "row       42"]
-    assert seen["config"] == "--psm 6 -c preserve_interword_spaces=1"
-    assert seen["lang"] == "eng+deu"
-    assert seen["timeout"] == 15
-    assert seen["size"] == (100, 50)
+    assert "error" not in result
+    assert "COMET" in result["text"].upper()
+    assert "READY" in result["text"].upper()
+    assert result["elements"]
 
 
 def test_run_text_ocr_rejects_empty_crop():
     manager = OCRManager()
-    manager.tesseract_bin = "tesseract"
 
     with pytest.raises(ValueError, match="non-empty region"):
-        manager.run_text_ocr(_jpeg_bytes(), crop=(20, 20, 10, 10))
+        manager.run_text_ocr(text_image(), crop=(20, 20, 10, 10))

@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import io
+import asyncio
+from contextlib import contextmanager
+from collections import deque
 from typing import Any, Optional
-from unittest.mock import AsyncMock
 
 from PIL import Image as PILImage
 
 import src.kvm_core.runtime as kvm_runtime_mod
 from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
+from src.bios_sidecar.perception.vlm_client import VLMClient
 from src.bios_sidecar.domain.enums import ControlRole, RiskClass, StateKind
 from src.bios_sidecar.domain.models import (
     ActionPolicies,
@@ -22,6 +25,8 @@ from src.bios_sidecar.domain.models import (
     RiskStatus,
     SelectionMetadata,
 )
+from src.kvm_core.runtime import KVMRuntime
+from tests.local_services import OpenAICompatibleService
 
 
 def jpeg_bytes(color: tuple[int, int, int] = (40, 80, 120), size: tuple[int, int] = (64, 48)) -> bytes:
@@ -31,7 +36,7 @@ def jpeg_bytes(color: tuple[int, int, int] = (40, 80, 120), size: tuple[int, int
     return buf.getvalue()
 
 
-def fake_ocr_result(
+def recorded_ocr_result(
     texts: Optional[list[str]] = None,
     width: int = 64,
     height: int = 48,
@@ -47,8 +52,8 @@ def fake_ocr_result(
     }
 
 
-class FakeCometClient:
-    """CometClient stand-in that records HID traffic and returns canned frames."""
+class ScriptedCometClient:
+    """Deterministic virtual Comet that records HID traffic and serves frames."""
 
     def __init__(
         self,
@@ -132,45 +137,119 @@ def make_bios_state(
 
 
 def build_runtime(tmp_path, *, host: str = "127.0.0.1", screenshot: Optional[bytes] = None):
-    """Fresh StatefulBiosRuntime with FakeCometClient and fast settle/OCR stubs."""
+    """Fresh sidecar driven by loopback VLM and deterministic virtual hardware."""
     kvm_runtime_mod._runtime = None
     shots = tmp_path / "shots"
     shots.mkdir()
     db = tmp_path / "bios.db"
+    vlm_service = OpenAICompatibleService()
+    vlm_client = VLMClient(
+        provider="vllm",
+        model="recorded-bios",
+        base_url=vlm_service.base_url,
+    )
+    kvm_runtime = KVMRuntime(screenshot_cache=str(shots))
     runtime = StatefulBiosRuntime(
         db_path=str(db),
         screenshot_cache=str(shots),
-        vlm_provider="mock",
+        kvm_runtime=kvm_runtime,
+        vlm_client=vlm_client,
     )
-    client = FakeCometClient(host=host, screenshot=screenshot or jpeg_bytes())
+    client = ScriptedCometClient(host=host, screenshot=screenshot or jpeg_bytes())
     runtime.kvm.client = client
+    runtime._test_vlm_service = vlm_service
 
-    ocr_payload = fake_ocr_result()
+    ocr_payload = recorded_ocr_result()
 
     def _ocr(_img: bytes, search_text: str = "", psm: int = 3) -> dict:
         return dict(ocr_payload)
 
     runtime.ocr_mgr.run_ocr = _ocr  # type: ignore[method-assign]
 
-    async def _instant_settle(c):
-        return await c.get_screenshot(preview=False)
+    class InstantSettler:
+        async def wait_for_settle(self, c):
+            return await c.get_screenshot(preview=False)
 
-    runtime.settler.wait_for_settle = AsyncMock(side_effect=_instant_settle)
-    runtime.settler.wait_fixed = AsyncMock()
+        async def wait_fixed(self, *args, **kwargs):
+            return None
+
+    runtime.settler = InstantSettler()
+    runtime.crawler.settler = runtime.settler
+    runtime.navigator.settler = runtime.settler
+    runtime.mutator.settler = runtime.settler
+    runtime.recovery.settler = runtime.settler
     return runtime, client
 
 
 def cleanup_runtime(runtime: StatefulBiosRuntime) -> None:
     try:
+        asyncio.run(runtime.vlm_client.close())
+        service = getattr(runtime, "_test_vlm_service", None)
+        if service is not None:
+            service.close()
         runtime.store.close()
     finally:
         kvm_runtime_mod._runtime = None
 
 
-def patch_ocr_texts(runtime: StatefulBiosRuntime, texts: list[str]) -> None:
-    payload = fake_ocr_result(texts)
+def install_recorded_ocr(runtime: StatefulBiosRuntime, texts: list[str]) -> None:
+    payload = recorded_ocr_result(texts)
 
     def _ocr(_img: bytes, search_text: str = "", psm: int = 3) -> dict:
         return dict(payload)
 
     runtime.ocr_mgr.run_ocr = _ocr  # type: ignore[method-assign]
+
+
+class ScriptedObserver:
+    """Finite sequence of observed BIOS states with a useful call count."""
+
+    def __init__(self, states: list[BiosState], store: Any = None) -> None:
+        self._states = deque(states)
+        self.calls = 0
+        self.store = store
+
+    async def observe_state(self, *args, **kwargs) -> BiosState:
+        self.calls += 1
+        if len(self._states) > 1:
+            return self._states.popleft()
+        return self._states[0]
+
+
+class NoWaitSettler:
+    """Settler for deterministic rigs that records every requested boundary."""
+
+    def __init__(self) -> None:
+        self.fixed_waits: list[float] = []
+        self.settle_calls = 0
+
+    async def wait_fixed(self, seconds: float) -> None:
+        self.fixed_waits.append(seconds)
+
+    async def wait_for_settle(self, client) -> bytes:
+        self.settle_calls += 1
+        return await client.get_screenshot(preview=False)
+
+
+@contextmanager
+def installed_bios_runtime(runtime: StatefulBiosRuntime):
+    """Install a concrete runtime in the MCP facade for one test transaction."""
+    from src.bios_sidecar.mcp import server as bios_server
+
+    previous = bios_server._runtime
+    bios_server._runtime = runtime
+    try:
+        yield runtime
+    finally:
+        bios_server._runtime = previous
+
+
+@contextmanager
+def installed_kvm_runtime(runtime: KVMRuntime):
+    """Install a concrete KVM runtime for one tool-level test transaction."""
+    previous = kvm_runtime_mod._runtime
+    kvm_runtime_mod._runtime = runtime
+    try:
+        yield runtime
+    finally:
+        kvm_runtime_mod._runtime = previous

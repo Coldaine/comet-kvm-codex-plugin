@@ -73,13 +73,15 @@ We do **not** roll our own VLM transport or JSON-repair logic. See `docs/decisio
 Provider is selected by env:
 
 ```text
-VLM_PROVIDER  = openrouter | ollama | vllm | openai | mock
+VLM_PROVIDER  = openrouter | ollama | vllm | openai
 VLM_MODEL     = openrouter/qwen/qwen-2-vl-72b-instruct   # or ollama/llama3.2-vision
 VLM_API_KEY   = sk-...    # OpenAI-compatible API key (required for OpenRouter/OpenAI)
 VLM_BASE_URL  = http://localhost:11434/v1   # override API endpoint (optional)
 ```
 
-`mock` remains the default for tests and offline development.
+There is no fabricated provider or default parse. Missing provider/API-key
+configuration fails closed. Offline contracts use an executable loopback
+OpenAI-compatible service with schema-valid recorded responses.
 
 ### 3.2 Tool signature
 
@@ -119,7 +121,7 @@ The VLM is invoked on: unknown screens during crawl, drift during navigation, dr
 
 - **Phase 1: Docs (this PR).** Rewrite plan/decisions/architecture/skill to the 3-tier surface + framework choice.
 - **Phase 2: Bug fixes.** Fix the `asyncio.to_thread` wrapping of the async `parse_screenshot` in `observe.py`.
-- **Phase 3: VLM framework.** Add `instructor` + `litellm` deps; rewrite `vlm_client.py` to use them with provider routing; keep `mock`.
+- **Phase 3: VLM framework.** Superseded: the current client uses a small direct OpenAI-compatible HTTP contract with Pydantic validation and no fabricated provider.
 - **Phase 4: Tool implementation.** Add `kvm_vlm_parse`, `kvm_match_screen`, `bios_save_and_reboot`; migrate raw `kvm_*` → `comet_raw_*` aliases; reposition `bios_grant_human_approval` as out-of-band.
-- **Phase 5: Tests.** VLM contract tests (mock), match-first bypass tests, save-and-reboot gating tests.
+- **Phase 5: Tests.** VLM loopback HTTP contract tests, live-state re-extraction tests, and save-and-reboot gating tests.
 - **Phase 6: Live drive.** Smoke-test against the Comet at `192.168.0.126` (connect, screenshot, sysinfo). BIOS not available yet — refine live.

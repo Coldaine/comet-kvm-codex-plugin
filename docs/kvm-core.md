@@ -55,8 +55,8 @@ The KVM core exposes frame capture and OCR as general-purpose primitives.
 |------|---------|
 | `kvm_screenshot` | Captures a JPEG frame and returns MCP `Image` content. Supports preview/max-width/quality controls. |
 | `kvm_screenshot_to_file` | Captures a frame and stores it under the screenshot cache directory. |
-| `kvm_ocr_status` | Reports native Comet OCR state plus host Tesseract availability. |
-| `kvm_ocr_text` | Uses native Comet OCR when enabled, else host Tesseract; returns text/lines and supports crop/language parameters. `psm` applies to host fallback only. |
+| `kvm_ocr_status` | Reports host Tesseract availability and identifies GL.iNet's browser-only Tesseract.js UI engine. |
+| `kvm_ocr_text` | Captures a frame and runs host Tesseract; returns text/lines and supports crop/language parameters. |
 | `kvm_ocr_screenshot` | Runs host Tesseract, returning ordered `text`/`lines` plus word coordinates and confidence. |
 | `kvm_ocr_click` | Finds text with OCR and clicks the highest-confidence match. Supports quadrant filtering with `top-left`, `top-right`, `bottom-left`, and `bottom-right`. |
 
@@ -64,7 +64,14 @@ The KVM core exposes frame capture and OCR as general-purpose primitives.
 
 The KVM core has no screen semantics. It sends input, captures frames, runs OCR, and exposes Comet hardware APIs. It does not know whether the screen is BIOS, Windows, an installer, a shell, a crash screen, POST, recovery UI, or anything else.
 
-Native text OCR reuses the Comet/PiKVM `/api/streamer/ocr` capability endpoint and the snapshot endpoint's `ocr`, language, and crop parameters. The endpoint returns text but no word boxes. When native OCR is disabled or fails, the same tool captures a frame and uses Pillow plus pytesseract's spacing-preserving text output. Structured/click OCR uses pytesseract's TSV/dictionary output for boxes and confidence. Host Tesseract calls have a 15-second timeout and run in a worker thread so OCR cannot block the asyncio watchdog and pinger.
+Both text and coordinate OCR capture a frame and run in the MCP host process. Pillow decodes the frame; pytesseract's spacing-preserving text output backs `kvm_ocr_text`, while its TSV/dictionary output supplies boxes and confidence for structured/click OCR. Calls have a 15-second timeout and run in a worker thread so OCR cannot block the asyncio watchdog and pinger.
+
+GL.iNet firmware 1.9's web UI **Text Recognition** feature is different: the
+product JavaScript crops the canvas and runs bundled Tesseract.js/WASM in the
+controlling browser. It works with the inherited PiKVM server OCR route disabled
+and does not expose its result to this Python MCP process. `/api/streamer/ocr`
+may still be observed during capability discovery as `legacy_server_ocr`, but it
+is not used as this product's OCR execution path.
 
 ## 6. Comet Hardware Tools
 
@@ -75,7 +82,7 @@ The server exposes Comet-specific hardware APIs in addition to HID and screensho
 | `comet_atx_power(action)` | Power on/off/reset through the ATX add-on board. | Requires the ATX add-on board to be physically installed. Destructive. |
 | `comet_atx_click(button)` | Momentary power/reset button pulse. | Requires the ATX add-on board to be physically installed. Destructive. |
 | `comet_sysinfo()` | Reads device metadata and capabilities. | Read-only. |
-| `comet_msd_upload(remote_path, local_path)` | Uploads a host file to the Comet's `/userdata/media/` partition. | Writes to device storage. |
+| `comet_msd_upload(local_path, image_name?)` | Streams a host file to the Comet's MSD image store. | Writes to device storage. |
 
 ATX endpoints being exposed does not guarantee the target machine is wired for ATX control. The hardware board and cable path still need to exist.
 
@@ -132,7 +139,10 @@ An always-on transcript buffer is **Deferred**. Persistent background OCR would 
 
 Direct target SSH is a **Candidate** companion component for hosts reachable over the network. It should use AsyncSSH to return exact stdout, stderr, exit status, and timeout state; enforce known-host verification and host allowlisting; and keep target credentials separate from the Comet credential. It is not part of the universal KVM core because it disappears precisely when BIOS, recovery, or network failure makes KVM necessary.
 
-`kvm_ocr_text` implements the Comet/PiKVM OCR endpoint as the preferred text-only path when the device reports it enabled, with automatic host fallback. The live device reported native OCR disabled on 2026-07-10, so host Tesseract is currently selected there. Host OCR remains necessary for word coordinates even when device text OCR is available.
+`kvm_ocr_text` always uses host Tesseract. The MCP process cannot reuse the
+browser's Tesseract.js worker, so Tesseract must be installed where the MCP runs.
+The inherited server OCR route is not treated as a fallback or as evidence that
+GL.iNet's product UI OCR runs on the device.
 
 MCP resources or resource-updated notifications may mirror a current transcript for clients that subscribe, but the portable primary interface remains an explicit tool result. Logging is diagnostic only and must not capture commands or OCR text.
 
@@ -176,4 +186,4 @@ Visual verification stays. Approval-gating is cut. For example, `bios_save_and_r
 2. **Exact target shell:** No optional AsyncSSH companion exists, so exact stdout/stderr/exit status is unavailable through this project even when the controlled OS is network-reachable.
 3. **`comet_raw_*` aliases:** The 10 aliases duplicate `kvm_*` tools. They remain for compatibility and are deprecated in documentation.
 4. **Non-OCR operation timeouts:** HTTP requests have a client timeout and OCR has a Tesseract timeout, but some multi-step WebSocket and BIOS operations still lack an overall tool deadline.
-5. **Behavioral coverage:** Current tests cover registration, OCR output, logging, state identity, graph transitions, crawl safety, capabilities, and VLM routing. More live/protocol fixtures are still needed for watchdog recovery, pinger failure, OCR quadrant filtering, and ATX error mapping.
+5. **Remaining live coverage:** Loopback contracts cover login, HTTP/WebSocket auth, capability discovery, HID, watchdog release, ATX error mapping, MSD streaming/mount, multi-target sessions, OCR, VLM routing, and BIOS safety behavior. Live Lane A is read-only; reversible Lane B and destructive Lane C still require disposable hardware sign-off.

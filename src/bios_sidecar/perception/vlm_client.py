@@ -40,7 +40,7 @@ class VLMClient:
         model: Optional[str] = None,
         base_url: Optional[str] = None,
     ) -> None:
-        self.provider = (provider or os.environ.get("VLM_PROVIDER", "mock")).lower()
+        self.provider = (provider or os.environ.get("VLM_PROVIDER", "")).lower()
         self.api_key = api_key or os.environ.get("VLM_API_KEY")
         self.model = model or os.environ.get("VLM_MODEL")
         self.base_url = (base_url or os.environ.get("VLM_BASE_URL") or self._default_base_url()).rstrip("/")
@@ -48,6 +48,17 @@ class VLMClient:
 
     def _requires_key(self) -> bool:
         return self.provider in _KEY_REQUIRED_PROVIDERS
+
+    def _validate_configuration(self) -> None:
+        if not self.provider:
+            raise RuntimeError(
+                "VLM_PROVIDER is required for BIOS perception; configure "
+                "openai, openrouter, ollama, or vllm"
+            )
+        if self.provider not in _PROVIDER_DEFAULTS:
+            raise ValueError(f"Unsupported provider: {self.provider}")
+        if self._requires_key() and not self.api_key:
+            raise RuntimeError(f"VLM_API_KEY is required for provider: {self.provider}")
 
     def _default_base_url(self) -> str:
         return _PROVIDER_DEFAULTS.get(self.provider, ("", ""))[0]
@@ -76,8 +87,7 @@ class VLMClient:
         previous_state: Optional[dict[str, Any]] = None,
         last_action: Optional[str] = None,
     ) -> dict[str, Any]:
-        if self.provider == "mock" or (self._requires_key() and not self.api_key):
-            return self._parse_mock(image_bytes)
+        self._validate_configuration()
 
         user_prompt = self._build_user_prompt(previous_state, last_action)
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
@@ -91,15 +101,7 @@ class VLMClient:
             except Exception as exc:
                 LOG.warning("VLM call attempt %d failed: %s", attempt + 1, type(exc).__name__)
 
-        LOG.error("VLM failed after 3 attempts; returning unparseable state")
-        return {
-            "screen_title": "Unparseable Screen",
-            "menu_path": [],
-            "cursor_at": None,
-            "entries": [],
-            "blocklist_flag": False,
-            "blocklist_keywords": [],
-        }
+        raise RuntimeError("VLM failed to return a valid BIOS screen parse after 3 attempts")
 
     @staticmethod
     def _build_user_prompt(
@@ -162,39 +164,3 @@ class VLMClient:
         if not isinstance(value, dict):
             raise ValueError("VLM response must be a JSON object")
         return value
-
-    @staticmethod
-    def _parse_mock(image_bytes: bytes) -> dict[str, Any]:
-        import hashlib
-
-        screen = int(hashlib.sha256(image_bytes).hexdigest()[:4], 16) % 4
-        screens = [
-            ("EZ Mode", ["EZ Mode"], 0, [
-                {"label": "CPU Cooler Tuning", "type": "leaf-enum", "value": "Water Cooler", "options": ["Box Cooler", "Tower Cooler", "Water Cooler"], "key_to_enter": "Enter"},
-                {"label": "Memory Fast Boot", "type": "leaf-toggle", "value": "Enabled", "options": ["Enabled", "Disabled"], "key_to_enter": "Enter"},
-            ]),
-            ("Advanced SETTINGS", ["SETTINGS"], 1, [
-                {"label": "System Status", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-                {"label": "Advanced", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-                {"label": "Boot", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-                {"label": "Security", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-            ]),
-            ("Advanced", ["SETTINGS", "Advanced"], 2, [
-                {"label": "PCI Subsystem Settings", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-                {"label": "ACPI Settings", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-                {"label": "Integrated Peripherals", "type": "submenu", "value": None, "options": None, "key_to_enter": "Enter"},
-            ]),
-            ("PCI Subsystem Settings", ["SETTINGS", "Advanced", "PCI Subsystem Settings"], 1, [
-                {"label": "Above 4G memory/Crypto Currency mining", "type": "leaf-toggle", "value": "Enabled", "options": ["Enabled", "Disabled"], "key_to_enter": "Enter"},
-                {"label": "Re-Size BAR Support", "type": "leaf-enum", "value": "Auto", "options": ["Auto", "Disabled", "Enabled"], "key_to_enter": "Enter"},
-            ]),
-        ]
-        title, path, cursor, entries = screens[screen]
-        return {
-            "screen_title": title,
-            "menu_path": path,
-            "cursor_at": cursor,
-            "entries": entries,
-            "blocklist_flag": False,
-            "blocklist_keywords": [],
-        }

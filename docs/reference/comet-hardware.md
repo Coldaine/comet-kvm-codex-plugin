@@ -146,10 +146,10 @@ The USB-A 2.0 port can mount external exFAT drives, expanding available storage 
 Primary live path (see [`comet-api.md` verification status](comet-api.md#verification-status)):
 
 1. `POST /api/auth/login` — authentication
-2. `WSS /api/ws` with `stream=false` — keyboard/mouse input over WebSocket
+2. `WSS /api/ws` with `stream=true` — keyboard/mouse input over WebSocket (also keeps the HDMI streamer process up so HTTP snapshots work)
 3. `GET /api/streamer/snapshot` — JPEG frame capture
 4. `GET /api/info` — sysinfo tool
-5. `GET /api/streamer/ocr` — capability probe (often disabled on the LAN unit)
+5. `GET /api/streamer/ocr` — inherited server-OCR discovery observation (not the browser Text Recognition engine)
 
 ATX power actions and MSD ISO upload/mount have **not** been live-qualified in read-only smoke. Fuller firmware inventory: [`docs/research/glkvm-api-surface.md`](../research/glkvm-api-surface.md).
 

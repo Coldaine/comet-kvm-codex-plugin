@@ -1,40 +1,40 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from collections.abc import Callable
-
-import httpx
 import pytest
 
 from src.bios_sidecar.perception.vlm_client import VLMClient
+from tests.local_services import OpenAICompatibleService
 
 
 def run(coro):
     return asyncio.run(coro)
 
 
-def install_mock_transport(
-    client: VLMClient,
-    handler: Callable[[httpx.Request], httpx.Response],
-) -> None:
-    run(client.client.aclose())
-    client.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-
-
-def test_mock_default_is_deterministic():
-    client = VLMClient(provider="mock")
+def test_provider_is_required_instead_of_fabricating_a_parse():
+    client = VLMClient(provider="")
     try:
-        assert run(client.parse_screenshot(b"same-bytes")) == run(client.parse_screenshot(b"same-bytes"))
+        with pytest.raises(RuntimeError, match="VLM_PROVIDER is required"):
+            run(client.parse_screenshot(b"bytes"))
     finally:
         run(client.close())
 
 
-def test_key_required_provider_without_key_falls_back_to_mock():
+def test_mock_provider_is_rejected():
+    client = VLMClient(provider="mock")
+    try:
+        with pytest.raises(ValueError, match="Unsupported provider: mock"):
+            run(client.parse_screenshot(b"bytes"))
+    finally:
+        run(client.close())
+
+
+def test_key_required_provider_without_key_fails_closed():
     client = VLMClient(provider="openrouter", api_key=None)
     try:
         client.api_key = None
-        assert run(client.parse_screenshot(b"bytes"))["screen_title"]
+        with pytest.raises(RuntimeError, match="VLM_API_KEY is required"):
+            run(client.parse_screenshot(b"bytes"))
     finally:
         run(client.close())
 
@@ -70,54 +70,49 @@ def test_extract_json_strips_code_fences():
 
 
 def test_openai_compatible_request_uses_schema_and_validates_response():
-    captured = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.update(json.loads(request.content))
-        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({
+    response = {
             "screen_title": "Main",
             "menu_path": ["Main"],
             "cursor_at": 0,
             "entries": [],
             "blocklist_flag": False,
             "blocklist_keywords": [],
-        })}}]})
-
-    client = VLMClient(provider="ollama", model="ollama/test-model")
-    install_mock_transport(client, handler)
-    try:
-        result = run(client.parse_screenshot(b"image"))
-        assert result["screen_title"] == "Main"
-        assert captured["model"] == "test-model"
-        assert captured["response_format"] == {"type": "json_object"}
-        assert captured["messages"][1]["content"][1]["type"] == "image_url"
-    finally:
-        run(client.close())
+    }
+    with OpenAICompatibleService() as service:
+        service.enqueue_parse(response)
+        client = VLMClient(
+            provider="ollama",
+            model="ollama/test-model",
+            base_url=service.base_url,
+        )
+        try:
+            result = run(client.parse_screenshot(b"image"))
+            assert result["screen_title"] == "Main"
+            captured = service.requests[0]
+            assert captured["model"] == "test-model"
+            assert captured["response_format"] == {"type": "json_object"}
+            assert captured["messages"][1]["content"][1]["type"] == "image_url"
+        finally:
+            run(client.close())
 
 
 def test_local_provider_retries_without_response_format():
-    requests = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content)
-        requests.append(body)
-        if "response_format" in body:
-            return httpx.Response(400, json={"error": "unsupported"})
-        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({
+    response = {
             "screen_title": "Main",
             "menu_path": [],
             "cursor_at": None,
             "entries": [],
             "blocklist_flag": False,
             "blocklist_keywords": [],
-        })}}]})
-
-    client = VLMClient(provider="vllm")
-    install_mock_transport(client, handler)
-    try:
-        assert run(client.parse_screenshot(b"image"))["screen_title"] == "Main"
-        assert len(requests) == 2
-        assert "response_format" in requests[0]
-        assert "response_format" not in requests[1]
-    finally:
-        run(client.close())
+    }
+    with OpenAICompatibleService() as service:
+        service.enqueue_payload(400, {"error": "unsupported"})
+        service.enqueue_parse(response)
+        client = VLMClient(provider="vllm", base_url=service.base_url)
+        try:
+            assert run(client.parse_screenshot(b"image"))["screen_title"] == "Main"
+            assert len(service.requests) == 2
+            assert "response_format" in service.requests[0]
+            assert "response_format" not in service.requests[1]
+        finally:
+            run(client.close())

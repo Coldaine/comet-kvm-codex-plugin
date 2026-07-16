@@ -5,6 +5,12 @@
 > **Homes for follow-up:** Protocol/contract facts → [`glkvm-api-surface.md`](glkvm-api-surface.md) / [`docs/reference/comet-api.md`](../reference/comet-api.md). Ops judgment → [`oob-proxmox-tailscale-vision.md`](oob-proxmox-tailscale-vision.md).  
 > **Scope of this pass:** Capture findings so they are not lost. **No code fixes here.**
 
+> **Correction (2026-07-16):** This snapshot's “native OCR” assessment conflated
+> the inherited PiKVM `/api/streamer/ocr` handler with GL.iNet's product UI Text
+> Recognition feature. Product-bundle inspection and live probes show the UI runs
+> Tesseract.js/WASM in the controlling browser. Current architecture/reference
+> docs supersede the OCR statements below.
+
 **Method:** Source review against public GLKVM handlers and this repository’s `main` tree as of the audit date. **No live destructive commands** were sent to hardware as part of the audit writeup.
 
 **Deployment caution from the audit:** Prefer screenshot, OCR, and ordinary keyboard/mouse primitives. Do not trust ATX, MSD, BIOS mutation, or save-and-reboot paths on a valuable node until protocol/BIOS correctness work lands.
@@ -16,7 +22,7 @@
 - Decomposition: MCP tools → `kvm_core` (HTTP auth, WebSocket HID, screenshots, OCR) + `bios_sidecar` (state graph, observation, navigation, mutation).  
 - Shared runtime avoids a second independent Comet session; sidecar depends on kvm_core (one-way).  
 - Screenshot path uses `/api/streamer/snapshot` with preview/offline parameters.  
-- Native OCR + host Tesseract fallback wiring is substantially correct.  
+- Host Tesseract wiring is usable; the native/fallback conclusion was later corrected as described above.
 - JSON keyboard/mouse WebSocket messages generally follow KVMD event schema.  
 - `kvm_screenshot_to_file` containment to screenshot cache is sound.  
 - Core/BIOS separation is better than a monolith.
@@ -117,7 +123,7 @@ Multi-Comet: process-global singleton disconnects prior host; audit recommends t
 | Surface | Assessment |
 |---------|------------|
 | Screenshots | Usable |
-| Native OCR + Tesseract fallback | Usable |
+| OCR (corrected 2026-07-16) | Host Tesseract usable; browser UI OCR is not callable by MCP |
 | Ordinary keyboard/mouse | Mostly usable |
 | Long key holds | Broken above ~250 ms |
 | WebSocket session reliability | Incomplete |

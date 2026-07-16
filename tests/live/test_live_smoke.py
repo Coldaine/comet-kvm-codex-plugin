@@ -15,23 +15,20 @@ from src.kvm_core.doppler_credentials import (
     resolve_comet_password,
 )
 
-# Always fetch from Doppler CLI. Skip only when Doppler is missing/unauthenticated
-# (e.g. GitHub-hosted runners without CLI login). Force-off: RUN_LIVE_COMET_SMOKE=0.
-# Force-on (fail instead of skip when host down): RUN_LIVE_COMET_SMOKE=1.
+# Live hardware access is opt-in. Collection skips before credential or network
+# access unless RUN_LIVE_COMET_SMOKE=1 is set by an operator or the manual workflow.
 _FORCE = os.environ.get("RUN_LIVE_COMET_SMOKE")
 _PASSWORD: str | None = None
-_SKIP_REASON: str | None = None
 
-if _FORCE == "0":
-    _SKIP_REASON = "RUN_LIVE_COMET_SMOKE=0 disables live Comet checks"
-else:
-    try:
-        _PASSWORD = resolve_comet_password(require=True)
-    except DopplerAuthError as exc:
-        _SKIP_REASON = str(exc)
-
-if _SKIP_REASON:
-    pytest.skip(_SKIP_REASON, allow_module_level=True)
+if _FORCE != "1":
+    pytest.skip(
+        "live Comet checks require explicit RUN_LIVE_COMET_SMOKE=1",
+        allow_module_level=True,
+    )
+try:
+    _PASSWORD = resolve_comet_password(require=True)
+except DopplerAuthError as exc:
+    pytest.fail(f"live Comet credentials unavailable: {exc}", pytrace=False)
 
 
 def resolve_live_host() -> str:
@@ -71,16 +68,14 @@ def _tcp_host_port(host: str, default_port: int = 443) -> tuple[str, int]:
 
 
 def require_comet_reachable(host: str, timeout: float = 3.0) -> None:
-    """Skip (or fail if forced) when the Comet TCP port is unreachable."""
+    """Fail the explicitly requested live lane when its Comet is unreachable."""
     name, port = _tcp_host_port(host)
     try:
         with socket.create_connection((name, port), timeout=timeout):
             return
     except OSError as exc:
         msg = f"Comet host {name}:{port} unreachable ({exc})"
-        if _FORCE == "1":
-            pytest.fail(msg)
-        pytest.skip(msg)
+        pytest.fail(msg)
 
 
 def _run(coro, timeout: float = 45.0):

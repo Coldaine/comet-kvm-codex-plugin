@@ -1,11 +1,7 @@
-"""Behavioral tests for bios_* MCP tools, mock-VLM guard, and OCR-first observe."""
+"""Behavioral tests for bios_* MCP tools and OCR-first observation."""
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
-
-import pytest
-
 from src.bios_sidecar.domain.enums import ControlRole, RiskClass, RuntimeState
 from src.bios_sidecar.domain.models import ControlEntry
 from src.bios_sidecar.mcp import server as bios_server
@@ -13,8 +9,10 @@ from tests.bios_test_helpers import (
     build_runtime,
     cleanup_runtime,
     jpeg_bytes,
+    installed_bios_runtime,
     make_bios_state,
-    patch_ocr_texts,
+    install_recorded_ocr,
+    ScriptedObserver,
 )
 
 
@@ -31,7 +29,7 @@ class TestBiosTools:
     def test_bios_observe_state_returns_bios_state_dict(self, tmp_path):
         runtime, _client = build_runtime(tmp_path)
         try:
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
+            with installed_bios_runtime(runtime):
                 result = _run(bios_server.bios_observe_state())
 
             assert isinstance(result, dict)
@@ -47,7 +45,7 @@ class TestBiosTools:
     def test_bios_crawl_step_returns_state_edge_recommendation(self, tmp_path):
         runtime, client = build_runtime(tmp_path)
         try:
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
+            with installed_bios_runtime(runtime):
                 _run(bios_server.bios_observe_state())
                 # Distinct frame after crawl key so observe can produce a new node/edge.
                 client.screenshot = jpeg_bytes(color=(90, 20, 30))
@@ -66,7 +64,7 @@ class TestBiosTools:
     def test_bios_navigate_to_known_vs_unknown(self, tmp_path):
         runtime, _client = build_runtime(tmp_path)
         try:
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
+            with installed_bios_runtime(runtime):
                 _run(bios_server.bios_observe_state())
                 known_id = runtime.syncer.current_matched_node.node_id
                 assert known_id
@@ -86,7 +84,7 @@ class TestBiosTools:
         runtime, client = build_runtime(tmp_path)
         try:
             # Seed SYNCED via observe, then drive mutator with controlled observes.
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
+            with installed_bios_runtime(runtime):
                 _run(bios_server.bios_observe_state())
 
             before = make_bios_state(
@@ -119,10 +117,10 @@ class TestBiosTools:
                     )
                 ],
             )
-            observe = AsyncMock(side_effect=[before, after])
-            runtime.mutator.observer.observe_state = observe
+            observe = ScriptedObserver([before, after])
+            runtime.mutator.observer.observe_state = observe.observe_state
 
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
+            with installed_bios_runtime(runtime):
                 result = _run(
                     bios_server.bios_apply_setting_change("cpu_cooler_tuning", "Tower Cooler")
                 )
@@ -138,13 +136,13 @@ class TestBiosTools:
     def test_bios_save_and_reboot_aborts_without_save_dialog(self, tmp_path):
         runtime, client = build_runtime(tmp_path)
         try:
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
+            with installed_bios_runtime(runtime):
                 _run(bios_server.bios_observe_state())
 
             plain = make_bios_state(screen_title="Advanced SETTINGS", modal_present=False)
-            runtime.mutator.observer.observe_state = AsyncMock(return_value=plain)
+            runtime.mutator.observer.observe_state = ScriptedObserver([plain]).observe_state
 
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
+            with installed_bios_runtime(runtime):
                 result = _run(bios_server.bios_save_and_reboot())
 
             assert result["success"] is False
@@ -157,7 +155,7 @@ class TestBiosTools:
     def test_bios_abort_and_recover(self, tmp_path):
         runtime, client = build_runtime(tmp_path)
         try:
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
+            with installed_bios_runtime(runtime):
                 # attach path needs a connected client; recover then re-observes
                 result = _run(bios_server.bios_abort_and_recover())
 
@@ -170,41 +168,7 @@ class TestBiosTools:
 
 
 # ---------------------------------------------------------------------------
-# 4c — Mock VLM hard-fail on live-looking Comet
-# ---------------------------------------------------------------------------
-
-
-class TestMockVlmGuard:
-    def test_observe_raises_when_mock_vlm_and_live_client(self, tmp_path):
-        # Non-fixture host ⇒ treated as live; mock provider must hard-fail.
-        runtime, _client = build_runtime(tmp_path, host="10.20.30.40")
-        try:
-            with pytest.raises(RuntimeError, match="VLM_PROVIDER=mock"):
-                _run(runtime.observe_state())
-        finally:
-            cleanup_runtime(runtime)
-
-    def test_bios_observe_state_raises_via_mcp_on_live_mock(self, tmp_path):
-        runtime, _client = build_runtime(tmp_path, host="172.16.5.9")
-        try:
-            with patch.object(bios_server, "get_runtime", return_value=runtime):
-                with pytest.raises(RuntimeError, match="live Comet"):
-                    _run(bios_server.bios_observe_state())
-        finally:
-            cleanup_runtime(runtime)
-
-    def test_fixture_host_allows_mock_vlm(self, tmp_path):
-        runtime, _client = build_runtime(tmp_path, host="127.0.0.1")
-        try:
-            state = _run(runtime.observe_state())
-            assert state.state_id
-            assert runtime.state == RuntimeState.SYNCED
-        finally:
-            cleanup_runtime(runtime)
-
-
-# ---------------------------------------------------------------------------
-# 4d — Page identity reuse still re-extracts live interaction via VLM
+# 4c — Page identity reuse still re-extracts live interaction via VLM
 # ---------------------------------------------------------------------------
 
 
@@ -212,16 +176,14 @@ class TestLiveInteractionObserve:
     def test_matched_screen_still_calls_vlm_for_live_fields(self, tmp_path):
         shot = jpeg_bytes(color=(12, 34, 56))
         runtime, client = build_runtime(tmp_path, screenshot=shot)
-        patch_ocr_texts(runtime, ["EZ", "Mode", "Cooler"])
+        install_recorded_ocr(runtime, ["EZ", "Mode", "Cooler"])
         try:
             first = _run(runtime.observer.observe_state(client, "run_a", "dev_a"))
             assert first.state_id
 
-            with patch.object(
-                runtime.vlm_client,
-                "parse_screenshot",
-                new_callable=AsyncMock,
-                return_value={
+            service = runtime._test_vlm_service
+            service.enqueue_parse(
+                {
                     "screen_title": "EZ Mode",
                     "menu_path": ["EZ Mode"],
                     "cursor_at": 0,
@@ -236,10 +198,11 @@ class TestLiveInteractionObserve:
                     ],
                     "blocklist_flag": False,
                     "blocklist_keywords": [],
-                },
-            ) as spy:
-                second = _run(runtime.observer.observe_state(client, "run_a", "dev_a"))
-                spy.assert_called_once()
+                }
+            )
+            calls_before = len(service.requests)
+            second = _run(runtime.observer.observe_state(client, "run_a", "dev_a"))
+            assert len(service.requests) == calls_before + 1
 
             assert second.state_id != first.state_id
             assert second.selection.label == "Cooler"

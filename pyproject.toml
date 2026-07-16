@@ -35,6 +35,7 @@ UpstreamGLKVM = "https://github.com/gl-inet/glkvm"
 
 [dependency-groups]
 dev = [
+    "aiohttp>=3.13.3",
     "pytest>=9.1.1",
     "ruff>=0.15.21",
 ]

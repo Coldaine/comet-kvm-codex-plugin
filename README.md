@@ -70,7 +70,7 @@ comet-kvm-codex-plugin/
 }
 ```
 
-`.mcp.json` starts `glkvm_mcp.py` (via Doppler + `uv run --locked --python 3.13 python ./glkvm_mcp.py` in this repo's launcher). The server code that runs is this project's — `kvm_core` plus `bios_sidecar` (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip) on one `FastMCP("comet-kvm")` process. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa.
+`.mcp.json` starts `glkvm_mcp.py` via `uv run --locked --python 3.13 python ./glkvm_mcp.py`. The server code that runs is this project's — `kvm_core` plus `bios_sidecar` (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip) on one `FastMCP("comet-kvm")` process. `kvm_connect` resolves an omitted password through the Doppler CLI; the launcher does not inject secret environment variables. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa.
 
 ---
 
@@ -120,7 +120,7 @@ sudo apt-get install tesseract-ocr
 
 The plugin is auto-discovered when the repo is installed as a Codex plugin. Its bundled launcher runs `uv run --locked --python 3.13 python ./glkvm_mcp.py`. `kvm_connect` fetches `GLCOMET_ADMIN_PASSWORD` from the Doppler CLI (`doppler.yaml`); the host must have Doppler installed and authenticated.
 
-**Launcher note:** The bundled [`.mcp.json`](.mcp.json) does not wrap the process in `doppler run` for env injection. Doppler CLI auth on the host is required for password resolution — tracked alongside portable plugin installs in [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
+**Launcher note:** The bundled [`.mcp.json`](.mcp.json) does not wrap the process in `doppler run` for env injection. Doppler CLI auth on the host is required for password resolution. A future portable credential-elicitation path remains a candidate in [`docs/plans/02-mcp-v2-migration-evaluation.md`](docs/plans/02-mcp-v2-migration-evaluation.md).
 
 ### Use as a standalone MCP server
 
@@ -170,8 +170,8 @@ Add to any MCP client config:
 |------|-------------|
 | `kvm_screenshot(preview?, max_width?, quality?)` | Capture JPEG frame as MCP image content |
 | `kvm_screenshot_to_file(path, ...)` | Capture and save to disk |
-| `kvm_ocr_status()` | Report native Comet OCR and host Tesseract availability |
-| `kvm_ocr_text(psm?, languages?, prefer_native?, left?, top?, right?, bottom?)` | Native-first visible text with host Tesseract fallback and optional crop |
+| `kvm_ocr_status()` | Report MCP host Tesseract status and the browser-only product UI engine |
+| `kvm_ocr_text(psm?, languages?, left?, top?, right?, bottom?)` | Host Tesseract visible-text OCR with optional crop |
 | `kvm_ocr_screenshot(search_text?, preview?, psm?)` | Host Tesseract OCR with ordered text/lines plus word coordinates |
 | `kvm_ocr_click(text, button?, count?, search_area?)` | Find text via OCR and click it |
 
@@ -181,7 +181,7 @@ Add to any MCP client config:
 | `comet_atx_power(action)` | Power on/off/reset through the ATX add-on board |
 | `comet_atx_click(button)` | Momentary power/reset button pulse through the ATX add-on board |
 | `comet_sysinfo()` | Retrieve device metadata and capabilities |
-| `comet_msd_upload(remote_path, local_path)` | Upload a host file to the Comet's `/userdata/media/` partition |
+| `comet_msd_upload(local_path, image_name?)` | Stream a host file to the Comet's MSD image store |
 
 ### BIOS Workflow (sidecar)
 
@@ -231,13 +231,16 @@ The `comet_raw_*` aliases currently duplicate `kvm_*` tools. They are deprecated
                                              │
                                       kvm_ocr_text
                                              │
-                    ┌────────────────────────┴────────────────────────┐
-                    ▼                                                 ▼
-         Native OCR (Comet)                              Host Tesseract
-         /api/streamer/ocr                               (pytesseract)
-                    │                                                 ▲
-                    └── disabled / fail ──── fallback ────────────────┘
+                                             ▼
+                                      Host Tesseract
+                                       (pytesseract)
 ```
+
+The GL.iNet 1.9 web UI's **Text Recognition** button is a separate
+Tesseract.js/WASM worker running in the controlling browser. It is not executed
+by the Comet and is not callable by this Python MCP process. The inherited
+PiKVM `/api/streamer/ocr` route is retained only as a discovery observation;
+the MCP does not treat it as the product UI OCR backend.
 
 The MCP server maintains a persistent WebSocket connection to the Comet for low-latency keyboard/mouse input, and uses HTTP for screenshots, authentication, ATX, sysinfo, and MSD upload. It runs background key-watchdog and WebSocket-pinger loops.
 
@@ -270,7 +273,7 @@ This server includes fixes for known GLKVM/PiKVM firmware bugs:
 This repo is a selective fork of [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp):
 
 - **Upstream** is a standalone MCP server for GLKVM/Comet keyboard/mouse/screenshot/OCR.
-- **This repo** ships its **own** MCP server (forked code under `src/`, composed by `glkvm_mcp.py`), augments it (BIOS sidecar, native OCR path, Comet hardware tools, etc.), and packages that server for Codex with skills.
+- **This repo** ships its **own** MCP server (forked code under `src/`, composed by `glkvm_mcp.py`), augments it (BIOS sidecar, host OCR, Comet hardware tools, etc.), and packages that server for Codex with skills.
 
 We are not wrapping upstream as an external dependency. We keep a fetch-only `upstream` remote to cherry-pick bug fixes or API improvements when useful. This repo is not a mirror and does not track upstream releases.
 

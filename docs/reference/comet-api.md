@@ -2,7 +2,7 @@
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
 > **Status:** Project-facing summary of upstream contracts this MCP cares about, plus what tools this repo exposes. Fuller endpoint inventory: [`docs/research/glkvm-api-surface.md`](../research/glkvm-api-surface.md).
-> **Compiled:** 2026-07-07 · **Revised:** 2026-07-15 (auth/discovery/ATX/MSD/verification)
+> **Compiled:** 2026-07-07 · **Revised:** 2026-07-16 (auth/discovery/ATX/MSD/OCR/verification)
 > **Purpose:** Auth, discovery, important request shapes, live-probe status, and MCP tool tables. Not ops advice (see [`docs/research/oob-proxmox-tailscale-vision.md`](../research/oob-proxmox-tailscale-vision.md)). Not a client-bug tracker (see [`docs/research/glkvm-client-audit-2026-07-15.md`](../research/glkvm-client-audit-2026-07-15.md)).
 
 ## Architecture Overview
@@ -15,12 +15,9 @@
                                              │
                                       kvm_ocr_text
                                              │
-                    ┌────────────────────────┴────────────────────────┐
-                    ▼                                                 ▼
-         Native OCR (Comet)                              Host Tesseract
-         /api/streamer/ocr                               (pytesseract)
-                    │                                                 ▲
-                    └── disabled / fail ──── fallback ────────────────┘
+                                             ▼
+                                      Host Tesseract
+                                       (pytesseract)
 ```
 
 The MCP server uses `glkvm_mcp.py` as a PEP 723 composition entry point and keeps implementation under `src/kvm_core/` and `src/bios_sidecar/`. It is launched via `uv run --locked --python 3.13 python ./glkvm_mcp.py` and runs over stdio. The KVM core maintains a persistent WebSocket connection to the Comet for low-latency input and uses HTTP for screenshots and authentication.
@@ -60,14 +57,15 @@ Useful GETs before assuming features:
 | `GET /api/upgrade/version` | Firmware / model reporting |
 | `GET /api/info` (optional `fields=`) | System / meta / extras |
 | `GET /api/system/capability` | Model capability files |
-| `GET /api/hid`, `/api/atx`, `/api/msd`, `/api/streamer`, `/api/streamer/ocr`, `/api/recorder` | Subsystem state |
+| `GET /api/hid`, `/api/atx`, `/api/msd`, `/api/streamer`, `/api/recorder` | Subsystem state |
+| `GET /api/streamer/ocr` | Inherited PiKVM server-OCR state; discovery-only here, not GL.iNet's browser Text Recognition engine |
 | `GET /api/tailscale/status`, `/api/tailscale/config` | Overlay status when present |
 
 MCP today exposes `GET /api/info` via `comet_sysinfo` / `comet_capabilities`. Connect-time discovery also probes `/api/upgrade/version`, `/api/system/capability`, and subsystem GETs. Fuller route inventory remains in the research catalog.
 
 ### Keyboard/Mouse WebSocket: `WSS /api/ws`
 
-- Typical query: `stream=false` (video via HTTP snapshot, not WS)
+- Typical query: `stream=true` (keeps the HDMI streamer process alive so HTTP `/api/streamer/snapshot` works; binary frames are drained on the socket). `stream=false` is HID-only and leaves `result.streamer` null → snapshot HTTP 503 on Comet/RM10.
 - Auth: cookie / `Token` header; query `auth_token` also accepted by firmware (prefer header/cookie — this client uses header/cookie)
 - Keyboard events: keydown, keyup (with `finish=true` flag)
 - Mouse events: button press/release, absolute move (int16 coordinates), wheel scroll
@@ -84,15 +82,23 @@ GET /api/streamer/snapshot?preview=<bool>&preview_max_width=<int>&preview_qualit
 → JPEG bytes
 
 GET /api/streamer/ocr
-→ native OCR capability
-
-GET /api/streamer/snapshot?ocr=true&ocr_langs=...&ocr_left=...&ocr_top=...&ocr_right=...&ocr_bottom=...
-→ OCR JSON when enabled
+→ inherited PiKVM server-OCR state (legacy observation)
 ```
 
-Used by `kvm_screenshot`, `kvm_screenshot_to_file`, `kvm_ocr_*` tools. Live unit at `192.168.0.126` (2026-07-10): OCR capability endpoint HTTP 200 with `enabled: false`; OCR snapshot returned HTTP 500 while disabled → host Tesseract fallback.
+Snapshot JPEGs are used by `kvm_screenshot`, `kvm_screenshot_to_file`, and
+the host-backed `kvm_ocr_*` tools. **Streamer lifecycle (RM10):** kvmd only keeps
+`result.streamer` non-null while at least one WebSocket client is connected with
+`stream=true`. With `stream=false`, snapshot returns HTTP 503 even when HDMI
+in/out LEDs show a live signal. This client connects with `stream=true`.
 
-> **Source:** GLKVM `streamer.py`, `src/kvm_core/comet/client.py`, live probes 2026-07-10. Confidence: **High**.
+The PiKVM fork still contains server-side OCR parameters, but GL.iNet firmware
+1.9's product UI Text Recognition code crops its canvas and runs bundled
+Tesseract.js/WASM in the controlling browser. A live browser recognition
+succeeded with the server OCR route disabled and no device OCR socket/process,
+proving these are separate paths. The MCP does not call the legacy OCR snapshot
+mode.
+
+> **Source:** GLKVM `streamer.py`, `src/kvm_core/comet/client.py`, live probes 2026-07-16. Confidence: **High**.
 
 ### ATX power control
 
@@ -153,17 +159,20 @@ What this project has actually exercised against the LAN Comet (`192.168.0.126`)
 |---------|--------------|--------------|
 | `POST /api/auth/login` | Yes | Authenticated sessions 2026-07-07 / 2026-07-10 |
 | `GET /api/info` | Yes | HTTP 200 authenticated 2026-07-10 |
-| `GET /api/streamer/snapshot` | Yes | JPEG capture via MCP tools |
-| `GET /api/streamer/ocr` | Yes | HTTP 200; `enabled: false` on unit 2026-07-10 |
-| Snapshot OCR (`ocr=true`) | Partial | HTTP 500 while OCR disabled; host Tesseract used |
-| WebSocket HID (keys/mouse) | Yes | Primary input path in normal MCP use |
+| `GET /api/streamer/snapshot` | Yes | JPEG after `stream=true` connect; HTTP 503 if streamer null (2026-07-16) |
+| `GET /api/streamer/ocr` | Yes | HTTP 200; `enabled: false` on unit (legacy server OCR; MCP uses host Tesseract) |
+| Snapshot OCR (`ocr=true`) | N/A for MCP | Product Text Recognition is browser Tesseract.js; MCP does not use legacy OCR snapshot |
+| WebSocket HID + stream | Yes | MCP uses `?stream=true`; pong/receiver healthy; binary frames drained |
 | `GET /api/atx` | Existence only | Not action-tested |
 | `POST /api/atx/power` / `click` | **Not live-tested** | No destructive power tests in smoke |
 | `POST /api/msd/write` + mount lifecycle | **Not live-tested** | Upload not invoked in 2026-07-10 verification |
 | WOL / Redfish / Tailscale / recorder / metrics | **Not live-tested** | Documented from source inventory only |
-| Offline CI | Yes | stdio MCP list-tools smoke, mocked protocol tests (see CI) |
+| Offline CI | Yes | stdio MCP list-tools smoke, executable loopback HTTP/WebSocket contracts, and real Tesseract OCR (see CI) |
 
-Manual live smoke: `.github/workflows/live-smoke.yml` (Doppler + runner with Comet reachability). Preflight without KVM actions: `scripts/comet_preflight.py`.
+Manual live smoke: `.github/workflows/live-smoke.yml` (Doppler + self-hosted
+`comet-lan` runner). Direct execution requires explicit
+`RUN_LIVE_COMET_SMOKE=1`; otherwise collection skips before credentials or
+network access. Preflight without KVM actions: `scripts/comet_preflight.py`.
 
 ## This repo’s MCP tools
 
@@ -198,8 +207,8 @@ This section is **this repo’s tool surface**, not the full firmware catalog. K
 |------|-----------|-------------|-------------|
 | `kvm_screenshot` | `(preview?, max_width?, quality?)` | read-only, non-destructive, idempotent | JPEG as MCP image content |
 | `kvm_screenshot_to_file` | `(path, preview?, ...)` | read-only, non-destructive, idempotent | Save JPEG to disk |
-| `kvm_ocr_status` | `()` | read-only, non-destructive, idempotent | Native OCR state plus host Tesseract status |
-| `kvm_ocr_text` | `(psm?, languages?, prefer_native?, left?, top?, right?, bottom?)` | read-only, non-destructive, idempotent | Native-first text OCR with host fallback and optional crop; `psm` configures fallback only |
+| `kvm_ocr_status` | `()` | read-only, non-destructive, idempotent | Host Tesseract status plus browser-only product UI engine metadata |
+| `kvm_ocr_text` | `(psm?, languages?, left?, top?, right?, bottom?)` | read-only, non-destructive, idempotent | Host Tesseract text OCR with optional language and crop |
 | `kvm_ocr_screenshot` | `(search_text?, preview?, psm?)` | read-only, non-destructive, idempotent | Capture + Tesseract OCR → ordered text/lines plus word coordinates; `psm=6` suits terminals |
 | `kvm_ocr_click` | `(text, button?, count?, search_area?)` | write, destructive | OCR-find text → click it (all-in-one) |
 
@@ -303,18 +312,25 @@ The MCP process runs **two background asyncio loops** for transport reliability:
 
 ## OCR Integration
 
-Text-only OCR uses the Comet when its native engine is enabled and falls back to the host:
+All MCP OCR runs in the host process:
 
 - Tesseract binary is located via `TESSERACT_PATH`/`TESSERACT_CMD` env vars, then `PATH`, then Windows default paths
-- `kvm_ocr_status` reads `GET /api/streamer/ocr` and reports native plus host availability
-- `kvm_ocr_text` prefers native `GET /api/streamer/snapshot?ocr=true`, passing language and crop parameters; it falls back to host `image_to_string` with preserved inter-word spacing
+- `kvm_ocr_status` reports host availability and explicitly marks GL.iNet's Tesseract.js UI engine as browser-only/unavailable to MCP
+- `kvm_ocr_text` captures a JPEG and uses host `image_to_string` with preserved inter-word spacing
 - `kvm_ocr_screenshot` captures a frame, passes it to Tesseract, and returns structured JSON with word coordinates
 - `kvm_ocr_click` finds text by name and clicks its exact coordinates
 - Pillow supplies decoded image dimensions; pytesseract is bounded to 15 seconds and runs off the MCP asyncio loop
 
-### Device-side OCR capability
+### Browser Text Recognition versus inherited server OCR
 
-GL.iNet's PiKVM fork exposes `GET /api/streamer/ocr` with `enabled`, `engine` (`tesseract` or `rknn`), and language state. On 2026-07-10, the live Comet at `192.168.0.126` returned `enabled: false`, engine `tesseract`, and no available/default languages; the native snapshot call returned HTTP 500, so host Tesseract is selected on that unit. Native OCR does not replace host word boxes used for coordinate-sensitive tools.
+The fork exposes inherited PiKVM server-OCR state at `/api/streamer/ocr`, which
+may mention engines such as `tesseract` or `rknn`. That is not the implementation
+behind GL.iNet firmware 1.9's web UI Text Recognition feature. Inspection of the
+served product bundle shows `Tesseract.createWorker(...)` and
+`worker.recognize(...)` operating on a browser canvas crop. Live recognition
+also succeeds while server OCR is disabled. Therefore RKNN enablement would be
+a separate firmware experiment, not a way for this Python process to invoke the
+existing product UI OCR.
 
 > **Source:** `src/kvm_core/ocr.py`, `src/kvm_core/tools.py`, and live probes. Verified 2026-07-10.
 
@@ -336,7 +352,7 @@ GL.iNet's PiKVM fork exposes `GET /api/streamer/ocr` with `enabled`, `engine` (`
 | `COMET_USERNAME` | no | no | `admin` | Comet login username |
 | `COMET_DISABLE_BIOS_SIDECAR` | no | no | unset | Set to `1` to skip loading `bios_sidecar` |
 | `VLM_API_KEY` | **yes** | for VLM | — | OpenAI-compatible API key |
-| `VLM_PROVIDER` | no | no | `mock` | `openrouter` \| `ollama` \| `vllm` \| `openai` \| `mock` |
+| `VLM_PROVIDER` | no | **yes for BIOS perception** | — | `openrouter` \| `ollama` \| `vllm` \| `openai`; missing/unsupported values fail closed |
 | `VLM_MODEL` | no | no | provider default | Model string for the OpenAI-compatible endpoint |
 | `VLM_BASE_URL` | no | no | provider default | Override API endpoint |
 

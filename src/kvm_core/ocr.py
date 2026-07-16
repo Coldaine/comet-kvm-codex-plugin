@@ -14,6 +14,63 @@ def validate_psm(psm: int) -> None:
         raise ValueError("psm must be a Tesseract text-recognition mode (1, 3-13 except 2)")
 
 
+def ordered_lines(data: dict) -> list[str]:
+    """Convert recorded Tesseract TSV fields into reading-order lines."""
+    lines: list[str] = []
+    current_line = None
+    current_words: list[str] = []
+    for i, raw_word in enumerate(data["text"]):
+        word = raw_word.strip()
+        if not word:
+            continue
+        line_key = (
+            data["page_num"][i],
+            data["block_num"][i],
+            data["par_num"][i],
+            data["line_num"][i],
+        )
+        if current_line is not None and line_key != current_line:
+            lines.append(" ".join(current_words))
+            current_words = []
+        current_line = line_key
+        current_words.append(word)
+    if current_words:
+        lines.append(" ".join(current_words))
+    return lines
+
+
+def word_elements(data: dict, img_w: int, img_h: int, search_text: str = "") -> list[dict]:
+    """Convert recorded Tesseract TSV fields into normalized clickable words."""
+    elements = []
+    search_lower = search_text.strip().lower() if search_text else ""
+    for i in range(len(data["text"])):
+        word = data["text"][i].strip()
+        if not word:
+            continue
+        raw_conf = data["conf"][i]
+        conf = float(raw_conf) if raw_conf not in ("", "-1") else 0.0
+        if conf < 30:
+            continue
+        if search_lower and search_lower not in word.lower():
+            continue
+        x = int(data["left"][i])
+        y = int(data["top"][i])
+        w = int(data["width"][i])
+        h = int(data["height"][i])
+        cx = x + w // 2
+        cy = y + h // 2
+        elements.append({
+            "text": word,
+            "confidence": round(conf, 1),
+            "x_pct": round(cx / img_w * 100, 1),
+            "y_pct": round(cy / img_h * 100, 1),
+            "pixel": [cx, cy],
+            "box": [x, y, w, h],
+        })
+    elements.sort(key=lambda e: (e["y_pct"], e["x_pct"]))
+    return elements
+
+
 class OCRManager:
     def __init__(self):
         self.tesseract_bin = self._find_tesseract_binary()
@@ -85,60 +142,10 @@ class OCRManager:
             result["error"] = f"OCR error: {e}"
             return result
 
-        lines: list[str] = []
-        current_line = None
-        current_words: list[str] = []
-        for i, raw_word in enumerate(data["text"]):
-            word = raw_word.strip()
-            if not word:
-                continue
-            line_key = (
-                data["page_num"][i],
-                data["block_num"][i],
-                data["par_num"][i],
-                data["line_num"][i],
-            )
-            if current_line is not None and line_key != current_line:
-                lines.append(" ".join(current_words))
-                current_words = []
-            current_line = line_key
-            current_words.append(word)
-        if current_words:
-            lines.append(" ".join(current_words))
-
+        lines = ordered_lines(data)
         result["lines"] = lines
         result["text"] = "\n".join(lines)
-
-        elements = []
-        search_lower = search_text.strip().lower() if search_text else ""
-
-        for i in range(len(data["text"])):
-            word = data["text"][i].strip()
-            if not word:
-                continue
-            raw_conf = data["conf"][i]
-            conf = float(raw_conf) if raw_conf not in ("", "-1") else 0.0
-            if conf < 30:
-                continue
-            if search_lower and search_lower not in word.lower():
-                continue
-            x = int(data["left"][i])
-            y = int(data["top"][i])
-            w = int(data["width"][i])
-            h = int(data["height"][i])
-            cx = x + w // 2
-            cy = y + h // 2
-            elements.append({
-                "text": word,
-                "confidence": round(conf, 1),
-                "x_pct": round(cx / img_w * 100, 1),
-                "y_pct": round(cy / img_h * 100, 1),
-                "pixel": [cx, cy],
-                "box": [x, y, w, h],
-            })
-
-        elements.sort(key=lambda e: (e["y_pct"], e["x_pct"]))
-        result["elements"] = elements
+        result["elements"] = word_elements(data, img_w, img_h, search_text)
         return result
 
     def run_text_ocr(
@@ -161,11 +168,6 @@ class OCRManager:
         try:
             with PILImage.open(io.BytesIO(image_bytes)) as pil_img:
                 result["width"], result["height"] = pil_img.size
-                if not self._ensure_tesseract():
-                    result["error"] = "Tesseract OCR binary not found."
-                    return result
-                result["tesseract_found"] = True
-
                 ocr_img = pil_img
                 cropped_img = None
                 if crop is not None:
@@ -180,6 +182,10 @@ class OCRManager:
                     ocr_img = cropped_img
 
                 try:
+                    if not self._ensure_tesseract():
+                        result["error"] = "Tesseract OCR binary not found."
+                        return result
+                    result["tesseract_found"] = True
                     text = pytesseract.image_to_string(
                         ocr_img,
                         config=f"--psm {psm} -c preserve_interword_spaces=1",
