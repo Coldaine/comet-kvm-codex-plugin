@@ -261,7 +261,7 @@ This table is **MCP tool names only**. Curated upstream facts stay in the [resea
 | URI | Returns | Description |
 |-----|---------|-------------|
 | `bios://state/current` | JSON string | Latest normalized BIOS state |
-| `bios://screen/current` | bytes | Current screenshot (known R1c limitation) |
+| `bios://screen/current` | bytes | Current screenshot bytes (prefer `kvm_screenshot` / `kvm_screenshot_to_file` for agent-facing capture) |
 | `bios://graph/current` | JSON string | Navigation graph summary |
 | `bios://capabilities/current` | JSON string | Discovered settings index |
 

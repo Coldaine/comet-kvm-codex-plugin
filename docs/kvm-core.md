@@ -7,7 +7,7 @@ The KVM MCP server is the universal physical-control substrate. The BIOS sidecar
 
 ## 1. Overview
 
-The KVM MCP server is a hardened fork of `kennypeh85/glkvm-mcp` that exposes a GL.iNet Comet KVM / GL-RM1 device's keyboard, mouse, screenshot, OCR, and hardware-control capabilities as MCP tools.
+The KVM MCP server is a hardened fork of `kennypeh85/glkvm-mcp` that exposes a GL.iNet Comet KVM / GL-RM1 device's keyboard, mouse, screenshot, and hardware-control capabilities as MCP tools, plus host-process OCR (`kvm_ocr_*`) over captured frames.
 
 It is a stdio MCP server intended to run from `glkvm_mcp.py` with `uv run --locked --python 3.13 python ./glkvm_mcp.py`. The entry point composes universal tools from `src/kvm_core/` and BIOS-aware tools from `src/bios_sidecar/` (loaded by default; `COMET_DISABLE_BIOS_SIDECAR=1` skips sidecar registration) against one shared MCP server. The KVM core owns the physical session; the sidecar delegates to it rather than duplicating transport state.
 
@@ -79,12 +79,15 @@ The server exposes Comet-specific hardware APIs in addition to HID and screensho
 
 | Tool | Purpose | Caution |
 |------|---------|---------|
-| `comet_atx_power(action)` | Power on/off/reset through the ATX add-on board. | Requires the ATX add-on board to be physically installed. Destructive. |
-| `comet_atx_click(button)` | Momentary power/reset button pulse. | Requires the ATX add-on board to be physically installed. Destructive. |
-| `comet_sysinfo()` | Reads device metadata and capabilities. | Read-only. |
-| `comet_msd_upload(local_path, image_name?)` | Streams a host file to the Comet's MSD image store. | Writes to device storage. |
+| `comet_power_state` | Read ATX power/LED state. | Read-only; ATX board required for useful LEDs. |
+| `comet_atx_power(action)` | Power on/off/reset through the ATX add-on board. | Requires the ATX add-on board. Destructive. |
+| `comet_atx_click(button)` | Momentary power/reset button pulse. | Requires the ATX add-on board. Destructive. |
+| `comet_sysinfo()` | Reads device metadata. | Read-only. |
+| `comet_capabilities()` | Discover supported subsystems on the connected unit. | Read-only. |
+| `comet_media_*` | Virtual media inventory, upload/fetch, mount/unmount, remove, reset. | Writes to device storage / changes boot media. |
+| `comet_msd_upload` | Legacy alias for media upload. Prefer `comet_media_upload`. | Writes to device storage. |
 
-ATX endpoints being exposed does not guarantee the target machine is wired for ATX control. The hardware board and cable path still need to exist.
+ATX endpoints being exposed does not guarantee the target machine is wired for ATX control. The hardware board and cable path still need to exist. Full tool tables (WOL, streamer, recorder, Tailscale, Redfish) live in `docs/reference/comet-api.md` and the README.
 
 ## 7. Tool Annotations
 
@@ -100,7 +103,7 @@ These hints tell the client and operator what a tool can do. They do not grant o
 
 Read-only examples: `kvm_screenshot`, `kvm_screenshot_to_file`, `kvm_ocr_screenshot`, `kvm_status`, `comet_sysinfo`.
 
-Destructive or physical-input examples: `kvm_send_text`, `kvm_send_keys`, `kvm_hold_key`, mouse tools, `kvm_ocr_click`, `comet_atx_power`, `comet_atx_click`, `comet_msd_upload`.
+Destructive or physical-input examples: `kvm_send_text`, `kvm_send_keys`, `kvm_hold_key`, mouse tools, `kvm_ocr_click`, `comet_atx_power`, `comet_atx_click`, `comet_media_upload`, `comet_media_mount`.
 
 ## 8. Security Model
 
@@ -163,7 +166,7 @@ The KVM core does not know about VLMs. It exposes screenshots, OCR, HID, and Com
 | Phase | Tool Call | Layer | Position Tracker Role |
 |:---|:---|:---|:---|
 | **I. KVM session** | `kvm_connect()` | Universal KVM | Idle. Opens physical I/O session. |
-| **II. General triage** | `kvm_ocr_text()` | Universal KVM | Native-first visible text for shells, POST, recovery, and other text screens. |
+| **II. General triage** | `kvm_ocr_text()` | Universal KVM | Host Tesseract visible text for shells, POST, recovery, and other text screens. |
 | | `comet_atx_power("reset")` | Universal KVM | No BIOS semantics. Physical power action. |
 | **III. BIOS entry** | `kvm_hold_key("Delete")` or repeated `kvm_send_keys("Delete")` | Universal KVM | Still mostly passive. Getting into setup. |
 | **IV. BIOS alignment** | `bios_observe_state()` | BIOS sidecar | Wakes up. Uses screenshot/OCR/VLM to set `current_state`. |

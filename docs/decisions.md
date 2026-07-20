@@ -1,16 +1,16 @@
 # Implementation Decisions
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
-> **Authority:** #2 in the [Authority Order](NORTH_STAR.md#authority-order). These are decisions about *how* we build the thing, not *what* the thing is (that's NORTH_STAR.md) or *how to behave* in the repo (that's AGENTS.md). See `docs/architecture.md` for the full justification of each decision.
+> **Authority:** #2 after `docs/NORTH_STAR.md` (ladder in `AGENTS.md`). These are decisions about *how* we build the thing, not *what* the thing is (that's NORTH_STAR.md). `AGENTS.md` is a thin router into these docs. See `docs/architecture.md` and `docs/kvm-core.md` for shape and pipeline detail.
 
 ## D1 — Screenshot retention: TTL, not permanent
 
 Runtime screenshots are persisted temporarily for retry, debugging, and map-building, then automatically purged after approximately 30 days. They are never committed to Git. The retention is a cleanup policy, not a git policy — the TTL runs against whatever runtime data directory the installed plugin uses (host-side or on-Comet).
 
 
-## D3 — Cartography skill placement: reference under active plans
+## D3 — Cartography lives under the BIOS triage skill
 
-BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It is documented under `docs/architecture.md` and active plans (e.g. `docs/plans/01-vlm-mcp-integration-plan.md`). The existing skill's trigger surface already covers BIOS workflows; cartography is a prerequisite step within that workflow, not a separate capability.
+BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It is documented under `docs/architecture.md` and `docs/kvm-core.md`. The existing skill's trigger surface already covers BIOS workflows; cartography is a prerequisite step within that workflow, not a separate capability.
 
 ## D4 — Map store runtime location: on-Comet preferred, pending verification
 
@@ -34,9 +34,9 @@ The stateful screen-level position tracker runs inside the MCP server process, k
 
 ## D8 — Two granularity levels: workflow phases vs screen position
 
-**Status: QUESTIONED.** User does not understand this concept yet; do not enshrine the workflow phase ledger as product architecture without re-evaluation.
+**Status: open / not product architecture.** Do not treat the workflow-phase ledger as settled product design until re-evaluated.
 
-The project operates at two distinct granularity levels that complement, not replace, each other:
+The project may operate at two distinct granularity levels that complement, not replace, each other:
 
 - **Workflow level** (`stateful-control-model.md`): phases like `planned → preflight → bios-entry → bios-edit → save-confirm → windows-boot → hwinfo-log → analysis → done`. Agent-maintained, persisted in the run ledger. Asks "are we in the edit phase?"
 - **Screen level** (state engine): which BIOS menu node are we on right now, matched against a stored map. Maintained on demand and ephemeral per session. Asks "are we on the Overclocking submenu row 3, and did that Enter press land where the map predicted?"
@@ -60,13 +60,18 @@ Removed as product architecture. Approval tokens, `bios_grant_human_approval`, a
 
 ## D-K1 — KVM tool surface plus deprecated aliases
 
-The KVM core exposes these unique driver-facing tools: `kvm_connect`, `kvm_disconnect`, `kvm_status`, `kvm_send_text`, `kvm_send_keys`, `kvm_hold_key`, `kvm_release_all`, `kvm_mouse_move`, `kvm_mouse_move_pct`, `kvm_mouse_click`, `kvm_mouse_scroll`, `kvm_screenshot`, `kvm_screenshot_to_file`, `kvm_ocr_status`, `kvm_ocr_text`, `kvm_ocr_screenshot`, `kvm_ocr_click`, `comet_atx_power`, `comet_atx_click`, `comet_sysinfo`, and `comet_msd_upload`.
+The KVM core exposes these unique driver-facing tool families (exact schemas in `docs/reference/comet-api.md` and the live MCP tool list):
+
+- **Session / HID / capture:** `kvm_connect`, `kvm_disconnect`, `kvm_status`, `kvm_select_target`, `kvm_send_text`, `kvm_send_keys`, `kvm_hold_key`, `kvm_release_all`, `kvm_mouse_move`, `kvm_mouse_move_pct`, `kvm_mouse_click`, `kvm_mouse_scroll`, `kvm_screenshot`, `kvm_screenshot_to_file`, `kvm_ocr_status`, `kvm_ocr_text`, `kvm_ocr_screenshot`, `kvm_ocr_click`
+- **Power / discovery:** `comet_power_state`, `comet_atx_power`, `comet_atx_click`, `comet_sysinfo`, `comet_capabilities`
+- **Virtual media:** `comet_media_state`, `comet_media_upload`, `comet_media_fetch`, `comet_media_mount`, `comet_media_unmount`, `comet_media_remove`, `comet_media_reset` (legacy alias `comet_msd_upload` remains)
+- **WOL / stream / recorder / admin:** `comet_wol_list`, `comet_wol_scan`, `comet_wol_wake`, `comet_streamer_state`, `comet_streamer_set_params`, `comet_recorder_state`, `comet_recorder_start`, `comet_recorder_stop`, `comet_metrics`, `comet_tailscale_status`, `comet_redfish_power`
 
 The 10 `comet_raw_*` aliases duplicate `kvm_*` tools and are deprecated in documentation only. Do not remove them in this docs pass; `tests/test_smoke.py` currently expects `comet_raw_send_keys` and `comet_raw_screenshot`.
 
 ## D-K2 — ATX power control is wrapped
 
-ATX power control is available through `comet_atx_power` and `comet_atx_click`. These tools supersede the stale AGENTS.md claim that ATX endpoints are not wrapped. The tools still require the ATX add-on board to be physically installed and wired to the target.
+ATX power control is available through `comet_atx_power` and `comet_atx_click`. The tools still require the ATX add-on board to be physically installed and wired to the target.
 
 ## D-K3 — Upstream sync is fetch-only and selective
 
@@ -92,14 +97,36 @@ For a pixel-only KVM console, the current primitive flow is `kvm_send_text` → 
 
 Exact stdout/stderr/exit status requires a real byte-stream transport, not HDMI OCR. A separate AsyncSSH-backed target-shell component is a **Candidate** for machines that are directly reachable on the network. It must keep target credentials separate from the Comet admin password, verify known hosts, and use an allowlist. It does not belong inside `kvm_core` and it cannot replace KVM access for BIOS, recovery, or network-down states.
 
-`kvm_ocr_text` captures the frame and uses host Pillow plus pytesseract. GL.iNet
-firmware 1.9's Text Recognition UI runs Tesseract.js/WASM in the controlling
-browser; it is neither RKNN nor a device API available to this process. The
-inherited PiKVM `/api/streamer/ocr` route remains a discovery-only legacy
-observation and must not be presented as the product UI's OCR engine.
+`kvm_ocr_text` captures the frame and uses host Pillow plus pytesseract. The
+full host-only OCR decision, rejected native/device paths, and live-probe
+findings are recorded in **D-K9**.
 
 ## D-K8 — Prefer small standard adapters over dependency expansion
 
 Keep Pillow for image decoding, pytesseract for Tesseract integration, and the Python standard library for rotating logs, bounded queues, subprocess offloading, and initial text overlap. Do not add `screen-ocr`, pandas, OpenCV, RapidFuzz, Loguru, structlog, or OpenTelemetry without fixture- or profiling-backed need. If direct SSH is implemented, use AsyncSSH rather than writing an SSH protocol/session layer or wrapping synchronous Paramiko.
 
-**MCP Python SDK:** Pin `mcp[cli]>=1.28,<2` and use `FastMCP` from the 1.x line. "Stay on 1.x" means defer a deliberate **`mcp` 2.x / `MCPServer`** migration — not avoid the high-level server API (the project already uses FastMCP). MCP v2 is a **candidate**, not rejected: elicitation for the Comet admin password (plugin distribution), progress notifications for long crawl/observe calls, and resource subscriptions for `bios://*` resources. See [`docs/plans/02-mcp-v2-migration-evaluation.md`](plans/02-mcp-v2-migration-evaluation.md) and [issue #24](https://github.com/Coldaine/comet-kvm-codex-plugin/issues/24).
+**MCP Python SDK:** Pin `mcp[cli]>=1.28,<2` and use `FastMCP` from the 1.x line. "Stay on 1.x" means defer a deliberate **`mcp` 2.x / `MCPServer`** migration — not avoid the high-level server API (the project already uses FastMCP). MCP v2 is a **candidate**, not rejected: elicitation for the Comet admin password (plugin distribution), progress notifications for long crawl/observe calls, and resource subscriptions for `bios://*` resources. See [`docs/plans/02-mcp-v2-migration-evaluation.md`](plans/02-mcp-v2-migration-evaluation.md).
+
+## D-K9 — MCP OCR is host-only; native-first removed
+
+**Settled path:** `kvm_ocr_*` captures a JPEG from `GET /api/streamer/snapshot` and runs host Tesseract (Pillow + pytesseract) in the MCP process. Pipeline detail: [`docs/kvm-core.md`](kvm-core.md) §5 / §9 and [`docs/reference/comet-api.md`](reference/comet-api.md)#ocr-integration.
+
+**Rejected paths:**
+
+- Device/RKNN `ocr_service` as an MCP text engine
+- GL.iNet browser Text Recognition (Tesseract.js/WASM) as an MCP backend
+- Native-first OCR with host Tesseract as a transparent fallback
+
+**Investigation narrative:**
+
+1. PR #22 added a native-first + host-fallback story based on the inherited PiKVM `/api/streamer/ocr` handler and assumed a device OCR path.
+2. Live probes on RM10 firmware V1.9.1 (2026-07-16): `GET /api/streamer/ocr` returned `enabled: false`, `engine: tesseract` (non-RKNN label). Root SSH showed `/run/kvmd/ocr-service.sock` absent, no `ocr_service` binary on the image, and no `libtesseract` / tessdata.
+3. Served product-bundle inspection found `Tesseract.createWorker(...)` and `worker.recognize(...)` operating on a browser canvas crop. GL.iNet firmware 1.9 Text Recognition is browser-side Tesseract.js/WASM in the controlling browser — not a device API available to this Python process.
+4. Browser recognition succeeded with server OCR disabled and no device OCR socket/process, proving inherited server OCR and product UI OCR are separate surfaces.
+5. PR #34 removed the fabricated native/RKNN execution path from the MCP client and tools. PR #36 scrubbed false native-OCR language from skills.
+
+**Discovery-only:** `GET /api/streamer/ocr` may still appear during capability discovery as legacy server-OCR state. It is not a text engine for this MCP and must not be presented as the product UI's OCR.
+
+**Issue #2 superseded:** Installing host Tesseract is a normal MCP-host dependency (README prerequisites + CI). It is not an open product or architecture spike. Do not reopen device-OCR work from a closed host-install checklist.
+
+Dated raw record (research, not authority): [`docs/research/glkvm-client-audit-2026-07-15.md`](research/glkvm-client-audit-2026-07-15.md).
