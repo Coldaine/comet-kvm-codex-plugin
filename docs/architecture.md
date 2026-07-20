@@ -7,6 +7,17 @@
 
 One stdio MCP process composes a universal physical KVM core with a BIOS-aware sidecar (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip). The KVM core owns Comet transport and screen primitives; the sidecar consumes those primitives and adds BIOS semantics. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa. Agents receive results through explicit MCP tool return values. Perception and diagnostic services do not become peer navigators or hidden output channels.
 
+## Maturity — two layers
+
+The product is one integrated MCP process with two layers maturing at different rates:
+
+| Layer | Role | Maturity |
+|---|---|---|
+| Universal KVM (`src/kvm_core/`) | Transport, HID, screenshots, host OCR, Comet hardware tools, plugin packaging | More mature — in active use for connect/console/media/power work |
+| BIOS sidecar (`src/bios_sidecar/`) | Observation, graph/state, VLM grounding, navigation, mutation, cartography | Still the live product spike — code exists; end-to-end board proof is **Planned** |
+
+The first live-hardware proof point is MSI Z690 (see `docs/workflows/live-hardware-qualification.md`). Until that lane signs off, treat BIOS mutation/save paths as lab-only.
+
 ## Status Legend
 
 - **Current** — implemented in the repository or verified in the live setup.
@@ -55,8 +66,8 @@ The dependency direction is `bios_sidecar -> kvm_core`. `src/kvm_core` does not 
 
 The project has two agent roles and one packaging surface:
 
-1. The **developer agent** edits this repo (MCP server, skills, tests) using `AGENTS.md`, `docs/NORTH_STAR.md`, and `docs/decisions.md`. `AGENTS.md` is repo guidance — not part of the Codex plugin payload.
-2. The **driver agent** operates a physical machine using bundled skills under `skills/comet-bios-triage/` (plugin payload) and the MCP tools this server exposes.
+1. The **developer agent** edits this repo (MCP server, skills, tests) by following `AGENTS.md` into `docs/NORTH_STAR.md`, `docs/decisions.md`, `docs/architecture.md`, and `docs/kvm-core.md`. `AGENTS.md` is a thin router — not part of the Codex plugin payload.
+2. The **driver agent** operates a physical machine using bundled skills under `skills/comet-kvm-operations/` and `skills/comet-bios-triage/` (plugin payload) and the MCP tools this server exposes.
 3. The **Codex plugin** is how the MCP server + skills are installed; it does not replace the MCP server.
 
 The VLM is a stateless perception service called by the BIOS sidecar. It returns structured screen interpretation; it does not send input, navigate, edit code, or hold the project state.
@@ -85,12 +96,19 @@ The KVM core is the engine and the BIOS sidecar is steering:
 
 The BIOS tracker is **Current** and updates on demand through semantic `bios_*` calls. It uses perceptual hashes, OCR fingerprints, normalized VLM output, and a persisted graph/capability store. It does not continuously poll the screen.
 
-Near-exhaustive BIOS cartography is **Planned** as the first product spike. It derives two persisted views:
+Near-exhaustive BIOS cartography is **Planned** as the first product spike. Intended shape:
+
+- A Python DFS driver navigates the UI tree; a VLM returns per-screen structured perception; cycle detection uses perceptual hashing.
+- Blocklisted zones (Flash, Secure Erase, RAID, Boot Order, Password) stay off-limits to the crawler; everything else is visited.
+- Maps persist as labeled, reusable artifacts (board model, BIOS version, date) for reconnect and similar-board reuse.
+- A stateful screen-level position tracker validates expected transitions against a stored map during live sessions, without relying on the main LLM to hold screen position.
+
+Persisted views:
 
 - a semantic capability index for deterministic driver navigation;
 - a screen-node graph for transition validation and cycle detection.
 
-Blocklisted zones such as firmware flash, secure erase, RAID, boot order, and password screens remain outside autonomous crawl traversal.
+Runtime driver procedure for cartography and mutation lives under `skills/comet-bios-triage/` (not in this architecture doc).
 
 ## Architectural Invariants
 
@@ -112,5 +130,7 @@ Blocklisted zones such as firmware flash, secure erase, RAID, boot order, and pa
 - Accepted implementation choices: `docs/decisions.md`
 - Universal KVM detail and runtime call order: `docs/kvm-core.md`
 - Verified Comet API surface: `docs/reference/comet-api.md`
-- BIOS perception contract: `docs/vlm-prompt-contract.md`
-- Driver workflow: `skills/comet-bios-triage/SKILL.md`
+- BIOS perception contract (sidecar design): `docs/vlm-prompt-contract.md`
+- Live hardware / MSI proof: `docs/workflows/live-hardware-qualification.md`
+- Developer doc ladder: `AGENTS.md`
+- How to **use** the product at runtime: `skills/comet-kvm-operations/`, `skills/comet-bios-triage/` (plugin payload; not develop authority)
