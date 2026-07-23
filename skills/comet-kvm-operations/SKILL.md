@@ -53,8 +53,8 @@ When the MCP is available, do not reproduce raw GLKVM HTTP requests — the MCP
 owns authentication, wire contracts, retries, streaming, and response
 normalization. Do not drive the Comet web UI with browser automation
 (self-signed cert interstitial). If you must go raw, use the auth and stream
-contracts in [`docs/reference/comet-api.md`](../../docs/reference/comet-api.md);
-do not guess `/api/login`.
+contracts in the repo doc `docs/reference/comet-api.md` (outside this skill
+payload); do not guess `/api/login`.
 
 ## Result
 
