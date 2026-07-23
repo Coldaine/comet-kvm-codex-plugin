@@ -44,7 +44,7 @@ Three control layers:
 
 1. **Tailnet identity** — who may reach the Comet host/ports  
 2. **GLKVM authentication** — application token / login (`Token` header preferred)  
-3. **BIOS sidecar / orchestrator** — stateful, policy-gated operations  
+3. **BIOS sidecar / orchestrator** — stateful BIOS ops with blocklists and visual verification (not an approval-token / policy-engine gate; see `docs/decisions.md` D11)
 
 Tailscale encrypts transport; it does **not** replace GLKVM auth.
 
@@ -114,7 +114,7 @@ Contract details: [`glkvm-api-surface.md`](glkvm-api-surface.md) MSD + ATX secti
 
 ## 6. External watchdog / screen classification
 
-Firmware OCR plus `/api/streamer/snapshot` + HID enables an **external** watchdog (must not run on the cluster it monitors):
+Host MCP OCR (`kvm_ocr_*` over `/api/streamer/snapshot`) plus HID enables an **external** watchdog (must not run on the cluster it monitors):
 
 1. Detect Proxmox unresponsive.  
 2. Capture Comet screenshot.  
@@ -238,7 +238,7 @@ These are open design questions for a later `decisions.md` entry — not decided
 | Today | Future OOB (this vision) |
 |-------|---------------------------|
 | `kvm_core` transport + screenshot/OCR + HID | Same, with correct ATX/MSD/WS contracts (see audit snapshot) |
-| `bios_sidecar` cartography / policy-gated BIOS | Phase 4 agentic recovery consumer |
+| `bios_sidecar` cartography / visually verified BIOS | Phase 4 agentic recovery consumer |
 | Docs: reference API + hardware | Track A facts already separated |
 | NORTH_STAR / architecture / VLM contract | Unchanged by this note — relationship only |
 
@@ -250,4 +250,4 @@ What would need a later **`decisions.md` promotion** before becoming authority:
 - Virtual-media provisioning as a first-class product goal  
 - Watchdog hosting model  
 
-Until then: BIOS sidecar architecture stays in [`docs/architecture.md`](../architecture.md) / [`docs/kvm-core.md`](../kvm-core.md) / skills — summarize relationship here; do not fork a second architecture. VLM / cartography / board adapters stay in NORTH_STAR and related contracts.
+Until then: BIOS sidecar architecture stays in [`docs/architecture.md`](../architecture.md) / [`docs/kvm-core.md`](../kvm-core.md) / skills — summarize relationship here; do not fork a second architecture. VLM / cartography design stays in `docs/architecture.md` and `docs/vlm-prompt-contract.md`; board adapters and MSI procedure stay in the BIOS skill.
