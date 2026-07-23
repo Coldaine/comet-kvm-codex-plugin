@@ -49,12 +49,12 @@ Prefer another already-available exact interface such as the Proxmox API or SSH
 when it is healthy and provides the required operation. Use KVM for pre-boot,
 installer, recovery, network-down, frozen, or otherwise inaccessible states.
 
-Do not reproduce raw GLKVM HTTP requests. The MCP server owns authentication,
-wire contracts, retries, streaming, and response normalization. Do not drive the
-Comet web UI with browser automation (self-signed cert interstitial). If you
-must go raw, use the auth and stream contracts in
-[`docs/reference/comet-api.md`](../../docs/reference/comet-api.md) — do not
-guess `/api/login`.
+When the MCP is available, do not reproduce raw GLKVM HTTP requests — the MCP
+owns authentication, wire contracts, retries, streaming, and response
+normalization. Do not drive the Comet web UI with browser automation
+(self-signed cert interstitial). If you must go raw, use the auth and stream
+contracts in [`docs/reference/comet-api.md`](../../docs/reference/comet-api.md);
+do not guess `/api/login`.
 
 ## Result
 
