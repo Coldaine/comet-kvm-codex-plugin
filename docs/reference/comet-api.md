@@ -48,6 +48,8 @@ Form body: user=admin&passwd=<password>&expire=0
 
 > **Source:** pinned [`auth.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/auth.py); `src/kvm_core/comet/client.py` (`CometClient.connect` / `disconnect`). Confidence: **High**.
 
+**Agent traps (observed):** Prefer this MCP or `curl -k` over driving the web UI — Chrome's self-signed-cert interstitial is not automation-attachable (`Cannot attach to this target`; `screenshot`/`read_page` fail with `Frame … showing error page`; `thisisunsafe` needs a focused page and cannot run when attach fails). Guessed login paths (`/api/login`, `/api/auth`, `/api/session`, `/api/user/login`, `/api/v1/login`, `/rpc`, `/cgi-bin/api`, `/api/system`) return **404**; the real route is `POST /api/auth/login` above. Pre-auth, `/api/hid`, `/api/streamer`, and `/api/info` return **401** (they exist). For video, open `WSS /api/ws?stream=true` before snapshots — `stream=false` leaves `streamer` null and snapshot returns 503 (this MCP client uses `stream=true`).
+
 ### Discovery
 
 Useful GETs before assuming features:
@@ -345,8 +347,7 @@ existing product UI OCR.
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — device ships with self-signed certificate; `verify=False` in httpx client
-- **Browser automation caveat** — the Comet ships a self-signed certificate. Chrome's certificate interstitial is not automation-attachable (`Cannot attach to this target`; `screenshot`/`read_page` fail with `Frame … showing error page`). The `thisisunsafe` bypass needs a focused, typeable page, which cannot exist when attach fails. Agents should default to `curl -k` or this MCP server (TLS verification already disabled), not the web UI through a browser driver. If a human browser session is required, pre-trust the Comet certificate in that profile first. See also [raw HTTP recovery](../../skills/comet-kvm-operations/references/raw-http-recovery.md) for the observed failure modes and the real `/api/auth/login` handshake.
-- **No credentials in repo** — secrets are never committed, logged, or stored in files. The Comet admin password is fetched at connect time from Doppler CLI as `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `homelab`/`dev`). Process-env injection is not used for that secret.
+- **No credentials in repo** — secrets are never committed, logged, or stored in files. The Comet admin password is fetched at connect time from Doppler CLI as `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `homelab`/`dev`). Process-env injection is not used for that secret. Agent browser/login traps are under [Authentication](#authentication) above.
 - **stdio exposure warning** — do not expose the MCP server's stdio to a remote agent without confirming the target host is on a trusted network
 - **Remote access options:** Tailscale (supported on Comet models that ship the integration), GL.iNet cloud service (`glkvm.com`), or VPN — topology judgment is **not** documented here; see the [OOB vision](../research/oob-proxmox-tailscale-vision.md) if needed
 

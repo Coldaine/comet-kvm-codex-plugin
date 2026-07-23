@@ -32,9 +32,6 @@ arguments, capabilities, and returned fields.
   [virtual media](references/virtual-media.md).
 - For a visible shell when no exact transport is available, read
   [visible-console commands](references/visible-console.md).
-- For raw HTTP/WebSocket recovery, browser-cert failure modes, or the real
-  login route when not using the MCP, read
-  [raw HTTP recovery](references/raw-http-recovery.md).
 - For Comet capabilities, streaming, recording, metrics, or Tailscale status,
   read [appliance diagnostics](references/appliance-diagnostics.md).
 - For firmware inspection, mapping, or mutation, read
@@ -53,7 +50,11 @@ when it is healthy and provides the required operation. Use KVM for pre-boot,
 installer, recovery, network-down, frozen, or otherwise inaccessible states.
 
 Do not reproduce raw GLKVM HTTP requests. The MCP server owns authentication,
-wire contracts, retries, streaming, and response normalization.
+wire contracts, retries, streaming, and response normalization. Do not drive the
+Comet web UI with browser automation (self-signed cert interstitial). If you
+must go raw, use the auth and stream contracts in
+[`docs/reference/comet-api.md`](../../docs/reference/comet-api.md) — do not
+guess `/api/login`.
 
 ## Result
 
