@@ -32,6 +32,8 @@ arguments, capabilities, and returned fields.
   [virtual media](references/virtual-media.md).
 - For a visible shell when no exact transport is available, read
   [visible-console commands](references/visible-console.md).
+- For raw HTTP/WebSocket recovery when the MCP server itself is unavailable,
+  read [raw HTTP recovery](references/raw-http-recovery.md).
 - For Comet capabilities, streaming, recording, metrics, or Tailscale status,
   read [appliance diagnostics](references/appliance-diagnostics.md).
 - For firmware inspection, mapping, or mutation, read
