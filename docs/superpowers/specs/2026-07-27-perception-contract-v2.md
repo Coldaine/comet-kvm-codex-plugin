@@ -62,10 +62,11 @@ is unioned with it, never substituted for it.
   `response_format` (ollama/vllm start at `json_object`). The 3-attempt
   validation loop remains as the last line.
 - **Locked-in free endpoint**: the openrouter provider default model is
-  `google/gemma-4-31b-it:free` (262K context, image input, $0). Free-tier
-  limits: ~20 requests/minute, ~200/day; `.mcp.json` pins
-  `VLM_PROVIDER=openrouter` + `VLM_MODEL` so a fresh clone works with only a
-  key.
+  `openrouter/free` — OpenRouter's Free Models Router ($0; image content in
+  the request routes it to vision-capable free models such as Gemma 4 31B).
+  Free-tier limits: ~20 requests/minute, ~200/day; `.mcp.json` pins
+  `VLM_PROVIDER=openrouter` + `VLM_MODEL=openrouter/free` so a fresh clone
+  works with only a key.
 - **Doppler key fallback**: when `VLM_API_KEY` is not in the environment, the
   key resolves from the Doppler CLI (secret `OPENROUTER_API_KEY`, project from
   `doppler.yaml`), cached in-process like the Comet password. Free models still
@@ -82,7 +83,8 @@ modal in a single `extras` JSON column, added via an idempotent
 ## Phasing
 
 - **Phase 1 (this change)**: schema, prompt, normalization, transport, config,
-  persistence. Mock provider emits v2 so offline tests exercise the full shape.
+  persistence. The mock provider keeps its v1 shape — v2 fields are optional,
+  so v1 parses remain valid; tests exercise v2 through normalize directly.
 - **Phase 2**: consumers — crawler builds allowed actions from observed
   `hotkeys`, restricts under `modal.present`, and enumerates ArrowLeft/Right
   when `layout=tabs_with_list` (fixes one-tab-only exploration); settler uses
