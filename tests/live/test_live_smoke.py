@@ -155,3 +155,91 @@ def test_live_comet_websocket_pong_health():
             await client.disconnect()
 
     _run(run(), timeout=30)
+
+
+def test_managed_lifecycle_end_to_end_readonly():
+    """Drive KVMRuntime's managed connection lifecycle (ensure_connected/disconnect).
+
+    Read-only: sysinfo only, no HID/ATX/media/WOL/recorder/streamer-set/Redfish
+    calls. COMET_HOST is pinned to the resolved live host for the duration of
+    the test and restored afterward so other live tests are unaffected.
+    """
+    from src.kvm_core.runtime import KVMRuntime
+
+    host = resolve_live_host()
+    require_comet_reachable(host)
+
+    prior_host = os.environ.get("COMET_HOST")
+    os.environ["COMET_HOST"] = host
+    runtime = KVMRuntime()
+
+    async def run() -> None:
+        assert runtime.is_connected() is False
+
+        client = await runtime.ensure_connected()
+        sysinfo = await client.get_sysinfo()
+        assert isinstance(sysinfo, dict)
+        assert sysinfo
+
+        second = await runtime.ensure_connected()
+        assert second is client, "ensure_connected must reuse the live session, not reconnect"
+
+        await runtime.disconnect()
+        assert runtime.is_connected() is False
+
+        third = await runtime.ensure_connected()
+        assert third is not None
+        assert third.is_connected() is True
+
+    try:
+        _run(run(), timeout=60)
+    finally:
+        try:
+            _run(runtime.disconnect(), timeout=15)
+        finally:
+            if prior_host is None:
+                os.environ.pop("COMET_HOST", None)
+            else:
+                os.environ["COMET_HOST"] = prior_host
+
+
+def test_connect_to_first_capture_timing():
+    """Evidence for the 503-retry design: time cold connect and first capture.
+
+    Read-only: ensure_connected + a single preview screenshot, nothing else.
+    """
+    from src.kvm_core.runtime import KVMRuntime
+
+    host = resolve_live_host()
+    require_comet_reachable(host)
+
+    prior_host = os.environ.get("COMET_HOST")
+    os.environ["COMET_HOST"] = host
+    runtime = KVMRuntime()
+
+    async def run() -> None:
+        t0 = time.monotonic()
+        client = await runtime.ensure_connected()
+        t_connect = time.monotonic() - t0
+
+        t1 = time.monotonic()
+        frame = await client.get_screenshot(preview=True, max_width=320, quality=40)
+        t_capture = time.monotonic() - t1
+
+        assert frame.startswith(b"\xff\xd8")
+        print(
+            f"LIVE-TIMING connect={t_connect:.2f}s "
+            f"first_capture={t_capture:.2f}s retries={client.capture_retry_count}"
+        )
+        assert t_capture < 10
+
+    try:
+        _run(run(), timeout=60)
+    finally:
+        try:
+            _run(runtime.disconnect(), timeout=15)
+        finally:
+            if prior_host is None:
+                os.environ.pop("COMET_HOST", None)
+            else:
+                os.environ["COMET_HOST"] = prior_host

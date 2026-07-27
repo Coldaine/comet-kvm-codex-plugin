@@ -16,9 +16,12 @@ and Tailscale work.
 A screen being pre-boot does not by itself make the task BIOS triage. The
 intended outcome must be firmware inspection, mapping, or modification.
 
-The general skill establishes the target and transport, while the BIOS skill
-chooses semantic firmware observation and actions. After the firmware-specific
-portion, return to the general route for boot observation, service recovery,
-media cleanup, or further physical-machine operation.
+The server manages transport automatically for the default target; a named
+multi-target session must still be connected explicitly with `kvm_connect`
+before BIOS attachment. The general skill covers target selection and generic
+operations, while the BIOS skill chooses semantic firmware observation and
+actions. After the firmware-specific portion, return
+to the general route for boot observation, service recovery, media cleanup,
+or further physical-machine operation.
 
 Do not apply MSI tuning assumptions to unrelated BIOS work.

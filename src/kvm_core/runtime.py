@@ -1,13 +1,56 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from typing import Optional
 
 from src.kvm_core.comet.client import CometClient
 from src.kvm_core.comet.capture import CaptureManager
+from src.kvm_core.doppler_credentials import resolve_comet_password
 from src.kvm_core.ocr import OCRManager
 
 LOG = logging.getLogger("kvm_core.runtime")
+
+DEFAULT_TARGET = "default"
+DEFAULT_COMET_HOST = "192.168.0.126"
+DEFAULT_COMET_USERNAME = "admin"
+
+
+def _normalize_host(value: str | None) -> str:
+    """Canonicalize host values for connection identity comparisons."""
+    host = (value or "").strip().lower()
+    for scheme in ("https://", "http://"):
+        if host.startswith(scheme):
+            host = host[len(scheme):]
+            break
+    return host.rstrip("/")
+
+
+def _client_matches(client: CometClient, host: str, username: str) -> bool:
+    """Whether a live client represents the requested Comet identity."""
+    requested_host = _normalize_host(host)
+    client_hosts = {
+        _normalize_host(getattr(client, "host", None)),
+        _normalize_host(getattr(client, "base_url", None)),
+    }
+    return (
+        client.is_connected()
+        and bool(requested_host)
+        and requested_host in client_hosts
+        and getattr(client, "username", None) == username
+    )
+
+
+def resolve_default_target() -> tuple[str, str]:
+    """Return the managed default ``(host, username)``.
+
+    Environment overrides win; otherwise the homelab Comet is hardcoded. Doppler
+    holds the password only — it is never consulted for host or username.
+    """
+    host = (os.environ.get("COMET_HOST") or DEFAULT_COMET_HOST).strip()
+    username = (os.environ.get("COMET_USERNAME") or DEFAULT_COMET_USERNAME).strip()
+    return host, username
 
 
 class TargetRuntime:
@@ -29,8 +72,15 @@ class KVMRuntime:
         self.capture_mgr = CaptureManager(cache_dir=screenshot_cache)
         self.ocr_mgr = OCRManager()
         self.targets: dict[str, TargetRuntime] = {}
-        self.selected_target: str = "default"
+        self.selected_target: str = DEFAULT_TARGET
         self.client: Optional[CometClient] = None
+        # Lock ordering invariant: runtime locks are always acquired BEFORE any
+        # client-internal lock (e.g. CometClient.send_lock). Never await a
+        # runtime lock while holding a client lock. CometClient.connect()
+        # internally takes send_lock, which is safe because that happens inside
+        # our lock scope, not around it.
+        self._connection_lock = asyncio.Lock()
+        self._operation_lock = asyncio.Lock()
 
     def _sync_selected_client(self) -> None:
         selected = self.targets.get(self.selected_target)
@@ -43,10 +93,45 @@ class KVMRuntime:
         password: str = "",
         target: str | None = None,
         select: bool = True,
-    ) -> bool:
-        target_id = target or self.selected_target or "default"
+        force_reconnect: bool = False,
+    ) -> tuple[bool, bool]:
+        """Connect or reuse a target, returning ``(connected, reused)``.
+
+        Identity comparison belongs under the connection lock so concurrent
+        callers cannot both decide a session is absent and replace one another.
+        """
+        async with self._connection_lock:
+            return await self._connect_locked(
+                host=host,
+                username=username,
+                password=password,
+                target=target,
+                select=select,
+                force_reconnect=force_reconnect,
+            )
+
+    async def _connect_locked(
+        self,
+        host: str,
+        username: str = "admin",
+        password: str = "",
+        target: str | None = None,
+        select: bool = True,
+        force_reconnect: bool = False,
+    ) -> tuple[bool, bool]:
+        """Connect body. Caller MUST already hold ``_connection_lock``.
+
+        ``asyncio.Lock`` is not re-entrant, so every public entry point takes the
+        lock exactly once and then routes through here.
+        """
+        target_id = target or self.selected_target or DEFAULT_TARGET
         existing = self.targets.get(target_id)
         if existing:
+            if not force_reconnect and _client_matches(existing.client, host, username):
+                if select or self.selected_target == target_id:
+                    self.selected_target = target_id
+                    self._sync_selected_client()
+                return True, True
             await existing.client.disconnect()
             del self.targets[target_id]
 
@@ -63,20 +148,91 @@ class KVMRuntime:
         if select or was_empty or self.selected_target == target_id:
             self.selected_target = target_id
         self._sync_selected_client()
-        return True
+        return True, False
 
     async def disconnect(self, target: str | None = None) -> None:
+        async with self._connection_lock:
+            await self._disconnect_locked(target)
+
+    async def _disconnect_locked(self, target: str | None = None) -> None:
+        """Disconnect body. Caller MUST already hold ``_connection_lock``."""
         if target is None:
+            # Some sidecar integrations install a compatibility client directly
+            # rather than registering a target. It is still process-owned and
+            # must not survive a disconnect-all or shutdown cleanup. Capture it
+            # BEFORE the target loop: each recursive disconnect calls
+            # _sync_selected_client(), which can rebind self.client away from a
+            # directly-installed client and leak it connected.
+            direct_client = self.client
+            target_clients = [entry.client for entry in self.targets.values()]
             # Disconnect all when no target specified (legacy behavior for kvm_disconnect).
             for tid in list(self.targets.keys()):
-                await self.disconnect(tid)
+                await self._disconnect_locked(tid)
+            if direct_client is not None and all(
+                direct_client is not client for client in target_clients
+            ):
+                await direct_client.disconnect()
+            self.client = None
+            self.selected_target = DEFAULT_TARGET
             return
         entry = self.targets.pop(target, None)
         if entry:
             await entry.client.disconnect()
         if self.selected_target == target:
-            self.selected_target = next(iter(self.targets), "default")
+            self.selected_target = next(iter(self.targets), DEFAULT_TARGET)
         self._sync_selected_client()
+
+    def _live_default_client(self) -> Optional[CometClient]:
+        """The connected default-target client, if there is one."""
+        entry = self.targets.get(DEFAULT_TARGET)
+        client = entry.client if entry else None
+        if client is None and self.selected_target == DEFAULT_TARGET:
+            # Sidecar rigs may install a client directly on the runtime.
+            client = self.client
+        if client is not None and client.is_connected():
+            return client
+        return None
+
+    async def ensure_connected(self, target: str | None = None) -> CometClient:
+        """Return a live client for ``target``, connecting the default on demand.
+
+        Only the ``default`` target is auto-managed. Named targets are the
+        caller's to own: a named target that is not already connected fails
+        closed rather than being silently dialled.
+        """
+        target_id = target if target is not None else self.selected_target
+
+        if target_id != DEFAULT_TARGET:
+            entry = self.targets.get(target_id)
+            if entry is not None and entry.client.is_connected():
+                return entry.client
+            raise RuntimeError(
+                f"Target '{target_id}' is not connected. Only the default target "
+                f"is managed automatically; connect this one explicitly with "
+                f"kvm_connect(host=..., target='{target_id}')."
+            )
+
+        live = self._live_default_client()
+        if live is not None:
+            return live
+
+        async with self._connection_lock:
+            # Double-check under the lock so concurrent cold ensures collapse
+            # into a single connect (single-flight).
+            live = self._live_default_client()
+            if live is not None:
+                return live
+            host, username = resolve_default_target()
+            password = await asyncio.to_thread(resolve_comet_password)
+            await self._connect_locked(
+                host=host,
+                username=username,
+                password=password,
+                target=DEFAULT_TARGET,
+            )
+            client = self.targets[DEFAULT_TARGET].client
+            LOG.info("Managed default Comet session connected (%s@%s)", username, host)
+            return client
 
     def select_target(self, target: str) -> str:
         if target not in self.targets:

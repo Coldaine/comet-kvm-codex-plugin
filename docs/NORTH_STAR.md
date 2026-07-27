@@ -43,6 +43,7 @@ plugin into a hypervisor manager or a general desktop tool.
 | Implementation choices (OCR path, packaging, map store, …) | `docs/decisions.md` |
 | KVM pipeline and tool surface | `docs/kvm-core.md` |
 | Core and specialist hardware qualification | `docs/workflows/live-hardware-qualification.md` |
-| Ordinary driver procedure | `skills/comet-kvm-operations/` |
-| Firmware-only driver procedure | `skills/comet-bios-triage/` |
+| Ordinary driver procedure | `.claude/skills/comet-kvm-operations/` |
+| Firmware-only driver procedure | `.claude/skills/comet-bios-triage/` |
 | Doc authority ladder (developer) | `AGENTS.md` |
+

@@ -26,6 +26,33 @@ def _run(coro):
 
 
 class TestBiosTools:
+    def test_bios_observe_pins_ensured_client_inside_operation_fence(self, tmp_path):
+        """Selection changes must not redirect an in-flight BIOS observation."""
+        runtime, ensured_client = build_runtime(tmp_path, host="10.1.2.3")
+        selected_elsewhere = type(ensured_client)(host="10.9.8.7")
+        seen: dict[str, object] = {}
+
+        async def ensure_selected_client():
+            # Model a target-selection update immediately after ensure returns.
+            runtime.kvm.client = selected_elsewhere
+            return ensured_client
+
+        async def observe(client, *_args, **_kwargs):
+            seen["client"] = client
+            seen["fenced"] = runtime.kvm._operation_lock.locked()
+            return make_bios_state(state_id="pinned-observation")
+
+        runtime.kvm.ensure_connected = ensure_selected_client  # type: ignore[method-assign]
+        runtime.observer.observe_state = observe  # type: ignore[method-assign]
+        try:
+            with installed_bios_runtime(runtime):
+                _run(bios_server.bios_observe_state())
+
+            assert seen["client"] is ensured_client
+            assert seen["fenced"] is True
+        finally:
+            cleanup_runtime(runtime)
+
     def test_bios_observe_state_returns_bios_state_dict(self, tmp_path):
         runtime, _client = build_runtime(tmp_path)
         try:

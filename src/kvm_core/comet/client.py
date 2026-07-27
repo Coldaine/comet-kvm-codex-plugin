@@ -102,6 +102,15 @@ ATX_CLICK_BUTTONS = {"power", "power_long", "reset"}
 
 MSD_UPLOAD_TIMEOUT = httpx.Timeout(600.0, connect=30.0)
 
+# GET /api/streamer/snapshot answers 503 while kvmd's streamer process is still
+# coming up. That is the ONLY retryable capture failure — every other status is
+# a real error and is raised on the first attempt.
+CAPTURE_BACKOFF_SCHEDULE = (0.1, 0.2, 0.4, 0.8)
+
+
+class CometCaptureError(RuntimeError):
+    """Screen capture failed. Session and auth state are left intact."""
+
 
 @dataclass
 class HeldKey:
@@ -157,6 +166,12 @@ class CometClient:
         self.last_pong_at: float | None = None
         self.capabilities: dict[str, Any] = {}
         self._ws_healthy = False
+
+        # Capture diagnostics for the most recent get_screenshot (no image bytes).
+        self.last_capture_ok: Optional[bool] = None
+        self.last_capture_error: Optional[str] = None
+        self.last_capture_at: Optional[float] = None
+        self.capture_retry_count = 0
 
         self.min_down_up_gap = 0.025
         self.inter_char_gap = 0.010
@@ -343,6 +358,11 @@ class CometClient:
         self.auth_token = None
         LOG.info("Disconnected from Comet KVM (target=%s)", self.target_id)
 
+    def _record_capture(self, ok: bool, error: Optional[str] = None) -> None:
+        self.last_capture_ok = ok
+        self.last_capture_error = error
+        self.last_capture_at = time.time()
+
     async def get_screenshot(self, preview: bool = True, max_width: int = 1024, quality: int = 60) -> bytes:
         if not self.http:
             raise RuntimeError("Not connected")
@@ -351,9 +371,43 @@ class CometClient:
             params["preview"] = "true"
             params["preview_max_width"] = str(int(max_width))
             params["preview_quality"] = str(max(1, min(100, int(quality))))
-        r = await self.http.get(f"{self.base_url}/api/streamer/snapshot", params=params)
-        r.raise_for_status()
-        return r.content
+        url = f"{self.base_url}/api/streamer/snapshot"
+        self.capture_retry_count = 0
+
+        for index in range(len(CAPTURE_BACKOFF_SCHEDULE) + 1):
+            try:
+                r = await self.http.get(url, params=params)
+            except httpx.HTTPError as exc:
+                self._record_capture(False, f"{type(exc).__name__}: {exc}")
+                raise
+            if r.status_code != 503:
+                if r.is_error:
+                    self._record_capture(False, f"HTTP {r.status_code} from {url}")
+                r.raise_for_status()
+                self._record_capture(True)
+                return r.content
+            if index >= len(CAPTURE_BACKOFF_SCHEDULE):
+                break
+            self.capture_retry_count += 1
+            await asyncio.sleep(CAPTURE_BACKOFF_SCHEDULE[index])
+            # The streamer only comes back on a live session; if the session died
+            # during the backoff there is nothing left to retry against.
+            if not self.is_connected():
+                message = (
+                    "capture aborted: the Comet session died while waiting for the "
+                    "streamer to become available"
+                )
+                self._record_capture(False, message)
+                raise CometCaptureError(message)
+
+        message = (
+            f"capture failed: streamer unavailable (HTTP 503) after "
+            f"{len(CAPTURE_BACKOFF_SCHEDULE) + 1} attempts over "
+            f"{sum(CAPTURE_BACKOFF_SCHEDULE):.1f}s. The session and its "
+            "credentials are still valid — this is a streamer fault, not auth."
+        )
+        self._record_capture(False, message)
+        raise CometCaptureError(message)
 
     async def send_key_event(self, key: str, state: bool, finish: bool = False):
         async with self.send_lock:

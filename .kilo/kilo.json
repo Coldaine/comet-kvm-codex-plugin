@@ -1,0 +1,17 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "comet-kvm": {
+      "type": "local",
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "--python",
+        "3.13",
+        "python",
+        "./glkvm_mcp.py"
+      ]
+    }
+  }
+}

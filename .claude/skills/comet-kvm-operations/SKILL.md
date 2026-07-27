@@ -2,14 +2,15 @@
 name: comet-kvm-operations
 description: >
   Operate or diagnose a physical machine through a GL.iNet Comet or
-  GLKVM-compatible KVM. Use when the user wants to connect to a Comet, select a
-  target, inspect or read the live console, send keyboard or mouse input,
-  control power, wake a machine, attach virtual media, recover or boot a
-  physical host, inspect the Comet appliance, or use its Tailscale-accessible
-  management path. Do not use for editing this plugin's source code, shopping
-  for KVM hardware, researching the Comet API, or general discussion that does
-  not require operating a device. For explicit BIOS or UEFI setting inspection,
-  mapping, or mutation, also use the specialized comet-bios-triage skill.
+  GLKVM-compatible KVM. Use when the user wants to reach a Comet-attached
+  machine, select a target, inspect or read the live console, send keyboard or
+  mouse input, control power, wake a machine, attach virtual media, recover or
+  boot a physical host, inspect the Comet appliance, or use its
+  Tailscale-accessible management path. Do not use for editing this plugin's
+  source code, shopping for KVM hardware, researching the Comet API, or
+  general discussion that does not require operating a device. For explicit
+  BIOS or UEFI setting inspection, mapping, or mutation, also use the
+  specialized comet-bios-triage skill.
 ---
 
 # Comet KVM Operations
@@ -25,8 +26,9 @@ arguments, capabilities, and returned fields.
 
 ## Route the operation
 
-- For connection state, target selection, or initial machine-state discovery,
-  read [sessions and targets](references/sessions-and-targets.md).
+- For overriding the default connection, multi-Comet targets, or initial
+  machine-state discovery, read
+  [sessions and targets](references/sessions-and-targets.md).
 - For screenshots, OCR, keyboard, mouse, or interrupted input, read
   [console control](references/console-control.md).
 - For wake, power, reset, force-off, or recovery, read
@@ -42,6 +44,9 @@ arguments, capabilities, and returned fields.
   `comet-bios-triage` skill for the firmware-specific portion.
 
 ## Shared operating contract
+
+Device tools manage the default Comet connection automatically — do not call
+`kvm_connect` or `kvm_disconnect` as ritual.
 
 Resolve the intended target and observe before mutating. Verify the resulting
 machine state after input, power, or media actions instead of treating a

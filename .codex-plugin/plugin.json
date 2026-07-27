@@ -21,7 +21,7 @@
     "recovery",
     "virtual-media"
   ],
-  "skills": "./skills/",
+  "skills": "./.claude/skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Comet KVM",

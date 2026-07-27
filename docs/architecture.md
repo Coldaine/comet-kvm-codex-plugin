@@ -37,7 +37,7 @@ useful.
 | Area | Status | Approach |
 |---|---|---|
 | MCP composition | Current | `glkvm_mcp.py` registers KVM and BIOS tools on one `FastMCP("comet-kvm")` instance. |
-| Codex plugin packaging | Current | `.codex-plugin/plugin.json` bundles `skills/` + `.mcp.json`; the launcher starts **this repo's** MCP server (not an external upstream package). |
+| Codex plugin packaging | Current | `.codex-plugin/plugin.json` bundles `.claude/skills/` + `.mcp.json`; the launcher starts **this repo's** MCP server (not an external upstream package). |
 | Plugin launch | Current | `.mcp.json` launches via `uv run --locked --python 3.13 python ./glkvm_mcp.py`; `kvm_connect` fetches `GLCOMET_ADMIN_PASSWORD` from Doppler CLI. |
 | Universal KVM | Current | `src/kvm_core/` owns auth, HTTP/WebSocket transport, HID, screenshots, OCR, logging, and Comet hardware tools. |
 | BIOS sidecar | Specialist | `src/bios_sidecar/` owns optional BIOS observation, graph/state, VLM grounding, navigation, mutation, recovery, and trace resources/tools. |
@@ -56,7 +56,7 @@ AI agent
 glkvm_mcp.py (composition entry point)
   ├── src/kvm_core
   │     ├── FastMCP server + universal tools
-  │     ├── KVMRuntime (one physical session)
+  │     ├── KVMRuntime (one physical session per target)
   │     ├── CometClient (HTTPS + WebSocket)
   │     ├── CaptureManager
   │     └── OCRManager (Pillow + pytesseract)
@@ -74,7 +74,7 @@ The dependency direction is `bios_sidecar -> kvm_core`. `src/kvm_core` does not 
 The project has two agent roles and one packaging surface:
 
 1. The **developer agent** edits this repo (MCP server, skills, tests) by following `AGENTS.md` into `docs/NORTH_STAR.md`, `docs/decisions.md`, `docs/architecture.md`, and `docs/kvm-core.md`. `AGENTS.md` is a thin router — not part of the Codex plugin payload.
-2. The **driver agent** operates a physical machine using bundled skills under `skills/comet-kvm-operations/` and `skills/comet-bios-triage/` (plugin payload) and the MCP tools this server exposes.
+2. The **driver agent** operates a physical machine using bundled skills under `.claude/skills/comet-kvm-operations/` and `.claude/skills/comet-bios-triage/` (plugin payload) and the MCP tools this server exposes.
 3. The **Codex plugin** is how the MCP server + skills are installed; it does not replace the MCP server.
 
 The VLM is a stateless perception service called by the BIOS sidecar. It returns structured screen interpretation; it does not send input, navigate, edit code, or hold the project state.
@@ -104,12 +104,12 @@ The KVM core is the normal engine; the BIOS sidecar is specialist steering:
 The BIOS sidecar owns the optional graph and map state used for firmware work.
 It updates on demand through semantic `bios_*` calls and never becomes a
 dependency of the KVM core. Runtime procedure, scope limits, and board-specific
-work belong under `skills/comet-bios-triage/`.
+work belong under `.claude/skills/comet-bios-triage/`.
 
 ## Architectural Invariants
 
 - The KVM core never depends on BIOS semantics; this prevents universal transport from becoming firmware-specific.
-- One MCP process owns one physical Comet session; this prevents conflicting HID state and duplicate watchdog/pinger loops.
+- One MCP process owns its physical Comet sessions, one per connected target; this prevents conflicting HID state and duplicate watchdog/pinger loops within each target session.
 - Commands, OCR text, credentials, screenshots, and live traces are not written to diagnostic logs; this limits accidental sensitive-data retention.
 - MCP tool results are the primary agent data path; logs, progress events, and resources cannot silently replace explicit output.
 - Exact SSH, if added, verifies host keys and uses credentials distinct from the Comet admin password; this prevents KVM appliance trust from becoming target-host trust.
@@ -129,4 +129,4 @@ work belong under `skills/comet-bios-triage/`.
 - BIOS perception contract (sidecar design): `docs/vlm-prompt-contract.md`
 - Live hardware / MSI proof: `docs/workflows/live-hardware-qualification.md`
 - Developer doc ladder: `AGENTS.md`
-- How to **use** the product at runtime: `skills/comet-kvm-operations/`, `skills/comet-bios-triage/` (plugin payload; not develop authority)
+- How to **use** the product at runtime: `.claude/skills/comet-kvm-operations/`, `.claude/skills/comet-bios-triage/` (plugin payload; not develop authority)

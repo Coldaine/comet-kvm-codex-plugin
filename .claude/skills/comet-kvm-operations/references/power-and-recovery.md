@@ -10,6 +10,11 @@ Check another available native management path when appropriate, then call
 network-unreachable, operating-system hang, crash screen, POST stall, boot loop,
 and unknown or no video. Use the least disruptive effective recovery path.
 
+When `comet_power_state` reports `enabled: false`, no ATX header is wired to
+the target: the power field does not reflect the real machine state — a
+running host can read "off". Classify power state from the console image
+instead. `comet_power_state` carries a warning field in that case.
+
 ## Choose the transition
 
 When Wake-on-LAN is expected to work, inspect `comet_wol_list` or

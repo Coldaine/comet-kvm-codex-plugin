@@ -20,14 +20,24 @@ It is a stdio MCP server intended to run from `glkvm_mcp.py` with `uv run --lock
 
 ## 2. Connection Model
 
-The server opens one physical I/O session to the Comet.
+The server maintains one physical I/O session per target and manages the
+default target's lifecycle automatically.
 
 | Channel | Purpose |
 |---------|---------|
 | HTTP(S) | Authentication, screenshots, sysinfo, ATX, MSD upload |
 | WebSocket | Keyboard, mouse, and ping frames |
 
-Connections are per-session. `kvm_connect(host, password?, username="admin")` accepts an explicit password or fetches `GLCOMET_ADMIN_PASSWORD` from the Doppler CLI using `doppler.yaml` (`homelab`/`dev`). The process environment is not used for the Comet password. The bundled launcher is plain `uv run --locked --python 3.13 python ./glkvm_mcp.py`; Doppler must be installed and authenticated on the host.
+Any device tool call auto-establishes the default session on first use
+(`KVMRuntime.ensure_connected`, single-flight under a connection lock) — an
+agent does not need to call `kvm_connect` before an ordinary screenshot, OCR,
+or HID action. Only the default target is auto-managed; named (non-default)
+targets fail closed and must be connected explicitly.
+
+`kvm_connect(host=None, password?, username=None, target="default", force_reconnect=False)` is an optional override, not a precondition. Omitted `host`/`username` resolve to the managed default (`COMET_HOST`/`COMET_USERNAME` env overrides, else `192.168.0.126`/`admin`). A live session already matching the requested host is reused (`reused: true`) without touching Doppler or the network; `force_reconnect=True` replaces it unconditionally. Password comes from an explicit argument or, when omitted, `GLCOMET_ADMIN_PASSWORD` fetched from the Doppler CLI via `doppler.yaml` (`homelab`/`dev`) and cached in-process for the life of the server so repeated connects don't re-shell to Doppler. The process environment is not used for the Comet password. The bundled launcher is plain `uv run --locked --python 3.13 python ./glkvm_mcp.py`; Doppler must be installed and authenticated on the host.
+
+`kvm_status` never connects; `kvm_disconnect` is optional and non-sticky — the
+next device operation reconnects the default automatically.
 
 TLS verification is disabled because the Comet ships with a self-signed certificate. The expected operating model is trusted LAN access, or remote access through Tailscale/VPN rather than direct public exposure.
 
@@ -68,6 +78,14 @@ The KVM core exposes frame capture and OCR as general-purpose primitives.
 | `kvm_ocr_click` | Finds text with OCR and clicks the highest-confidence match. Supports quadrant filtering with `top-left`, `top-right`, `bottom-left`, and `bottom-right`. |
 
 `kvm_screenshot_to_file` uses path safety validation: only filenames or relative paths under the screenshot cache are accepted. Absolute paths and `..` escapes are rejected.
+
+**Capture retry:** `/api/streamer/snapshot` returning HTTP 503 means the
+streamer hasn't come up yet, not an error. `get_screenshot` retries internally
+on schedule 0.1/0.2/0.4/0.8s (five attempts total) before raising a
+capture-specific error; the session and credentials are unaffected either way.
+Any other HTTP status is raised immediately without retry. If the session dies
+mid-retry, capture aborts rather than continuing to poll a dead session.
+`kvm_status` surfaces the last capture outcome and retry count.
 
 The KVM core has no screen semantics. It sends input, captures frames, runs OCR, and exposes Comet hardware APIs. It does not know whether the screen is BIOS, Windows, an installer, a shell, a crash screen, POST, recovery UI, or anything else.
 
@@ -117,7 +135,7 @@ Destructive or physical-input examples: `kvm_send_text`, `kvm_send_keys`, `kvm_h
 The security model is intentionally narrow.
 
 - LAN-first operation.
-- Per-session password supplied through `kvm_connect`, or fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD` secret).
+- Per-session password supplied through `kvm_connect`, or fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD` secret) and cached in process memory for the life of the server.
 - No stored Comet password in the repository.
 - TLS verification disabled for the Comet's self-signed certificate.
 - Remote operation should use Tailscale or a VPN.
@@ -131,11 +149,10 @@ An agent receives ordinary MCP tool results directly. It does not need to inspec
 
 ### Current pixel-console flow
 
-1. Call `kvm_connect(host)`.
-2. Call `kvm_ocr_status()` once, then `kvm_ocr_text()` to establish the current prompt.
-3. Call `kvm_send_text(command)` and `kvm_send_keys("Enter")`.
-4. Call `kvm_ocr_text()` and read its returned `text` or `lines` fields.
-5. Repeat the OCR read only if the command is still updating the visible screen.
+1. Call `kvm_ocr_status()` once, then `kvm_ocr_text()` to establish the current prompt — the default Comet session is established automatically on the first device call.
+2. Call `kvm_send_text(command)` and `kvm_send_keys("Enter")`.
+3. Call `kvm_ocr_text()` and read its returned `text` or `lines` fields.
+4. Repeat the OCR read only if the command is still updating the visible screen.
 
 This is appropriate for BIOS, recovery, network-down hosts, and other pixel-only states. It cannot recover bytes that scrolled off the HDMI viewport before a frame was captured, and OCR cannot provide a trustworthy process exit status by itself.
 
@@ -172,7 +189,7 @@ The KVM core does not know about VLMs. It exposes screenshots, OCR, HID, and Com
 
 | Phase | Tool Call | Layer | Position Tracker Role |
 |:---|:---|:---|:---|
-| **I. KVM session** | `kvm_connect()` | Universal KVM | Idle. Opens physical I/O session. |
+| **I. KVM session** | any device tool (auto-connect) | Universal KVM | Idle. Opens physical I/O session on first use; `kvm_connect()` is an optional override, not required. |
 | **II. General triage** | `kvm_ocr_text()` | Universal KVM | Host Tesseract visible text for shells, POST, recovery, and other text screens. |
 | | `comet_atx_power("reset")` | Universal KVM | No BIOS semantics. Physical power action. |
 | **III. BIOS entry** | `kvm_hold_key("Delete")` or repeated `kvm_send_keys("Delete")` | Universal KVM | Still mostly passive. Getting into setup. |
@@ -182,7 +199,7 @@ The KVM core does not know about VLMs. It exposes screenshots, OCR, HID, and Com
 | **VII. BIOS mutation** | `bios_apply_setting_change(capability_id=..., desired_value=...)` | BIOS sidecar | Verifies row, opens selector, uses VLM to read options, changes visible value. |
 | **VIII. Save/reboot** | `bios_save_and_reboot()` | BIOS sidecar | **Visually verifies** save dialog before confirming. Verification, not approval. |
 | **IX. Evidence** | `bios_export_trace()` | BIOS sidecar | Packages screenshots, parses, transitions, and actions. |
-| **X. Close** | `kvm_disconnect()` | Universal KVM | Ends physical session. |
+| **X. Close** | `kvm_disconnect()` — optional, non-sticky | Universal KVM | Frees the session/streamer now; the next device operation reconnects automatically. |
 
 Current design: `kvm_*` remains raw; `bios_*` wraps and verifies. The driver chooses the correct layer.
 

@@ -22,4 +22,8 @@ host is healthy. This plugin reports Tailscale status; it does not configure
 exit nodes or subnet routes.
 
 Separate authentication, transport, video capture, appliance health, overlay
-networking, and attached-machine failures in the result.
+networking, and attached-machine failures in the result. A snapshot HTTP 503
+is a capture-path condition — the streamer is warming up or was torn down —
+not an authentication or transport failure; the session stays authenticated
+and healthy, and the server already retries briefly on its own. Do not
+reconnect to recover capture.

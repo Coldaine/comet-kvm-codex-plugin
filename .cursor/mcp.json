@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "comet-kvm": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--locked",
+        "--python",
+        "3.13",
+        "python",
+        "./glkvm_mcp.py"
+      ]
+    }
+  }
+}

@@ -20,7 +20,7 @@ A Codex plugin is an installable bundle. For this project that bundle is:
 |---|---|
 | `.codex-plugin/plugin.json` | Manifest — identity + pointers |
 | `.mcp.json` | How Codex launches **this repo's** MCP server |
-| `skills/` | General Comet operations and specialized BIOS driver playbooks |
+| `.claude/skills/` | General Comet operations and specialized BIOS driver playbooks |
 | `glkvm_mcp.py` + `src/` | The MCP server implementation the launcher runs |
 
 That is the whole plugin shape: **your MCP + skill(s)**. It is not a thin wrapper around upstream. Upstream (`kennypeh85/glkvm-mcp`) was the starting fork; this tree owns and augments the server.
@@ -48,9 +48,10 @@ comet-kvm-codex-plugin/
 ├── src/
 │   ├── kvm_core/            # Universal KVM transport, OCR, tools, runtime
 │   └── bios_sidecar/        # BIOS-aware tools (default on; one-way dep on kvm_core)
-├── skills/                  # Bundled driver skills (plugin payload)
-│   ├── comet-kvm-operations/
-│   └── comet-bios-triage/
+├── .claude/
+│   └── skills/              # Bundled driver skills (plugin payload; repo-scoped for Claude Code)
+│       ├── comet-kvm-operations/
+│       └── comet-bios-triage/
 ├── AGENTS.md                # Thin router into docs/ (not plugin payload)
 ├── docs/                    # Design / authority docs (not plugin payload)
 ├── scripts/                 # Local tooling (preflight, run ledger)
@@ -66,7 +67,7 @@ comet-kvm-codex-plugin/
 
 ```json
 {
-  "skills": "./skills/",
+  "skills": "./.claude/skills/",
   "mcpServers": "./.mcp.json"
 }
 ```
@@ -84,7 +85,7 @@ normal route for a Comet task.
 The **firmware specialist lane** is the BIOS sidecar: cartography, navigation,
 mutation, and optional HWiNFO-backed validation for a named machine. It is
 entered only for an explicit firmware request and does not gate the core
-product. Board-specific procedure lives in `skills/comet-bios-triage/`.
+product. Board-specific procedure lives in `.claude/skills/comet-bios-triage/`.
 
 See:
 - [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — durable goals and anti-goals
@@ -149,10 +150,10 @@ Add to any MCP client config:
 ### Connection
 | Tool | Description |
 |------|-------------|
-| `kvm_connect(host, password?, username?, target?)` | Connect to a Comet device; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`) |
-| `kvm_disconnect(target?)` | Close one target or all sessions |
+| `kvm_connect(host?, password?, username?, target?, force_reconnect?)` | Optional override — device tools auto-connect to the managed default; a matching live session returns `reused: true`. Omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`) and cached in-process |
+| `kvm_disconnect(target?)` | Close one target or all sessions (non-sticky: the next device tool reconnects the default) |
 | `kvm_select_target(target)` | Select the active multi-Comet target |
-| `kvm_status()` | Report connection state, held keys, and targets |
+| `kvm_status()` | Report connection state, managed defaults, capture diagnostics, held keys, and targets — never connects |
 
 ### Keyboard
 | Tool | Description |
@@ -282,7 +283,7 @@ See [`docs/kvm-core.md`](docs/kvm-core.md) for the KVM core architecture and [`d
 
 - **LAN only** — designed for trusted local networks
 - **TLS verification disabled** — the Comet ships with a self-signed certificate
-- **No credentials stored** — password is passed per-session or fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`; `COMET_PASSWORD` is a legacy alias only)
+- **No credentials stored** — password is passed per-session or fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD` only)
 - **Remote access** — use Tailscale (native on Comet) or VPN; do not expose the MCP server's stdio to an untrusted network
 
 ---

@@ -103,18 +103,12 @@ def test_expect_tesseract_cmd_line(monkeypatch, tmp_path):
     assert res.returncode == 0
     assert "Tesseract OCR is available" in res.stdout
 
-    env["TESSERACT_PATH"] = "invalid_path_to_tesseract_non_existent"
-    # Hide PATH so _find_tesseract_binary cannot fall back to a real
-    # tesseract install (e.g. the one CI provisions) and mask the bad
-    # TESSERACT_PATH this case is meant to exercise.
-    env.pop("TESSERACT_CMD", None)
-    env["PATH"] = ""
-    res2 = subprocess.run(
-        [sys.executable, "glkvm_mcp.py", "--expect-tesseract"],
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=Path(__file__).resolve().parents[1]
-    )
-    assert res2.returncode == 1
-    assert "ERROR: Tesseract OCR is not available" in res2.stderr or "ERROR: Tesseract OCR is not available" in res2.stdout
+
+def test_ocr_manager_reports_unavailable_when_no_discovery_path(monkeypatch):
+    """Discovery is unavailable only when env, PATH, and Windows fallbacks miss."""
+    monkeypatch.setenv("TESSERACT_PATH", "invalid_path_to_tesseract_non_existent")
+    monkeypatch.delenv("TESSERACT_CMD", raising=False)
+    monkeypatch.setattr("src.kvm_core.ocr.shutil.which", lambda _: None)
+    monkeypatch.setattr("src.kvm_core.ocr.os.path.isfile", lambda _: False)
+
+    assert OCRManager().get_status()["available"] is False

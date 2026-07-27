@@ -95,6 +95,13 @@ in/out LEDs show a live signal. This client connects with `stream=true`, but a
 later 2026-07-27 read still received HTTP 503 after earlier successful JPEGs;
 do not treat the connection mode as a full capture qualification.
 
+The MCP now retries snapshot HTTP 503 internally on schedule 0.1/0.2/0.4/0.8s
+(five attempts total) before raising a capture-specific error; the session and
+its credentials remain valid throughout — this is a streamer-warmup condition,
+not an auth failure. Any other HTTP status is raised immediately without
+retry. If the session dies mid-retry, capture aborts rather than polling a
+dead session. `kvm_status` reports the last capture outcome and retry count.
+
 The PiKVM fork still contains server-side OCR parameters, but GL.iNet firmware
 1.9's product UI Text Recognition code crops its canvas and runs bundled
 Tesseract.js/WASM in the controlling browser. A live browser recognition
@@ -195,10 +202,10 @@ This section is **this repo’s tool surface**, not the full firmware catalog. K
 ### Connection
 | Tool | Signature | Annotations | Description |
 |------|-----------|-------------|-------------|
-| `kvm_connect` | `(host, password?, username?, target?)` | write, non-destructive, idempotent | Connect to Comet on LAN; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`); optional `target` enables multi-Comet sessions |
-| `kvm_disconnect` | `(target?)` | write, non-destructive, idempotent | Close one target or all sessions + cleanup |
+| `kvm_connect` | `(host?, password?, username?, target="default", force_reconnect?)` | write, non-destructive, idempotent | Optional override — device tools auto-connect the default target on demand. Omitted host/username resolve to the managed default; a live session matching the requested host **and** username is reused (`reused: true`, no Doppler call) — a same-host request under a different username replaces the session; `force_reconnect=true` replaces it unconditionally. Omitted password fetches `GLCOMET_ADMIN_PASSWORD` from Doppler CLI |
+| `kvm_disconnect` | `(target?)` | write, non-destructive, idempotent | Close one target or all sessions. Non-sticky: not required cleanup, the next device operation reconnects the default automatically |
 | `kvm_select_target` | `(target)` | write, non-destructive, idempotent | Select the active multi-Comet target for subsequent tools |
-| `kvm_status` | `()` | read-only, non-destructive, idempotent | Report connection state + held keys + target list |
+| `kvm_status` | `(target?)` | read-only, non-destructive, idempotent | Report managed defaults, auto-connect state, capture diagnostics, held keys, and target list. Never connects |
 
 ### Keyboard
 | Tool | Signature | Annotations | Description |
@@ -359,7 +366,7 @@ existing product UI OCR.
 
 ### Credentials and environment
 
-`kvm_connect` without an explicit `password` always calls the Doppler CLI. The blocker is: Doppler installed + authenticated to the project/config in `doppler.yaml`. Optional non-secret overrides:
+Device tools auto-connect the default target on demand, so most sessions never call `kvm_connect` explicitly. When `kvm_connect` (or the auto-connect path) does need a password and none is passed explicitly, it calls the Doppler CLI once per process — the resolved value is cached in-process, so subsequent connects (auto or explicit) reuse the cached password instead of re-shelling to Doppler. A `kvm_connect` call whose requested host matches an already-live session for that target skips Doppler entirely (`reused: true`). The blocker for a first resolution is: Doppler installed + authenticated to the project/config in `doppler.yaml`. Optional non-secret overrides:
 
 | Variable | Secret? | Required | Default | Description |
 |---|---|---|---|---|
@@ -394,6 +401,6 @@ The host must have Doppler CLI logged in (`doppler login`). The bundled [`.mcp.j
 
 `glkvm_mcp.py` contains PEP 723 dependency metadata and imports the two registration layers. `src/kvm_core/` owns the shared FastMCP instance, Comet HTTP/WebSocket client, HID workarounds, capture, OCR, logging, runtime, and universal tools. `src/bios_sidecar/` owns BIOS state, graph, perception, trace, controller, resources, and `bios_*` tool registration.
 
-This is one MCP process and one physical Comet session, not separate KVM and BIOS servers. The modular boundary keeps universal KVM behavior usable without introducing BIOS semantics into transport code. See `docs/decisions.md` D6.
+This is one MCP process with managed physical Comet sessions, not separate KVM and BIOS servers. The runtime owns one session per connected target; the modular boundary keeps universal KVM behavior usable without introducing BIOS semantics into transport code. See `docs/decisions.md` D6.
 
 > **Source:** `glkvm_mcp.py`, `src/kvm_core/`, and `src/bios_sidecar/`. Verified 2026-07-10.

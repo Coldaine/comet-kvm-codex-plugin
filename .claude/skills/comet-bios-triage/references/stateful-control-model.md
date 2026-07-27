@@ -51,5 +51,6 @@ input failed or was interrupted, call `kvm_release_all`, then
 and focus are known.
 
 Use `bios_export_trace` when the user requests evidence or the workflow needs a
-replayable diagnostic record. Disconnect through the general Comet operations
-workflow when no continuing observation is needed.
+replayable diagnostic record. Disconnecting frees the appliance session; it is
+optional, not required cleanup — a later BIOS observation reconnects
+automatically.
