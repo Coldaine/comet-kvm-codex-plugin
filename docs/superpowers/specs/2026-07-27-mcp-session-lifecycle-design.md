@@ -93,8 +93,8 @@ connect it explicitly; it is never silently dialled.
 
 `resolve_comet_password()` in `doppler_credentials.py` caches the resolved
 value in a module-level `_password_cache` for the life of the process. The
-first resolution shells out to the Doppler CLI (`GLCOMET_ADMIN_PASSWORD`,
-falling back to legacy `COMET_ADMIN_PASSWORD`/`COMET_PASSWORD`); every
+first resolution shells out to the Doppler CLI (`GLCOMET_ADMIN_PASSWORD`
+only; legacy aliases are no longer accepted); every
 subsequent connect — whether from `ensure_connected` or an explicit
 `kvm_connect()` — reuses the cached value. `_clear_password_cache()` is a test
 hook only. A `kvm_connect` call that reuses a matching live session (see next

@@ -202,7 +202,7 @@ This section is **this repo’s tool surface**, not the full firmware catalog. K
 ### Connection
 | Tool | Signature | Annotations | Description |
 |------|-----------|-------------|-------------|
-| `kvm_connect` | `(host?, password?, username?, target="default", force_reconnect?)` | write, non-destructive, idempotent | Optional override — device tools auto-connect the default target on demand. Omitted host/username resolve to the managed default; a live session matching the requested host is reused (`reused: true`, no Doppler call); `force_reconnect=true` replaces it unconditionally. Omitted password fetches `GLCOMET_ADMIN_PASSWORD` from Doppler CLI |
+| `kvm_connect` | `(host?, password?, username?, target="default", force_reconnect?)` | write, non-destructive, idempotent | Optional override — device tools auto-connect the default target on demand. Omitted host/username resolve to the managed default; a live session matching the requested host **and** username is reused (`reused: true`, no Doppler call) — a same-host request under a different username replaces the session; `force_reconnect=true` replaces it unconditionally. Omitted password fetches `GLCOMET_ADMIN_PASSWORD` from Doppler CLI |
 | `kvm_disconnect` | `(target?)` | write, non-destructive, idempotent | Close one target or all sessions. Non-sticky: not required cleanup, the next device operation reconnects the default automatically |
 | `kvm_select_target` | `(target)` | write, non-destructive, idempotent | Select the active multi-Comet target for subsequent tools |
 | `kvm_status` | `(target?)` | read-only, non-destructive, idempotent | Report managed defaults, auto-connect state, capture diagnostics, held keys, and target list. Never connects |

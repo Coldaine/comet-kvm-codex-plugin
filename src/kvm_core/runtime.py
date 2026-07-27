@@ -157,14 +157,20 @@ class KVMRuntime:
     async def _disconnect_locked(self, target: str | None = None) -> None:
         """Disconnect body. Caller MUST already hold ``_connection_lock``."""
         if target is None:
+            # Some sidecar integrations install a compatibility client directly
+            # rather than registering a target. It is still process-owned and
+            # must not survive a disconnect-all or shutdown cleanup. Capture it
+            # BEFORE the target loop: each recursive disconnect calls
+            # _sync_selected_client(), which can rebind self.client away from a
+            # directly-installed client and leak it connected.
+            direct_client = self.client
+            target_clients = [entry.client for entry in self.targets.values()]
             # Disconnect all when no target specified (legacy behavior for kvm_disconnect).
             for tid in list(self.targets.keys()):
                 await self._disconnect_locked(tid)
-            # Some sidecar integrations install a compatibility client directly
-            # rather than registering a target. It is still process-owned and
-            # must not survive a disconnect-all or shutdown cleanup.
-            direct_client = self.client
-            if direct_client is not None:
+            if direct_client is not None and all(
+                direct_client is not client for client in target_clients
+            ):
                 await direct_client.disconnect()
             self.client = None
             self.selected_target = DEFAULT_TARGET

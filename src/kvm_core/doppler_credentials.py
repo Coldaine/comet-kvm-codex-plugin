@@ -10,11 +10,7 @@ LOG = logging.getLogger("kvm_core.doppler")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOPPLER_YAML = _REPO_ROOT / "doppler.yaml"
-_PASSWORD_SECRET_NAMES = (
-    "GLCOMET_ADMIN_PASSWORD",
-    "COMET_ADMIN_PASSWORD",
-    "COMET_PASSWORD",
-)
+_PASSWORD_SECRET_NAMES = ("GLCOMET_ADMIN_PASSWORD",)
 
 # Resolving the password shells out to the Doppler CLI (~hundreds of ms). The
 # managed connection lifecycle reconnects freely, so the value is cached for the
@@ -146,8 +142,7 @@ def _resolve_password_from_reader(
             return value
     if require:
         raise DopplerAuthError(
-            f"Doppler project {project}/{config} has no GLCOMET_ADMIN_PASSWORD "
-            "(or legacy COMET_ADMIN_PASSWORD / COMET_PASSWORD) secret."
+            f"Doppler project {project}/{config} has no GLCOMET_ADMIN_PASSWORD secret."
         )
     return None
 
@@ -155,8 +150,8 @@ def _resolve_password_from_reader(
 def resolve_comet_password(*, require: bool = True) -> Optional[str]:
     """Always fetch the Comet admin password from Doppler CLI. Never reads process env.
 
-    Canonical Doppler secret: GLCOMET_ADMIN_PASSWORD (homelab/dev).
-    COMET_ADMIN_PASSWORD and COMET_PASSWORD are accepted as legacy aliases.
+    Canonical Doppler secret: GLCOMET_ADMIN_PASSWORD (homelab/dev). Legacy
+    aliases (COMET_ADMIN_PASSWORD, COMET_PASSWORD) are no longer accepted.
 
     The only blocker is Doppler CLI install + authentication to doppler.yaml's
     project/config. Explicit passwords passed to kvm_connect() are separate.

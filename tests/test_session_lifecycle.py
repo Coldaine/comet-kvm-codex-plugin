@@ -398,6 +398,23 @@ def test_disconnect_no_arg_releases_direct_compatibility_client(tmp_path):
     assert runtime.client is None
 
 
+def test_disconnect_no_arg_releases_direct_client_alongside_targets(tmp_path, monkeypatch):
+    """The direct client is captured before target disconnects rebind self.client."""
+    install_fakes(monkeypatch)
+    runtime = fresh_runtime(tmp_path)
+    direct = ConnectableScriptedClient(host="10.9.9.9", connected=True)
+
+    async def scenario():
+        await runtime.connect(host=DEFAULT_HOST, password="x", target="default")
+        runtime.client = direct
+        await runtime.disconnect()
+
+    run(scenario())
+
+    assert direct.disconnect_calls == 1
+    assert runtime.client is None
+
+
 def test_shutdown_releases_direct_compatibility_client(tmp_path, monkeypatch):
     """Shutdown must release keys held by a legacy sidecar-installed client."""
     from src.kvm_core.server import _shutdown_cleanup
