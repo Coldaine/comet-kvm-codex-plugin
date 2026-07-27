@@ -9,7 +9,7 @@ import glkvm_mcp
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS_ROOT = REPO_ROOT / "skills"
+SKILLS_ROOT = REPO_ROOT / ".claude" / "skills"
 EXPECTED_SKILLS = {"comet-bios-triage", "comet-kvm-operations"}
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 TOOL_NAME_RE = re.compile(r"`((?:bios|comet|kvm)_[a-z0-9_]+)`")
@@ -42,7 +42,7 @@ def test_expected_skill_packages_exist() -> None:
 
 def test_plugin_and_readme_advertise_both_skill_routes() -> None:
     manifest = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
-    assert manifest["skills"] == "./skills/"
+    assert manifest["skills"] == "./.claude/skills/"
 
     description = " ".join(
         [

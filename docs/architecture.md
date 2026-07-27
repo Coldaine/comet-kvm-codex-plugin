@@ -19,7 +19,7 @@ One stdio MCP process composes a universal physical KVM core with a BIOS-aware s
 | Area | Status | Approach |
 |---|---|---|
 | MCP composition | Current | `glkvm_mcp.py` registers KVM and BIOS tools on one `FastMCP("comet-kvm")` instance. |
-| Codex plugin packaging | Current | `.codex-plugin/plugin.json` bundles `skills/` + `.mcp.json`; the launcher starts **this repo's** MCP server (not an external upstream package). |
+| Codex plugin packaging | Current | `.codex-plugin/plugin.json` bundles `.claude/skills/` + `.mcp.json`; the launcher starts **this repo's** MCP server (not an external upstream package). |
 | Plugin launch | Current | `.mcp.json` launches via `uv run --locked --python 3.13 python ./glkvm_mcp.py`; `kvm_connect` fetches `GLCOMET_ADMIN_PASSWORD` from Doppler CLI. |
 | Universal KVM | Current | `src/kvm_core/` owns auth, HTTP/WebSocket transport, HID, screenshots, OCR, logging, and Comet hardware tools. |
 | BIOS sidecar | Current | `src/bios_sidecar/` owns BIOS observation, graph/state, VLM grounding, navigation, mutation, recovery, and trace resources/tools. |
@@ -56,7 +56,7 @@ The dependency direction is `bios_sidecar -> kvm_core`. `src/kvm_core` does not 
 The project has two agent roles and one packaging surface:
 
 1. The **developer agent** edits this repo (MCP server, skills, tests) using `AGENTS.md`, `docs/NORTH_STAR.md`, and `docs/decisions.md`. `AGENTS.md` is repo guidance — not part of the Codex plugin payload.
-2. The **driver agent** operates a physical machine using bundled skills under `skills/comet-bios-triage/` (plugin payload) and the MCP tools this server exposes.
+2. The **driver agent** operates a physical machine using bundled skills under `.claude/skills/comet-bios-triage/` (plugin payload) and the MCP tools this server exposes.
 3. The **Codex plugin** is how the MCP server + skills are installed; it does not replace the MCP server.
 
 The VLM is a stateless perception service called by the BIOS sidecar. It returns structured screen interpretation; it does not send input, navigate, edit code, or hold the project state.
@@ -113,4 +113,4 @@ Blocklisted zones such as firmware flash, secure erase, RAID, boot order, and pa
 - Universal KVM detail and runtime call order: `docs/kvm-core.md`
 - Verified Comet API surface: `docs/reference/comet-api.md`
 - BIOS perception contract: `docs/vlm-prompt-contract.md`
-- Driver workflow: `skills/comet-bios-triage/SKILL.md`
+- Driver workflow: `.claude/skills/comet-bios-triage/SKILL.md`

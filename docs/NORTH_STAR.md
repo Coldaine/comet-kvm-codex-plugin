@@ -29,8 +29,8 @@
 2. `docs/decisions.md`
 3. `docs/architecture.md`
 4. `docs/vlm-prompt-contract.md`
-5. `skills/comet-bios-triage/SKILL.md`
-6. `skills/comet-bios-triage/references/stateful-control-model.md`
+5. `.claude/skills/comet-bios-triage/SKILL.md`
+6. `.claude/skills/comet-bios-triage/references/stateful-control-model.md`
 7. `docs/reference/comet-hardware.md`
 8. `docs/reference/comet-api.md`
 9. `AGENTS.md`

@@ -20,7 +20,7 @@ A Codex plugin is an installable bundle. For this project that bundle is:
 |---|---|
 | `.codex-plugin/plugin.json` | Manifest — identity + pointers |
 | `.mcp.json` | How Codex launches **this repo's** MCP server |
-| `skills/` | General Comet operations and specialized BIOS driver playbooks |
+| `.claude/skills/` | General Comet operations and specialized BIOS driver playbooks |
 | `glkvm_mcp.py` + `src/` | The MCP server implementation the launcher runs |
 
 That is the whole plugin shape: **your MCP + skill(s)**. It is not a thin wrapper around upstream. Upstream (`kennypeh85/glkvm-mcp`) was the starting fork; this tree owns and augments the server.
@@ -48,9 +48,10 @@ comet-kvm-codex-plugin/
 ├── src/
 │   ├── kvm_core/            # Universal KVM transport, OCR, tools, runtime
 │   └── bios_sidecar/        # BIOS-aware tools (default on; one-way dep on kvm_core)
-├── skills/                  # Bundled driver skills (plugin payload)
-│   ├── comet-kvm-operations/
-│   └── comet-bios-triage/
+├── .claude/
+│   └── skills/              # Bundled driver skills (plugin payload; repo-scoped for Claude Code)
+│       ├── comet-kvm-operations/
+│       └── comet-bios-triage/
 ├── AGENTS.md                # Repo developer guidance (not plugin payload)
 ├── docs/                    # Design / authority docs (not plugin payload)
 ├── scripts/                 # Local tooling (preflight, run ledger)
@@ -66,7 +67,7 @@ comet-kvm-codex-plugin/
 
 ```json
 {
-  "skills": "./skills/",
+  "skills": "./.claude/skills/",
   "mcpServers": "./.mcp.json"
 }
 ```

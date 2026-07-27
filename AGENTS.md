@@ -15,7 +15,7 @@ The same agent instance may fill multiple roles — the developer agent can also
 | Role | What it does | Where its instructions live |
 |------|-------------|---------------------------|
 | **Developer agent** | Writes, tests, refactors the MCP server, skills, and packaging in this repo | **This file (AGENTS.md)** + `docs/NORTH_STAR.md` + `docs/decisions.md` |
-| **Driver agent** | Operates the Comet KVM at runtime: navigates BIOS, changes settings, collects HWiNFO logs, runs experiments | **The skill files** under `skills/comet-bios-triage/` |
+| **Driver agent** | Operates the Comet KVM at runtime: navigates BIOS, changes settings, collects HWiNFO logs, runs experiments | **The skill files** under `.claude/skills/comet-bios-triage/` (BIOS) and `.claude/skills/comet-kvm-operations/` (general operations) |
 
 The VLM is not a peer agent role. It is a stateless perception service the BIOS sidecar may call with screenshots to get structured parses. It does not navigate, edit code, or read repo docs at runtime.
 
