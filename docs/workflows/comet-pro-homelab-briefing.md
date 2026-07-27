@@ -33,6 +33,30 @@ This repository already exposes the useful MCP surface: `kvm_connect`,
 bounded keyboard/mouse input. They are the interface to use when operating the
 portable appliance.
 
+## Live read record — 2026-07-27 (Central)
+
+**Scope:** Read-only authenticated sessions against the deployed RM10. The
+credential came from Doppler. No HID, power, WOL, media, recorder, firmware, or
+Tailscale mutation was sent; no console image or tailnet identity was retained.
+
+**Observed working during the first session:** the repository's explicit live
+smoke passed all three checks: authenticated connect/sysinfo/JPEG snapshot,
+capability plus ATX/MSD state reads, and a WebSocket pong. A second read-only
+session also returned Tailscale running, ATX disabled and not busy, virtual
+media enabled but offline, an empty saved-WOL list, recorder idle, and a valid
+streamer-state response.
+
+**Observed failing during later sessions:** `comet_metrics` consistently
+received HTTP 500 from `/api/export/prometheus/metrics`. A later
+`kvm_screenshot` request received HTTP 503 after the earlier successful JPEG
+reads. This is evidence of a presently unavailable or intermittent snapshot
+surface, not proof that HDMI is disconnected. Do not represent screenshots,
+OCR, or metrics as currently qualified from this observation alone.
+
+**Not tested:** physical HID effect, virtual-media mount/boot, WOL wake, ATX,
+BIOS, and an independent-client tailnet recovery path. Those remain separate
+disposable-target qualification work.
+
 ## What we are taking advantage of
 
 ### Portable console and pre-OS access
@@ -64,10 +88,11 @@ the missing proof is host-by-host boot behavior.
 ### A useful operator interface
 
 For a consequential change, the MCP read tools make it easy to identify the
-appliance and target, inspect media/ATX/Tailscale state, and capture a fresh
-screen before sending input. After interrupted input, `kvm_release_all` is the
-useful reset. Console recording fits a short diagnostic capture rather than
-standing collection, because consoles can display secrets.
+appliance and target, inspect media/ATX/Tailscale state, and—when the snapshot
+surface is available—capture a fresh screen before sending input. After
+interrupted input, `kvm_release_all` is the useful reset. Console recording
+fits a short diagnostic capture rather than standing collection, because
+consoles can display secrets.
 
 ## Suggested next moves
 
