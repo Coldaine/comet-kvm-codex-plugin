@@ -57,9 +57,17 @@ class SQLiteStore:
                 frame_phash TEXT,
                 frame_resolution TEXT,
                 frame_captured_at TEXT,
-                confidence TEXT
+                confidence TEXT,
+                extras TEXT
             )
         """)
+
+        # Perception Contract v2 screen-level extras (layout/help_text/hotkeys/
+        # scroll/modal) live in a single JSON column. Map databases created
+        # before v2 predate the column, so add it idempotently.
+        state_columns = {r["name"] for r in cursor.execute("PRAGMA table_info(states)").fetchall()}
+        if "extras" not in state_columns:
+            cursor.execute("ALTER TABLE states ADD COLUMN extras TEXT")
 
         # 3. Nodes table
         cursor.execute("""
@@ -142,13 +150,20 @@ class SQLiteStore:
         with self._lock:
          cursor = self.conn.cursor()
          d = state.to_dict()
+         extras = json.dumps({
+            "layout": d["layout"],
+            "help_text": d["help_text"],
+            "hotkeys": d["hotkeys"],
+            "scroll": d["scroll"],
+            "modal": d["modal"],
+         })
          cursor.execute("""
             INSERT OR REPLACE INTO states (
                 state_id, run_id, device_id, screen_title, menu_path, screen_kind,
                 selection_label, selection_val, controls, blocklist_flag, blocklist_keywords,
                 actions, frame_screenshot_id, frame_sha256, frame_phash, frame_resolution,
-                frame_captured_at, confidence
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                frame_captured_at, confidence, extras
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             d["state_id"], d["run_id"], d["device_id"], d["location"]["screen_title"],
             json.dumps(d["location"]["breadcrumb"]), d["location"]["screen_kind"],
@@ -156,7 +171,7 @@ class SQLiteStore:
             1 if d["risk"]["blocklist_flag"] else 0, json.dumps(d["risk"]["blocklist_keywords"]),
             json.dumps(d["actions"]), d["frame"]["screenshot_id"], d["frame"]["sha256"],
             d["frame"]["perceptual_hash"], json.dumps(d["frame"]["resolution"]),
-            d["frame"]["captured_at"], json.dumps(d["confidence"])
+            d["frame"]["captured_at"], json.dumps(d["confidence"]), extras
         ))
         self.conn.commit()
         self._state_cache[state.state_id] = state
@@ -186,6 +201,9 @@ class SQLiteStore:
         confidence_raw = json.loads(row["confidence"] or "{}")
         resolution = json.loads(row["frame_resolution"] or "[1920, 1080]")
         top_module = breadcrumb[0] if breadcrumb else "SETTINGS"
+        # Pre-v2 rows have NULL extras and load with the v1 defaults.
+        extras = json.loads(row["extras"] or "{}")
+        modal_raw = extras.get("modal")
 
         state = BiosState(
             state_id=row["state_id"],
@@ -216,13 +234,17 @@ class SQLiteStore:
                 value=row["selection_val"],
             ),
             controls=[ControlEntry.from_dict(c) for c in controls_raw],
-            modal=ModalMetadata(present=False),
+            modal=ModalMetadata.from_dict(modal_raw) if modal_raw else ModalMetadata(present=False),
             risk=RiskStatus(
                 blocklist_flag=bool(row["blocklist_flag"]),
                 blocklist_keywords=json.loads(row["blocklist_keywords"] or "[]"),
             ),
             actions=ActionPolicies.from_dict(actions_raw) if actions_raw else ActionPolicies(),
             confidence=ConfidenceMetrics.from_dict(confidence_raw) if confidence_raw else ConfidenceMetrics(1.0, 1.0, 1.0),
+            layout=extras.get("layout") or "list",
+            help_text=extras.get("help_text"),
+            hotkeys=extras.get("hotkeys") or [],
+            scroll=extras.get("scroll") or {},
         )
         self._state_cache[state_id] = state
         return state

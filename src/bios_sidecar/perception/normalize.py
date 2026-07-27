@@ -94,7 +94,11 @@ def normalize_bios_state(
     # 3. Location Metadata
     menu_path = vlm_data.get("menu_path") or []
     top_module = menu_path[0] if menu_path else (adapter.identify_module(title) if adapter else "SETTINGS")
-    screen_kind = parse_state_kind(title)
+    # v2: the VLM classifies the screen directly; the title heuristic is the fallback.
+    try:
+        screen_kind = StateKind(vlm_data.get("screen_kind") or "")
+    except ValueError:
+        screen_kind = parse_state_kind(title)
 
     location = LocationMetadata(
         screen_kind=screen_kind,
@@ -127,7 +131,7 @@ def normalize_bios_state(
         elif t == "leaf-info":
             role = ControlRole.INFO
 
-        is_selected = (selected_idx is not None and idx == selected_idx)
+        is_selected = bool(e.get("selected")) or (selected_idx is not None and idx == selected_idx)
         if adapter:
             label = adapter.normalize_label(label)
 
@@ -155,16 +159,18 @@ def normalize_bios_state(
             selected=is_selected,
             risk=risk_class,
             bbox=e.get("bbox"),
-            options=e.get("options")
+            options=e.get("options"),
+            legible=e.get("legible", True) is not False,
         ))
 
     # 5. Selection Metadata
+    vlm_confidence = vlm_data.get("confidence")
     selection = SelectionMetadata(
         selected_index=selected_idx,
         label=selection_label,
         value=str(selection_val) if selection_val is not None else None,
         bbox=selection_bbox,
-        confidence=vlm_data.get("confidence", 0.90)
+        confidence=vlm_confidence if vlm_confidence is not None else 0.90
     )
 
     # 6. Risk Status
@@ -183,11 +189,34 @@ def normalize_bios_state(
         hazards.append("destructive_screen")
         blocklist_flag = True
 
+    # v2 semantic risk only ever restricts: it can raise the flag, never clear it.
+    risk_reason = None
+    vlm_risk = vlm_data.get("risk") or {}
+    if vlm_risk.get("dangerous"):
+        blocklist_flag = True
+        hazards.append("vlm_semantic")
+        risk_reason = vlm_risk.get("reason")
+        for kw in vlm_risk.get("keywords_seen") or []:
+            if kw not in blocklist_keywords:
+                blocklist_keywords.append(kw)
+
     risk = RiskStatus(
         blocklist_flag=blocklist_flag,
         blocklist_keywords=blocklist_keywords,
         hazards=hazards,
-        policy_class="blocked" if blocklist_flag else "context_gated"
+        policy_class="blocked" if blocklist_flag else "context_gated",
+        reason=risk_reason,
+    )
+
+    # 6b. Modal state (v2)
+    vlm_modal = vlm_data.get("modal") or {}
+    modal = ModalMetadata(
+        present=bool(vlm_modal.get("present")),
+        type="dialog" if vlm_modal.get("present") else None,
+        message=vlm_modal.get("message"),
+        options=list(vlm_modal.get("buttons") or []),
+        title=vlm_modal.get("title"),
+        focused=vlm_modal.get("focused_button"),
     )
 
     # 7. Action Policies
@@ -197,8 +226,8 @@ def normalize_bios_state(
     approval_required = ["F10"]
     blocked_actions = ["F6"] # defaults is unsafe in crawl
 
-    if blocklist_flag:
-        # Emergency exit
+    if blocklist_flag or modal.present:
+        # Emergency exit; a modal's Enter can confirm a save dialog.
         safe = ["Escape"]
         context_gated = []
         approval_required = []
@@ -214,7 +243,7 @@ def normalize_bios_state(
     # 8. Confidence
     confidence = ConfidenceMetrics(
         ocr=ocr_confidence,
-        vlm=0.92,
+        vlm=vlm_confidence if vlm_confidence is not None else 0.92,
         state=0.90
     )
 
@@ -227,8 +256,12 @@ def normalize_bios_state(
         location=location,
         selection=selection,
         controls=controls,
-        modal=ModalMetadata(present=False),
+        modal=modal,
         risk=risk,
         actions=actions,
-        confidence=confidence
+        confidence=confidence,
+        layout=vlm_data.get("layout") or "list",
+        help_text=vlm_data.get("help_text"),
+        hotkeys=[dict(h) for h in (vlm_data.get("hotkeys") or [])],
+        scroll=dict(vlm_data.get("scroll") or {}),
     )

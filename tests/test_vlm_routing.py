@@ -43,7 +43,7 @@ def test_key_required_provider_without_key_fails_closed():
     ("provider", "expected_base_url", "expected_model"),
     [
         ("openai", "https://api.openai.com/v1", "gpt-4o"),
-        ("openrouter", "https://openrouter.ai/api/v1", "qwen/qwen2.5-vl-72b-instruct"),
+        ("openrouter", "https://openrouter.ai/api/v1", "openrouter/free"),
         ("ollama", "http://localhost:11434/v1", "llama3.2-vision"),
         ("vllm", "http://localhost:8000/v1", "qwen2.5-vl"),
     ],

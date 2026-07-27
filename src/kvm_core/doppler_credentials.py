@@ -11,17 +11,31 @@ LOG = logging.getLogger("kvm_core.doppler")
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOPPLER_YAML = _REPO_ROOT / "doppler.yaml"
 _PASSWORD_SECRET_NAMES = ("GLCOMET_ADMIN_PASSWORD",)
+_VLM_KEY_SECRET_NAMES = (
+    "OPENROUTER_API_KEY",
+    "VLM_API_KEY",
+)
 
 # Resolving the password shells out to the Doppler CLI (~hundreds of ms). The
 # managed connection lifecycle reconnects freely, so the value is cached for the
 # life of the process; _clear_password_cache() is the test hook.
 _password_cache: Optional[str] = None
 
+# Same deal for the VLM key: every bios_* perception call would otherwise pay
+# the CLI round trip. _clear_vlm_key_cache() is the test hook.
+_vlm_key_cache: Optional[str] = None
+
 
 def _clear_password_cache() -> None:
     """Drop the in-process Comet password cache."""
     global _password_cache
     _password_cache = None
+
+
+def _clear_vlm_key_cache() -> None:
+    """Drop the in-process VLM API key cache."""
+    global _vlm_key_cache
+    _vlm_key_cache = None
 
 
 class DopplerAuthError(RuntimeError):
@@ -174,3 +188,37 @@ def resolve_comet_password(*, require: bool = True) -> Optional[str]:
     if value:
         _password_cache = value
     return value
+
+
+def resolve_vlm_api_key(*, require: bool = False) -> Optional[str]:
+    """Fetch the VLM (OpenRouter) API key from Doppler CLI. Never reads process env.
+
+    Canonical Doppler secret: OPENROUTER_API_KEY (homelab/dev).
+    VLM_API_KEY is accepted as an alias.
+
+    Env-var configuration is the caller's job (vlm_client checks VLM_API_KEY
+    first); this is the Doppler fallback, so require defaults to False and a
+    missing secret simply yields None.
+
+    The resolved value is cached in-process, so repeated perception calls never
+    re-probe the CLI.
+    """
+    global _vlm_key_cache
+    if _vlm_key_cache is not None:
+        return _vlm_key_cache
+
+    project, config = doppler_project_config()
+    assert_doppler_authenticated(project, config)
+
+    for name in _VLM_KEY_SECRET_NAMES:
+        value = _doppler_get_plain(name, project, config)
+        if value:
+            LOG.debug("Resolved VLM API key from Doppler secret %s (%s/%s)", name, project, config)
+            _vlm_key_cache = value
+            return value
+    if require:
+        raise DopplerAuthError(
+            f"Doppler project {project}/{config} has no OPENROUTER_API_KEY "
+            "(or VLM_API_KEY alias) secret."
+        )
+    return None

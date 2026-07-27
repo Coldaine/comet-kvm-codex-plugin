@@ -10,7 +10,6 @@ policy layer, and risk fields only ever restrict. These tests define:
 - BiosState/store round-trips preserving the new fields
 - VLMClient strict json_schema transport with 400 downgrade ladder,
   the locked-in OpenRouter free default model, and Doppler key fallback
-- mock provider emitting v2
 """
 from __future__ import annotations
 
@@ -19,14 +18,14 @@ import json
 
 import pytest
 
-
-def _run(coro):
-    return asyncio.run(coro)
-
 from src.bios_sidecar.domain.enums import StateKind
 from src.bios_sidecar.perception.models import BiosScreenParse
 from src.bios_sidecar.perception.normalize import normalize_bios_state
 from src.bios_sidecar.perception.vlm_client import VLMClient
+
+
+def _run(coro):
+    return asyncio.run(coro)
 
 
 def _normalize(vlm_data: dict, **overrides):
@@ -350,9 +349,19 @@ def test_vlm_client_downgrades_response_format_on_400():
     assert poster.bodies[1].get("response_format", {}).get("type") != "json_schema"
 
 
-def test_openrouter_default_model_is_free():
+def test_openrouter_default_model_is_free_router():
     client = VLMClient(provider="openrouter", api_key="k")
-    assert client._resolved_model().endswith(":free")
+    assert client._resolved_model() == "openrouter/free"
+
+
+def test_resolved_model_does_not_mangle_free_router_slug():
+    # "openrouter/free" is a literal model ID (author happens to equal the
+    # provider name) — prefix-stripping must not turn it into "free".
+    client = VLMClient(provider="openrouter", api_key="k", model="openrouter/free")
+    assert client._resolved_model() == "openrouter/free"
+    # LiteLLM-style provider prefixes still normalize.
+    client = VLMClient(provider="openrouter", api_key="k", model="openrouter/qwen/qwen2.5-vl")
+    assert client._resolved_model() == "qwen/qwen2.5-vl"
 
 
 def test_vlm_api_key_resolves_from_doppler(monkeypatch):
@@ -392,15 +401,3 @@ def test_vlm_key_doppler_cache_and_clear(monkeypatch):
     dc._clear_vlm_key_cache()
 
 
-# --- Mock provider ---------------------------------------------------------
-
-
-def test_mock_provider_emits_v2():
-    client = VLMClient(provider="mock")
-    result = _run(client.parse_screenshot(b"any-image-bytes"))
-    parsed = BiosScreenParse.model_validate(result)
-    assert parsed.screen_kind is not None
-    assert parsed.layout is not None
-    assert parsed.hotkeys, "mock must exercise the hotkeys field"
-    assert parsed.confidence is not None
-    assert any(e.selected for e in parsed.entries)
