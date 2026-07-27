@@ -1,47 +1,80 @@
 # Sessions and Targets
 
-Read this file when the task begins with connection state, target selection, or
-initial machine-state discovery.
+Read this file when the task needs a non-default connection, multi-target
+selection, or initial machine-state discovery.
 
-## Resolve the target
+## The server owns the default connection
 
-Start with `kvm_status`. Reuse an existing session only when its target
-unambiguously matches the requested machine.
+The server manages its own connection to the default Comet appliance. The
+first step for any task is the operation itself — a screenshot, OCR read, HID
+input, power check, media action — not `kvm_status`, not `kvm_connect`. Device
+tools establish or reuse a healthy session automatically.
 
-When a new session is required, resolve the Comet's network host first, then
-call `kvm_connect(host=..., target=...)`. The required `host` identifies the
-Comet appliance; `target` is only the stable logical session name for the
-attached machine, such as `pve01` or `nas02`. Never substitute the logical
-target name for an unknown Comet host.
+## When to use kvm_connect
+
+`kvm_connect` is an override, not a routine step. Call it only for:
+
+- a non-default host (a Comet other than the managed default);
+- explicit credentials instead of the resolved default/Doppler password;
+- a named multi-target session (`target=...` other than `default`);
+- `force_reconnect=True` to force a fresh session over a live one.
+
+It takes no required arguments. Calling it against a host that already has a
+matching live session returns `reused: true` without touching Doppler. Never
+call it as a routine first step before an operation on the default target.
+
+## Multi-target discipline
 
 When multiple sessions exist:
 
 - call `kvm_select_target` before using KVM input tools;
 - pass an explicit `target` to Comet-specific tools that accept it;
-- never assume the selected target is correct when the request names another
-  machine or is ambiguous.
+- never assume the selected target matches an ambiguous request — confirm
+  which machine the user means before acting.
 
 Selected-target tools such as screenshots, OCR, HID input, and `bios_*` do not
-take a target in the current schema. Select once, then call them with only their
-documented arguments. Use `kvm_disconnect(target=...)` when closing one
-completed session so unrelated sessions remain active.
+take a target in the current schema. Select once, then call them with only
+their documented arguments.
+
+Named targets are not auto-managed the way the default is: a cold named
+target fails closed. Connect it explicitly with
+`kvm_connect(host=..., target=...)` before using it.
 
 Use the connection capability profile to decide whether ATX, virtual media,
-OCR, recording, and other subsystems are available. Call
-`comet_capabilities` with refresh only after a firmware, hardware, or
-configuration change, or when the cached profile is missing.
+OCR, recording, and other subsystems are available. Call `comet_capabilities`
+with refresh only after a firmware, hardware, or configuration change, or when
+the cached profile is missing.
+
+## Disconnect semantics
+
+`kvm_disconnect` closes the session now and releases the device streamer. It
+is non-sticky: the next device operation on that target reconnects
+automatically. Use it when you are done observing a target or need to free
+the appliance for another session — not as end-of-task ceremony. Preserve
+other sessions unless the user asked to close them.
+
+## Recovery
+
+Never manually reconnect to work around an error. If a tool call fails in a
+way that suggests the transport is genuinely gone, use
+`kvm_connect(force_reconnect=True)` as the escape hatch, not a fresh
+`kvm_connect` call. After any reconnect, recapture the screen instead of
+replaying the last input — a replayed keystroke or click can land on a
+different screen than the one it was meant for.
 
 ## Establish the machine phase
 
-Capture the console and classify the visible state as powered off or no signal,
-POST, BIOS or UEFI, bootloader, one-time boot menu, installer, operating system,
-recovery shell, crash, boot loop, or unknown. Use OCR only when text materially
-improves the classification. Do not send input merely to discover state when a
-read-only observation is sufficient.
+Capture the console and classify the visible state as powered off or no
+signal, POST, BIOS or UEFI, bootloader, one-time boot menu, installer,
+operating system, recovery shell, crash, boot loop, or unknown. Use OCR only
+when text materially improves the classification. Do not send input merely to
+discover state when a read-only observation is sufficient. When ATX reports
+`enabled: false`, ignore the power field and classify state from the console
+instead.
 
-Reconnect only when `kvm_status` shows the transport is unusable or a bounded
-retry confirms transport loss. After reconnecting, recapture the screen instead
-of replaying the last input.
+## kvm_status is inspection only
 
-Call `kvm_disconnect` for the completed target when no continuing observation
-is needed. Preserve other sessions unless the user asked to close them.
+`kvm_status` observes without connecting — it never establishes a session.
+Use it to inspect the configured defaults (`default_host`, `default_username`,
+`default_target`, `auto_connect`), the live connection, and capture
+diagnostics, not as a precondition for calling a device tool.

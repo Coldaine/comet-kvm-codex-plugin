@@ -93,6 +93,13 @@ the host-backed `kvm_ocr_*` tools. **Streamer lifecycle (RM10):** kvmd only keep
 `stream=true`. With `stream=false`, snapshot returns HTTP 503 even when HDMI
 in/out LEDs show a live signal. This client connects with `stream=true`.
 
+The MCP now retries snapshot HTTP 503 internally on schedule 0.1/0.2/0.4/0.8s
+(five attempts total) before raising a capture-specific error; the session and
+its credentials remain valid throughout — this is a streamer-warmup condition,
+not an auth failure. Any other HTTP status is raised immediately without
+retry. If the session dies mid-retry, capture aborts rather than polling a
+dead session. `kvm_status` reports the last capture outcome and retry count.
+
 The PiKVM fork still contains server-side OCR parameters, but GL.iNet firmware
 1.9's product UI Text Recognition code crops its canvas and runs bundled
 Tesseract.js/WASM in the controlling browser. A live browser recognition
@@ -189,10 +196,10 @@ This section is **this repo’s tool surface**, not the full firmware catalog. K
 ### Connection
 | Tool | Signature | Annotations | Description |
 |------|-----------|-------------|-------------|
-| `kvm_connect` | `(host, password?, username?, target?)` | write, non-destructive, idempotent | Connect to Comet on LAN; omitted password is fetched from Doppler CLI (`GLCOMET_ADMIN_PASSWORD`); optional `target` enables multi-Comet sessions |
-| `kvm_disconnect` | `(target?)` | write, non-destructive, idempotent | Close one target or all sessions + cleanup |
+| `kvm_connect` | `(host?, password?, username?, target="default", force_reconnect?)` | write, non-destructive, idempotent | Optional override — device tools auto-connect the default target on demand. Omitted host/username resolve to the managed default; a live session matching the requested host is reused (`reused: true`, no Doppler call); `force_reconnect=true` replaces it unconditionally. Omitted password fetches `GLCOMET_ADMIN_PASSWORD` from Doppler CLI |
+| `kvm_disconnect` | `(target?)` | write, non-destructive, idempotent | Close one target or all sessions. Non-sticky: not required cleanup, the next device operation reconnects the default automatically |
 | `kvm_select_target` | `(target)` | write, non-destructive, idempotent | Select the active multi-Comet target for subsequent tools |
-| `kvm_status` | `()` | read-only, non-destructive, idempotent | Report connection state + held keys + target list |
+| `kvm_status` | `(target?)` | read-only, non-destructive, idempotent | Report managed defaults, auto-connect state, capture diagnostics, held keys, and target list. Never connects |
 
 ### Keyboard
 | Tool | Signature | Annotations | Description |
@@ -353,7 +360,7 @@ existing product UI OCR.
 
 ### Credentials and environment
 
-`kvm_connect` without an explicit `password` always calls the Doppler CLI. The blocker is: Doppler installed + authenticated to the project/config in `doppler.yaml`. Optional non-secret overrides:
+Device tools auto-connect the default target on demand, so most sessions never call `kvm_connect` explicitly. When `kvm_connect` (or the auto-connect path) does need a password and none is passed explicitly, it calls the Doppler CLI once per process — the resolved value is cached in-process, so subsequent connects (auto or explicit) reuse the cached password instead of re-shelling to Doppler. A `kvm_connect` call whose requested host matches an already-live session for that target skips Doppler entirely (`reused: true`). The blocker for a first resolution is: Doppler installed + authenticated to the project/config in `doppler.yaml`. Optional non-secret overrides:
 
 | Variable | Secret? | Required | Default | Description |
 |---|---|---|---|---|

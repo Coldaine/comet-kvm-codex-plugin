@@ -25,6 +25,7 @@ When filling the developer role, do not put driver-agent instructions or VLM pro
 
 - Follow `docs/NORTH_STAR.md` as the top-level project authority and `docs/decisions.md` for implementation decisions.
 - Follow `docs/kvm-core.md` for the universal KVM MCP server architecture and the KVM/BIOS sidecar boundary.
+- Device tools auto-connect to the managed default Comet on first use; `kvm_connect` is an optional override for a non-default host, explicit credentials, or a named multi-target session — do not treat it as a required first step.
 - When working as the developer agent, read the `comet-bios-triage` skill for context, but do not put driver-agent operational rules here.
 - **Do not commit credentials.** The only Comet secret is Doppler `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `homelab`/`dev`), fetched via Doppler CLI — never process-env injection. Host (`192.168.0.126`) and username (`admin`) are non-sensitive and safe in code/config. See `docs/reference/comet-api.md#security-model`.
 - Do not commit screenshots, HWiNFO logs, or live state files.

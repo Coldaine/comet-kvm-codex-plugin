@@ -27,9 +27,12 @@ The test module skips before reading credentials or opening a socket unless
 and fixed to a self-hosted runner carrying both `self-hosted` and `comet-lan` labels;
 it cannot silently fall back to a public hosted runner.
 
-Or manually via MCP / curl after `kvm_connect`:
+Or manually via MCP / curl:
 
-1. `kvm_connect(host=..., target="pve-lab")`
+1. Tools auto-connect to the managed default Comet on first use — no explicit
+   `kvm_connect` call is required for that target. For this disposable lab
+   node under its own named target, connect explicitly instead (named targets
+   are never auto-managed): `kvm_connect(host=..., target="pve-lab")`
 2. `comet_capabilities(refresh=true)`
 3. `kvm_status` — verify the WebSocket is healthy (`ws_open=true`); the client
    always connects with `stream=true` internally, which is not separately
@@ -40,7 +43,9 @@ Or manually via MCP / curl after `kvm_connect`:
 7. `comet_recorder_state`
 8. `comet_tailscale_status`
 9. `comet_metrics`
-10. `kvm_disconnect`
+10. `kvm_disconnect` — optional and non-sticky; the next device operation on
+    this target reconnects automatically. Call it to free the session/streamer
+    when the lab node is idle.
 
 The inherited `/api/streamer/ocr` state is discovery evidence only. GL.iNet's
 product Text Recognition runs browser-side Tesseract.js, while `kvm_ocr_*` uses
