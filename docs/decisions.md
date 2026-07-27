@@ -116,22 +116,10 @@ Keep Pillow for image decoding, pytesseract for Tesseract integration, and the P
 
 **Settled path:** `kvm_ocr_*` captures a JPEG from `GET /api/streamer/snapshot` and runs host Tesseract (Pillow + pytesseract) in the MCP process. Pipeline detail: [`docs/kvm-core.md`](kvm-core.md) §5 / §9 and [`docs/reference/comet-api.md`](reference/comet-api.md)#ocr-integration.
 
-**Rejected paths:**
+The inherited `/api/streamer/ocr` route is discovery-only. GL.iNet's Text
+Recognition feature runs browser-side Tesseract.js/WASM and is not a device API
+for this process. Installing host Tesseract is therefore a normal MCP-host
+dependency, not an open device-OCR project.
 
-- Device/RKNN `ocr_service` as an MCP text engine
-- GL.iNet browser Text Recognition (Tesseract.js/WASM) as an MCP backend
-- Native-first OCR with host Tesseract as a transparent fallback
-
-**Investigation narrative:**
-
-1. PR #22 added a native-first + host-fallback story based on the inherited PiKVM `/api/streamer/ocr` handler and assumed a device OCR path.
-2. Live probes on RM10 firmware V1.9.1 (2026-07-16): `GET /api/streamer/ocr` returned `enabled: false`, `engine: tesseract` (non-RKNN label). Root SSH showed `/run/kvmd/ocr-service.sock` absent, no `ocr_service` binary on the image, and no `libtesseract` / tessdata.
-3. Served product-bundle inspection found `Tesseract.createWorker(...)` and `worker.recognize(...)` operating on a browser canvas crop. GL.iNet firmware 1.9 Text Recognition is browser-side Tesseract.js/WASM in the controlling browser — not a device API available to this Python process.
-4. Browser recognition succeeded with server OCR disabled and no device OCR socket/process, proving inherited server OCR and product UI OCR are separate surfaces.
-5. PR #34 removed the fabricated native/RKNN execution path from the MCP client and tools. PR #36 scrubbed false native-OCR language from skills.
-
-**Discovery-only:** `GET /api/streamer/ocr` may still appear during capability discovery as legacy server-OCR state. It is not a text engine for this MCP and must not be presented as the product UI's OCR.
-
-**Issue #2 superseded:** Installing host Tesseract is a normal MCP-host dependency (README prerequisites + CI). It is not an open product or architecture spike. Do not reopen device-OCR work from a closed host-install checklist.
-
-Dated raw record (research, not authority): [`docs/research/glkvm-client-audit-2026-07-15.md`](research/glkvm-client-audit-2026-07-15.md).
+Evidence and the correction history are retained as a dated, non-authoritative
+record in [`docs/research/glkvm-client-audit-2026-07-15.md`](research/glkvm-client-audit-2026-07-15.md).

@@ -25,9 +25,8 @@ plugin into a hypervisor manager or a general desktop tool.
 - **AG1.** Not VM orchestration or hypervisor management.
 - **AG2.** Not general-purpose remote desktop for day-to-day interactive use.
 - **AG3.** Not a product that depends on device-side OCR as the MCP text engine (host perception only; see `docs/decisions.md` D-K9).
-- **AG4.** Not a BIOS product wearing a Comet wrapper: no ordinary KVM feature,
-  documentation route, or readiness claim waits on cartography, MSI tuning, or
-  HWiNFO analysis.
+- **AG4.** Core operations do not depend on BIOS cartography, board tuning, or
+  HWiNFO validation.
 
 ## Product lanes
 

@@ -8,16 +8,6 @@
 > **Prerequisite:** Comet reachable (LAN or Tailscale), Doppler `GLCOMET_ADMIN_PASSWORD`, ATX board installed for power tests.
 > **Source baseline:** Generated handler inventory in [`docs/reference/glkvm-api/`](../reference/glkvm-api/README.md), pinned to `gl-inet/glkvm@9bd8ad11ba03d220401b0b6a4208bbfd84ed6107`. The live unit may differ; record its discovered version and capabilities.
 
-## First proof point — MSI Z690
-
-The first end-to-end BIOS product proof is **Planned** against an MSI Z690-family board: cartography → one-setting-per-run mutation with visible confirm → Windows HWiNFO validation (thermal, voltage, power, throttling, WHEA). Code for observe/mutate/save exists; this lane is what signs it off on real hardware.
-
-- Protocol / ATX / media / HID readiness: Lanes A–C below on a disposable node first.
-- Board-specific tuning procedure: `skills/comet-bios-triage/references/msi-z690-bios-workflow.md`.
-- Cartography spike design (DFS, VLM, maps): `docs/architecture.md#state-and-cartography`.
-
-Until Lane C (BIOS) and the MSI workflow both pass with ledger evidence, do not treat BIOS mutation as qualified on fixed nodes.
-
 ## Safety gate
 
 Use only a disposable Proxmox/lab node with:
@@ -83,6 +73,10 @@ only from retained evidence: `handler_present` is not `discovered`, and
 **Pass:** long hold enters setup; media mount/unmount cycle completes; no WS stall from unconsumed events (`kvm_status` shows recent `last_pong_at`).
 
 ## Specialist lane — ATX / BIOS / install (disposable only)
+
+Use the board-specific BIOS skill reference only when the requested outcome is
+firmware work. HWiNFO-backed validation belongs to that specialist procedure,
+not to this shared qualification runbook.
 
 1. Document baseline ATX LED state via `comet_power_state`.
 2. Soft path: `comet_atx_click("power")` then observe screenshot transition.

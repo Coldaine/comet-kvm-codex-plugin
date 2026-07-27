@@ -18,12 +18,12 @@ The product has two deliberately unequal lanes:
 
 | Layer | Role | Maturity |
 |---|---|---|
-| Core: universal KVM (`src/kvm_core/`) | Transport, HID, screenshots, host OCR, Comet hardware tools, plugin packaging | Primary path — in active use for connect/console/media/power work |
+| Core: universal KVM (`src/kvm_core/`) | Transport, HID, screenshots, host OCR, Comet hardware tools, plugin packaging | Primary implemented path; physical qualification varies by capability and target |
 | Specialist: BIOS sidecar (`src/bios_sidecar/`) | Observation, graph/state, VLM grounding, navigation, mutation, cartography | Optional firmware lane — code exists; end-to-end board proof is **Planned** |
 
-MSI Z690 is a proof point for the specialist lane, not the project milestone.
-Until that lane signs off, treat BIOS mutation/save paths as lab-only; ordinary
-core operations remain independently useful.
+Until specialist firmware work signs off on a named board, treat BIOS
+mutation/save paths as lab-only. Ordinary core operations remain independently
+useful.
 
 ## Status Legend
 
@@ -101,23 +101,10 @@ The KVM core is the normal engine; the BIOS sidecar is specialist steering:
 
 ## Specialist lane: state and cartography
 
-The BIOS tracker is **Current** and updates on demand through semantic `bios_*` calls. It uses perceptual hashes, OCR fingerprints, normalized VLM output, and a persisted graph/capability store. It does not continuously poll the screen.
-
-Near-exhaustive BIOS cartography is **Planned** as a specialist capability. It
-is not a dependency of console, recovery, media, appliance, or remote-access
-work. Intended shape:
-
-- A Python DFS driver navigates the UI tree; a VLM returns per-screen structured perception; cycle detection uses perceptual hashing.
-- Blocklisted zones (Flash, Secure Erase, RAID, Boot Order, Password) stay off-limits to the crawler; everything else is visited.
-- Maps persist as labeled, reusable artifacts (board model, BIOS version, date) for reconnect and similar-board reuse.
-- A stateful screen-level position tracker validates expected transitions against a stored map during live sessions, without relying on the main LLM to hold screen position.
-
-Persisted views:
-
-- a semantic capability index for deterministic driver navigation;
-- a screen-node graph for transition validation and cycle detection.
-
-Runtime driver procedure for cartography and mutation lives under `skills/comet-bios-triage/` (not in this architecture doc).
+The BIOS sidecar owns the optional graph and map state used for firmware work.
+It updates on demand through semantic `bios_*` calls and never becomes a
+dependency of the KVM core. Runtime procedure, scope limits, and board-specific
+work belong under `skills/comet-bios-triage/`.
 
 ## Architectural Invariants
 

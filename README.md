@@ -83,8 +83,8 @@ normal route for a Comet task.
 
 The **firmware specialist lane** is the BIOS sidecar: cartography, navigation,
 mutation, and optional HWiNFO-backed validation for a named machine. It is
-entered only for an explicit firmware request. The MSI Z690 proof remains
-planned, but it does not gate the core product.
+entered only for an explicit firmware request and does not gate the core
+product. Board-specific procedure lives in `skills/comet-bios-triage/`.
 
 See:
 - [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — durable goals and anti-goals
