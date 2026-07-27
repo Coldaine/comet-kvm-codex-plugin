@@ -10,7 +10,7 @@
 ```
 ┌──────────────┐     MCP stdio      ┌─────────────────┐     HTTPS/WSS     ┌──────────┐
 │  AI Agent    │ ◄─────────────────► │  glkvm_mcp.py   │ ◄───────────────► │  Comet   │
-│ (Codex/LLM)  │    tool calls       │  (MCP server)   │   (PiKVM API)     │  (GL-RM1)│
+│ (Codex/LLM)  │    tool calls       │  (MCP server)   │   (PiKVM API)     │  (family)│
 └──────────────┘                     └─────────────────┘                   └──────────┘
                                              │
                                       kvm_ocr_text

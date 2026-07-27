@@ -101,7 +101,7 @@ See:
 
 - Python >= 3.10
 - [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) installed on the host
-- A GL.iNet Comet (GL-RM1) or PiKVM-compatible device on your LAN (firmware 1.9.0+)
+- A GL.iNet Comet-family device (for example GL-RM1 or GL-RM10) or PiKVM-compatible device on your LAN (firmware 1.9.0+)
 - [uv](https://docs.astral.sh/uv/) for running the MCP server
 - [Doppler CLI](https://docs.doppler.com/docs/install-cli) configured for `homelab/dev` when using the bundled plugin launcher
 
@@ -251,7 +251,7 @@ The `comet_raw_*` aliases currently duplicate `kvm_*` tools. They are deprecated
 ```
 ┌──────────────┐     MCP stdio      ┌─────────────────┐     HTTPS/WSS     ┌──────────┐
 │  AI Agent    │ ◄─────────────────► │  glkvm_mcp.py   │ ◄───────────────► │  Comet   │
-│ (Codex)      │    tool calls       │  (MCP server)   │   (PiKVM API)     │  (GL-RM1)│
+│ (Codex)      │    tool calls       │  (MCP server)   │   (PiKVM API)     │  (family)│
 └──────────────┘                     └─────────────────┘                   └──────────┘
                                              │
                                       kvm_ocr_text

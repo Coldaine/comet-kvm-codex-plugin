@@ -37,7 +37,7 @@ When filling the developer role, do not put driver-agent instructions or VLM pro
 
 ## Live Hardware Constraints
 
-- **Target:** Comet KVM (GL-RM1) at `192.168.0.126` on LAN
+- **Target:** Comet Pro KVM (GL-RM10) at `192.168.0.126` on LAN
 - **ATX power control:** Wrapped by `comet_atx_power` and `comet_atx_click`. These tools require the ATX add-on board to be physically installed and wired to the target.
 - **BIOS entry workflow:** Use ATX reset/power tools when the add-on board is installed; otherwise manually power on the target. The agent polls screenshots until POST is detected, sends the BIOS entry key (`Delete`, `F2`, `Escape`, etc.), then enters BIOS navigation mode.
 - **Credentials:** The only Comet secret is Doppler `GLCOMET_ADMIN_PASSWORD` (`doppler.yaml` → `homelab`/`dev`), fetched via Doppler CLI — never process-env injection. Host (`192.168.0.126`) and username (`admin`) are non-sensitive and safe in code/config. See `docs/reference/comet-api.md#security-model`.
