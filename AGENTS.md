@@ -11,8 +11,18 @@ Route by task:
 - Implementation decisions (incl. host-only OCR) → `docs/decisions.md`
 - System shape / KVM vs BIOS → `docs/architecture.md`, `docs/kvm-core.md`
 - Comet HTTP/WS/OCR API facts → `docs/reference/comet-api.md`
+- Ordinary Comet operation and recovery → `skills/comet-kvm-operations/`
+- Firmware-only work → `skills/comet-bios-triage/` and its focused references
 - Live hardware qualification → `docs/workflows/live-hardware-qualification.md`
-- Driver ops (runtime) → `skills/comet-kvm-operations/`, `skills/comet-bios-triage/`
 - Current work → GitHub Issues and/or `docs/plans/`
 
-If a task crosses a goal, anti-goal, or invariant: stop and surface it. Do not invent device OCR or bypass the authority docs.
+The universal KVM core is the product's primary path. BIOS cartography, board
+tuning, and HWiNFO analysis are an optional specialist lane; do not make an
+ordinary console, recovery, power, media, or appliance task depend on them.
+
+Never commit credentials, screenshots, HWiNFO logs, or live-state files. Resolve
+the Comet password from Doppler when an operation needs it; query the appliance
+for present state instead of writing a live-state file into the repository.
+
+If a task crosses a goal, anti-goal, or invariant: stop and surface it. Do not
+invent device OCR or bypass the authority docs.

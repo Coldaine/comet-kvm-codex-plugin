@@ -3,7 +3,11 @@
 > **Repo:** `Coldaine/comet-kvm-codex-plugin`
 > **Status:** Current product framing for the universal KVM MCP core.
 
-The KVM MCP server is the universal physical-control substrate. The BIOS sidecar is a BIOS-aware orchestration layer (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip) that uses KVM primitives plus VLM grounding, graph state, and visual verification to perform firmware workflows safely and repeatably. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa.
+The KVM MCP server is the universal physical-control substrate and the product's
+primary path. The BIOS sidecar is a separate specialist lane (loaded in the
+same process for compatibility; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip) for
+explicit firmware work. Dependency direction is one-way: sidecar may depend on
+KVM core, never the reverse.
 
 ## 1. Overview
 

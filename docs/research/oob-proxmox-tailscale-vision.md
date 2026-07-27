@@ -7,6 +7,11 @@
 
 Banner for agents: this is how we *might* deploy Comet as an out-of-band control plane beside Proxmox and Tailscale. It encodes operational experience and recommendations, not firmware facts.
 
+The current product framing is in `docs/NORTH_STAR.md`: universal Comet
+operations are the primary path and BIOS work is an optional specialist lane.
+Do not promote the exploratory autonomy or approval ideas below into the MCP's
+current behavior without a decision and implementation change.
+
 ---
 
 ## 1. Control-plane framing
@@ -127,9 +132,13 @@ Deploy on a small management host, independent NAS, router-class appliance, or e
 
 ---
 
-## 7. Agent permission model
+## 7. Research deployment authority model
 
-Preserve the repo architecture: `bios.*` stateful primary interface; `comet.raw.*` / low-level transport for debug; sidecar owns retries, timing, verification, audit. Do not hand raw HID freely to a general-purpose agent without policy.
+For an explicit firmware task, preserve the repo architecture: `bios.*` is the
+stateful interface and low-level transport is for debugging. For ordinary
+console, media, power, recovery, and appliance work, the universal `kvm_*` and
+`comet_*` interfaces remain primary. This section is deployment research, not a
+hidden policy engine or an override of the driver skills.
 
 ### Autonomous (broad recovery authority)
 

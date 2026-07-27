@@ -10,13 +10,18 @@ Runtime screenshots are persisted temporarily for retry, debugging, and map-buil
 
 ## D3 — Cartography lives under the BIOS triage skill
 
-BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It is documented under `docs/architecture.md` and `docs/kvm-core.md`. The existing skill's trigger surface already covers BIOS workflows; cartography is a prerequisite step within that workflow, not a separate capability.
+BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a sibling skill. It is documented under `docs/architecture.md` and `docs/kvm-core.md`. It is a firmware-only lane, not a prerequisite for ordinary Comet operation or a gate on the universal KVM core.
 
 ## D4 — Map store runtime location: on-Comet preferred, pending verification
 
-BIOS maps should persist on the Comet device itself, co-located with the hardware they describe. The deployed Comet Pro (GL-RM10) reports a writable `GLKVM` media partition through `GET /api/msd`: 28,797,599,744 bytes total and 28,797,403,136 bytes free (live read, 2026-07-27). A BIOS map is ~30-40MB, so the appliance has far more space than a single board map requires. The older base-model GL-RM1 root-shell evidence remains useful family context, not the deployed-unit capacity record.
+When the specialist lane stores BIOS maps, they should persist on the Comet device itself, co-located with the hardware they describe. This decision does not create a storage requirement for ordinary Comet operation.
 
-**Probe result (2026-07-27):** The Comet Pro at `192.168.0.126` is reachable through its authenticated API. `GET /api/msd` reports the internal media storage as writable with the capacity above. This verifies the device-reported virtual-media store, not a map write/read cycle or a particular map-storage path; those remain live-qualification work.
+**Probe result (2026-07-27):** The deployed Comet Pro (GL-RM10) reports a
+writable `GLKVM` media partition through its authenticated `GET /api/msd`
+endpoint: 28,797,599,744 bytes total and 28,797,403,136 bytes free. This
+establishes device-reported media capacity, not a map write/read cycle or a
+specific map path. Verify that path before relying on it; otherwise use the
+host-side plugin data directory for that specialist run.
 
 **Fallback:** If on-Comet storage proves impractical, maps persist in the host-side plugin data directory. The VLM interpretation layer always runs on the host (the Comet has no GPU) regardless of where maps are stored.
 
@@ -99,7 +104,7 @@ Exact stdout/stderr/exit status requires a real byte-stream transport, not HDMI 
 
 `kvm_ocr_text` captures the frame and uses host Pillow plus pytesseract. The
 full host-only OCR decision, rejected native/device paths, and live-probe
-findings are recorded in **D-K9**.
+findings are recorded in [D-K9](#d-k9--mcp-ocr-is-host-only-native-first-removed).
 
 ## D-K8 — Prefer small standard adapters over dependency expansion
 

@@ -14,6 +14,9 @@ description: >
 
 # Comet KVM Operations
 
+This is the primary driver skill for the plugin. Use it for the normal Comet
+path; firmware work is a separate specialist handoff, not a prerequisite.
+
 Use this file as a router, not an API catalog. Read only the reference that
 matches the current outcome. Read another only when the task crosses domains.
 

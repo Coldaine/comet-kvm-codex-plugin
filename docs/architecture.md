@@ -5,18 +5,25 @@
 
 ## Architecture Thesis
 
-One stdio MCP process composes a universal physical KVM core with a BIOS-aware sidecar (loaded by default; set `COMET_DISABLE_BIOS_SIDECAR=1` to skip). The KVM core owns Comet transport and screen primitives; the sidecar consumes those primitives and adds BIOS semantics. Dependency direction is one-way: sidecar may depend on KVM core, not vice versa. Agents receive results through explicit MCP tool return values. Perception and diagnostic services do not become peer navigators or hidden output channels.
+One stdio MCP process composes a universal physical KVM core with a BIOS-aware
+sidecar. The core owns Comet transport and screen primitives; the sidecar
+consumes those primitives and adds firmware semantics. The core is the ordinary
+product path. The sidecar is a specialist lane, even though it currently loads
+in the same process (set `COMET_DISABLE_BIOS_SIDECAR=1` to omit it). Dependency
+direction is one-way: sidecar may depend on KVM core, never the reverse.
 
 ## Maturity — two layers
 
-The product is one integrated MCP process with two layers maturing at different rates:
+The product has two deliberately unequal lanes:
 
 | Layer | Role | Maturity |
 |---|---|---|
-| Universal KVM (`src/kvm_core/`) | Transport, HID, screenshots, host OCR, Comet hardware tools, plugin packaging | More mature — in active use for connect/console/media/power work |
-| BIOS sidecar (`src/bios_sidecar/`) | Observation, graph/state, VLM grounding, navigation, mutation, cartography | Still the live product spike — code exists; end-to-end board proof is **Planned** |
+| Core: universal KVM (`src/kvm_core/`) | Transport, HID, screenshots, host OCR, Comet hardware tools, plugin packaging | Primary path — in active use for connect/console/media/power work |
+| Specialist: BIOS sidecar (`src/bios_sidecar/`) | Observation, graph/state, VLM grounding, navigation, mutation, cartography | Optional firmware lane — code exists; end-to-end board proof is **Planned** |
 
-The first live-hardware proof point is MSI Z690 (see `docs/workflows/live-hardware-qualification.md`). Until that lane signs off, treat BIOS mutation/save paths as lab-only.
+MSI Z690 is a proof point for the specialist lane, not the project milestone.
+Until that lane signs off, treat BIOS mutation/save paths as lab-only; ordinary
+core operations remain independently useful.
 
 ## Status Legend
 
@@ -33,7 +40,7 @@ The first live-hardware proof point is MSI Z690 (see `docs/workflows/live-hardwa
 | Codex plugin packaging | Current | `.codex-plugin/plugin.json` bundles `skills/` + `.mcp.json`; the launcher starts **this repo's** MCP server (not an external upstream package). |
 | Plugin launch | Current | `.mcp.json` launches via `uv run --locked --python 3.13 python ./glkvm_mcp.py`; `kvm_connect` fetches `GLCOMET_ADMIN_PASSWORD` from Doppler CLI. |
 | Universal KVM | Current | `src/kvm_core/` owns auth, HTTP/WebSocket transport, HID, screenshots, OCR, logging, and Comet hardware tools. |
-| BIOS sidecar | Current | `src/bios_sidecar/` owns BIOS observation, graph/state, VLM grounding, navigation, mutation, recovery, and trace resources/tools. |
+| BIOS sidecar | Specialist | `src/bios_sidecar/` owns optional BIOS observation, graph/state, VLM grounding, navigation, mutation, recovery, and trace resources/tools. |
 | Host OCR | Current | Pillow decodes frames; pytesseract returns ordered text and word boxes with a timeout off the asyncio event loop. |
 | MCP text OCR | Current | `kvm_ocr_text` captures a frame and runs host Tesseract. GL.iNet's product UI Text Recognition is browser-side Tesseract.js and is not a device/API backend for this process. |
 | Bounded KVM command observer | Planned | One tool call polls visible terminal output for one command, returns it, and discards the transcript. |
@@ -83,20 +90,22 @@ The Comet provides HDMI capture plus USB HID and hardware-control APIs. It does 
 
 Detailed call order and the bounded-observer design live in `docs/kvm-core.md#9-command-output-delivery`.
 
-## BIOS Sidecar Boundary
+## Specialist lane: BIOS sidecar
 
-The KVM core is the engine and the BIOS sidecar is steering:
+The KVM core is the normal engine; the BIOS sidecar is specialist steering:
 
 - `kvm_*` and `comet_*` remain general physical primitives.
-- `bios_*` adds screen semantics, graph state, transition verification, and BIOS workflow behavior.
+- `bios_*` adds screen semantics, graph state, transition verification, and BIOS workflow behavior only when a firmware task calls for it.
 - Raw KVM calls are not automatically intercepted or state-checked during BIOS work; the driver selects the correct layer.
 - Visual verification remains required for BIOS actions such as save confirmation. This is state verification, not an approval-token system.
 
-## State and Cartography
+## Specialist lane: state and cartography
 
 The BIOS tracker is **Current** and updates on demand through semantic `bios_*` calls. It uses perceptual hashes, OCR fingerprints, normalized VLM output, and a persisted graph/capability store. It does not continuously poll the screen.
 
-Near-exhaustive BIOS cartography is **Planned** as the first product spike. Intended shape:
+Near-exhaustive BIOS cartography is **Planned** as a specialist capability. It
+is not a dependency of console, recovery, media, appliance, or remote-access
+work. Intended shape:
 
 - A Python DFS driver navigates the UI tree; a VLM returns per-screen structured perception; cycle detection uses perceptual hashing.
 - Blocklisted zones (Flash, Secure Erase, RAID, Boot Order, Password) stay off-limits to the crawler; everything else is visited.

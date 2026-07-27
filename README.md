@@ -6,7 +6,7 @@
 | **Forked from** | [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp) (upstream MCP server) |
 | **Relationship** | Selective fork — occasionally review upstream for bug fixes, but this repo diverges strongly and is its own project |
 
-This repository develops and ships a **Comet KVM MCP server** for physical-machine operation and triage, packaged for Codex as a plugin. The MCP server is the product: keyboard/mouse, screenshots, OCR, power, virtual media, recovery and appliance diagnostics, plus BIOS-aware tools (loaded by default; disable with `COMET_DISABLE_BIOS_SIDECAR=1`). The Codex plugin installs that server with separate general-operations and BIOS driver skills. Not VM orchestration or general-purpose remote desktop.
+This repository develops and ships a **Comet KVM MCP server** for physical-machine operation and recovery, packaged for Codex as a plugin. Its primary path is console/HID, screenshots and OCR, power/WOL where available, virtual media, appliance diagnostics, and private remote access. BIOS-aware tools remain available as a separate specialist lane; they are not a prerequisite for ordinary Comet work. Not VM orchestration or general-purpose remote desktop.
 
 **Primary distribution target: Codex.** The MCP server itself is usable from any MCP client; Codex packaging is first. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
 
@@ -77,7 +77,14 @@ comet-kvm-codex-plugin/
 
 ## Current Scope
 
-Two layers share one MCP process and mature at different rates: the universal KVM core is farther along; the BIOS sidecar is still the live product spike. Cartography spike design and layer maturity live in [`docs/architecture.md`](docs/architecture.md). The MSI Z690 end-to-end proof is **Planned** — see [`docs/workflows/live-hardware-qualification.md`](docs/workflows/live-hardware-qualification.md). Board tuning procedure: `skills/comet-bios-triage/references/msi-z690-bios-workflow.md`.
+The **core** is the universal KVM MCP server: transport, session/auth, HID,
+screenshots/OCR, media, appliance control, and plugin packaging. That is the
+normal route for a Comet task.
+
+The **firmware specialist lane** is the BIOS sidecar: cartography, navigation,
+mutation, and optional HWiNFO-backed validation for a named machine. It is
+entered only for an explicit firmware request. The MSI Z690 proof remains
+planned, but it does not gate the core product.
 
 See:
 - [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — durable goals and anti-goals
