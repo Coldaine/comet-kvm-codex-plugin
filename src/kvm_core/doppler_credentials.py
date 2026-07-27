@@ -16,6 +16,17 @@ _PASSWORD_SECRET_NAMES = (
     "COMET_PASSWORD",
 )
 
+# Resolving the password shells out to the Doppler CLI (~hundreds of ms). The
+# managed connection lifecycle reconnects freely, so the value is cached for the
+# life of the process; _clear_password_cache() is the test hook.
+_password_cache: Optional[str] = None
+
+
+def _clear_password_cache() -> None:
+    """Drop the in-process Comet password cache."""
+    global _password_cache
+    _password_cache = None
+
 
 class DopplerAuthError(RuntimeError):
     """Doppler CLI is missing, not logged in, or cannot read the configured project."""
@@ -149,13 +160,22 @@ def resolve_comet_password(*, require: bool = True) -> Optional[str]:
 
     The only blocker is Doppler CLI install + authentication to doppler.yaml's
     project/config. Explicit passwords passed to kvm_connect() are separate.
+
+    The resolved value is cached in-process, so reconnects never re-probe the CLI.
     """
+    global _password_cache
+    if _password_cache is not None:
+        return _password_cache
+
     project, config = doppler_project_config()
     assert_doppler_authenticated(project, config)
 
-    return _resolve_password_from_reader(
+    value = _resolve_password_from_reader(
         _doppler_get_plain,
         project,
         config,
         require=require,
     )
+    if value:
+        _password_cache = value
+    return value

@@ -165,8 +165,9 @@ class StatefulBiosRuntime:
 
     async def attach_to_kvm(self) -> bool:
         """Initialize BIOS-sidecar state around an existing KVM core session."""
-        if self.client is None or not self.client.is_connected():
-            raise RuntimeError("Not connected. Call kvm_connect first.")
+        # The managed lifecycle owns the transport: connect the default target on
+        # demand instead of making the agent call kvm_connect first.
+        await self.kvm.ensure_connected()
         client_id = id(self.client)
         if self._attached_client_id == client_id and self.state not in (
             RuntimeState.UNCONFIGURED,
