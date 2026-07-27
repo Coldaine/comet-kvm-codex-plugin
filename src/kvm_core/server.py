@@ -40,8 +40,14 @@ async def _shutdown_cleanup() -> None:
         runtime = runtime_mod._runtime
         if runtime is None:
             return
-        for entry in list(getattr(runtime, "targets", {}).values()):
-            client = getattr(entry, "client", None)
+        clients = [
+            getattr(entry, "client", None)
+            for entry in list(getattr(runtime, "targets", {}).values())
+        ]
+        direct_client = getattr(runtime, "client", None)
+        if direct_client is not None and all(client is not direct_client for client in clients):
+            clients.append(direct_client)
+        for client in clients:
             if client is None:
                 continue
             try:

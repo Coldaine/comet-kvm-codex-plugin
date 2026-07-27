@@ -236,6 +236,27 @@ def test_force_reconnect_replaces_live_session(monkeypatch):
     assert stub.client is not client
 
 
+def test_kvm_connect_password_resolution_runs_off_event_loop(monkeypatch):
+    """An explicit connect must not synchronously block on Doppler either."""
+    import threading
+
+    stub = ManagedRuntimeStub()
+    main_thread = threading.current_thread()
+
+    def password(*args, **kwargs):
+        assert threading.current_thread() is not main_thread, (
+            "Doppler password resolution ran on the asyncio event-loop thread"
+        )
+        return "secret"
+
+    monkeypatch.setattr(doppler_credentials, "resolve_comet_password", password)
+
+    with patch(TOOLS_RUNTIME_PATH, return_value=stub):
+        result = run(kvm_tools.kvm_connect(host="10.0.0.9"))
+
+    assert result["connected"] is True
+
+
 # ---------------------------------------------------------------------------
 # kvm_status / kvm_release_all / kvm_select_target on a cold runtime
 # ---------------------------------------------------------------------------

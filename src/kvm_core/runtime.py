@@ -122,6 +122,14 @@ class KVMRuntime:
             # Disconnect all when no target specified (legacy behavior for kvm_disconnect).
             for tid in list(self.targets.keys()):
                 await self._disconnect_locked(tid)
+            # Some sidecar integrations install a compatibility client directly
+            # rather than registering a target. It is still process-owned and
+            # must not survive a disconnect-all or shutdown cleanup.
+            direct_client = self.client
+            if direct_client is not None:
+                await direct_client.disconnect()
+            self.client = None
+            self.selected_target = DEFAULT_TARGET
             return
         entry = self.targets.pop(target, None)
         if entry:
@@ -171,7 +179,7 @@ class KVMRuntime:
             if live is not None:
                 return live
             host, username = resolve_default_target()
-            password = resolve_comet_password()
+            password = await asyncio.to_thread(resolve_comet_password)
             await self._connect_locked(
                 host=host,
                 username=username,

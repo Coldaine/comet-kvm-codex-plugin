@@ -172,7 +172,7 @@ async def kvm_connect(
         from src.kvm_core.doppler_credentials import DopplerAuthError, resolve_comet_password
 
         try:
-            password = resolve_comet_password(require=True)
+            password = await asyncio.to_thread(resolve_comet_password, require=True)
         except DopplerAuthError as exc:
             raise ValueError(str(exc)) from exc
     if not password:

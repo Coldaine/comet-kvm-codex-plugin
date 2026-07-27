@@ -375,7 +375,11 @@ class CometClient:
         self.capture_retry_count = 0
 
         for index in range(len(CAPTURE_BACKOFF_SCHEDULE) + 1):
-            r = await self.http.get(url, params=params)
+            try:
+                r = await self.http.get(url, params=params)
+            except httpx.HTTPError as exc:
+                self._record_capture(False, f"{type(exc).__name__}: {exc}")
+                raise
             if r.status_code != 503:
                 if r.is_error:
                     self._record_capture(False, f"HTTP {r.status_code} from {url}")

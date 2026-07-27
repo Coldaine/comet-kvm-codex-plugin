@@ -17,6 +17,7 @@ Contract under specification:
 from __future__ import annotations
 
 import asyncio
+import threading
 
 import pytest
 
@@ -165,6 +166,25 @@ def test_cold_ensure_connects_once_then_reuses(tmp_path, monkeypatch):
     assert password.calls == 1, (
         "the password must be resolved once for the cold connect only"
     )
+
+
+def test_default_password_resolution_runs_off_event_loop(tmp_path, monkeypatch):
+    """A slow Doppler CLI call must not freeze the stdio MCP event loop."""
+    monkeypatch.setattr(runtime_mod, "CometClient", ConnectableScriptedClient)
+    main_thread = threading.current_thread()
+
+    def password(*args, **kwargs):
+        assert threading.current_thread() is not main_thread, (
+            "Doppler password resolution ran on the asyncio event-loop thread"
+        )
+        return "secret-from-doppler"
+
+    monkeypatch.setattr(runtime_mod, "resolve_comet_password", password)
+    runtime = fresh_runtime(tmp_path)
+
+    client = run(runtime.ensure_connected())
+
+    assert client.is_connected()
 
 
 def test_concurrent_cold_ensures_perform_one_connect(tmp_path, monkeypatch):
@@ -330,6 +350,33 @@ def test_disconnect_no_arg_disconnects_all_targets(tmp_path, monkeypatch):
     )
     assert all(not c.is_connected() for c in ConnectableScriptedClient.instances)
     assert runtime.client is None
+
+
+def test_disconnect_no_arg_releases_direct_compatibility_client(tmp_path):
+    """Legacy sidecar-installed clients must not survive disconnect-all."""
+    runtime = fresh_runtime(tmp_path)
+    direct = ConnectableScriptedClient(host=DEFAULT_HOST, connected=True)
+    runtime.client = direct
+
+    run(runtime.disconnect())
+
+    assert direct.disconnect_calls == 1
+    assert runtime.client is None
+
+
+def test_shutdown_releases_direct_compatibility_client(tmp_path, monkeypatch):
+    """Shutdown must release keys held by a legacy sidecar-installed client."""
+    from src.kvm_core.server import _shutdown_cleanup
+
+    runtime = fresh_runtime(tmp_path)
+    direct = ConnectableScriptedClient(host=DEFAULT_HOST, connected=True)
+    runtime.client = direct
+    monkeypatch.setattr(runtime_mod, "_runtime", runtime)
+
+    run(_shutdown_cleanup())
+
+    assert direct.release_calls == 1
+    assert direct.disconnect_calls == 1
 
 
 # ---------------------------------------------------------------------------

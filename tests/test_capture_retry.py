@@ -23,6 +23,7 @@ from collections import deque
 from typing import Any, Callable, Optional
 
 import httpx
+import pytest
 from aiohttp import web
 
 import src.kvm_core.comet.client as client_mod
@@ -217,6 +218,24 @@ def test_snapshot_401_never_retried(monkeypatch):
 
 def test_snapshot_500_never_retried(monkeypatch):
     assert_status_never_retried(monkeypatch, 500)
+
+
+def test_snapshot_transport_error_records_capture_failure():
+    """A network failure must not leave kvm_status reporting an old success."""
+    class FailingHttp:
+        async def get(self, *args, **kwargs):
+            raise httpx.ReadTimeout("snapshot connection timed out")
+
+    client = CometClient("https://comet.test")
+    client.http = FailingHttp()
+    client.auth_token = "token-123"
+
+    with pytest.raises(httpx.ReadTimeout):
+        run(client.get_screenshot(preview=False))
+
+    assert client.last_capture_ok is False
+    assert client.last_capture_error is not None
+    assert "ReadTimeout" in client.last_capture_error
 
 
 def test_snapshot_retry_aborts_when_session_dies(monkeypatch):
