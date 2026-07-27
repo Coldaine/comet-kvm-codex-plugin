@@ -9,7 +9,11 @@
         "3.13",
         "python",
         "./glkvm_mcp.py"
-      ]
+      ],
+      "env": {
+        "VLM_PROVIDER": "openrouter",
+        "VLM_MODEL": "openrouter/free"
+      }
     }
   }
 }

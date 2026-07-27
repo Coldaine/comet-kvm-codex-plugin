@@ -17,13 +17,62 @@ from src.bios_sidecar.perception.models import BiosScreenParse
 
 LOG = logging.getLogger("bios_sidecar.perception.vlm")
 _KEY_REQUIRED_PROVIDERS = frozenset({"openrouter", "openai"})
+# openrouter/free is OpenRouter's Free Models Router: $0, auto-picks a free
+# model, and image content in the request filters it to vision-capable ones.
 _PROVIDER_DEFAULTS = {
     "openai": ("https://api.openai.com/v1", "gpt-4o"),
-    "openrouter": ("https://openrouter.ai/api/v1", "qwen/qwen2.5-vl-72b-instruct"),
+    "openrouter": ("https://openrouter.ai/api/v1", "openrouter/free"),
     "ollama": ("http://localhost:11434/v1", "llama3.2-vision"),
     "vllm": ("http://localhost:8000/v1", "qwen2.5-vl"),
     "mock": ("", "mock"),
 }
+# Providers whose endpoints accept OpenAI strict structured outputs.
+_JSON_SCHEMA_PROVIDERS = frozenset({"openrouter", "openai"})
+
+# OpenAI strict structured outputs impose two rules Pydantic's schema does not
+# satisfy on its own: every object must set additionalProperties=false, and every
+# declared property must be listed in `required` (optionality is expressed by a
+# nullable type, which the v2 model already does). Violating either is a hard 400.
+_SCHEMA_MAP_KEYS = ("$defs", "definitions", "properties", "patternProperties")
+_SCHEMA_LIST_KEYS = ("anyOf", "oneOf", "allOf", "prefixItems")
+_SCHEMA_NODE_KEYS = ("items", "contains", "not", "if", "then", "else")
+
+
+def _strictify_json_schema(node: Any) -> Any:
+    """Recursively rewrite a JSON schema for OpenAI strict mode (mutates in place)."""
+    if isinstance(node, list):
+        return [_strictify_json_schema(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    for key in _SCHEMA_MAP_KEYS:
+        child = node.get(key)
+        if isinstance(child, dict):
+            for name, sub in child.items():
+                child[name] = _strictify_json_schema(sub)
+    for key in _SCHEMA_LIST_KEYS:
+        child = node.get(key)
+        if isinstance(child, list):
+            node[key] = _strictify_json_schema(child)
+    for key in _SCHEMA_NODE_KEYS:
+        child = node.get(key)
+        if isinstance(child, dict):
+            node[key] = _strictify_json_schema(child)
+    properties = node.get("properties")
+    if isinstance(properties, dict):
+        node["additionalProperties"] = False
+        node["required"] = list(properties)
+    return node
+
+
+_strict_parse_schema_cache: Optional[dict[str, Any]] = None
+
+
+def strict_bios_screen_parse_schema() -> dict[str, Any]:
+    """The BiosScreenParse JSON schema, strict-mode compliant. Computed once."""
+    global _strict_parse_schema_cache
+    if _strict_parse_schema_cache is None:
+        _strict_parse_schema_cache = _strictify_json_schema(BiosScreenParse.model_json_schema())
+    return _strict_parse_schema_cache
 
 
 class VLMClient:
@@ -59,7 +108,21 @@ class VLMClient:
         if self.provider not in _PROVIDER_DEFAULTS:
             raise ValueError(f"Unsupported provider: {self.provider}")
         if self._requires_key() and not self.api_key:
-            raise RuntimeError(f"VLM_API_KEY is required for provider: {self.provider}")
+            from src.kvm_core import doppler_credentials
+            from src.kvm_core.doppler_credentials import DopplerAuthError
+
+            # Defense in depth: the optional Doppler fallback must never turn a
+            # missing-key configuration error into a Doppler auth error.
+            try:
+                self.api_key = doppler_credentials.resolve_vlm_api_key(require=False)
+            except DopplerAuthError:
+                LOG.debug("Doppler VLM key fallback unavailable; continuing without a key")
+                self.api_key = None
+        if self._requires_key() and not self.api_key:
+            raise RuntimeError(
+                f"VLM_API_KEY is required for provider: {self.provider} "
+                "(set the env var or add OPENROUTER_API_KEY to Doppler)"
+            )
 
     def _default_base_url(self) -> str:
         return _PROVIDER_DEFAULTS.get(self.provider, ("", ""))[0]
@@ -71,7 +134,14 @@ class VLMClient:
         model = self.model or self._default_model()
         if not model:
             raise ValueError(f"VLM_MODEL is required for provider: {self.provider}")
-        return model.removeprefix(f"{self.provider}/")
+        # Strip a LiteLLM-style provider prefix ("ollama/llama3.2-vision" ->
+        # "llama3.2-vision"). OpenRouter IDs are always author/model, so a
+        # single-segment remainder there means the "prefix" was the author
+        # ("openrouter/free" is the Free Models Router, not a prefixed "free").
+        stripped = model.removeprefix(f"{self.provider}/")
+        if self.provider == "openrouter" and "/" not in stripped:
+            return model
+        return stripped
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -156,6 +226,18 @@ class VLMClient:
             hints.append(f"Last keystroke executed was: {last_action}")
         return USER_PROMPT_TEMPLATE + ("\n\nHints:\n" + "\n".join(hints) if hints else "")
 
+    def _response_format(self) -> dict[str, Any]:
+        if self.provider in _JSON_SCHEMA_PROVIDERS:
+            return {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "bios_screen_parse",
+                    "strict": True,
+                    "schema": strict_bios_screen_parse_schema(),
+                },
+            }
+        return dict(VLM_DEFAULT_PARAMS["response_format"])
+
     async def _call_api(self, system_prompt: str, user_prompt: str, image_b64: str) -> dict[str, Any]:
         if self.provider not in _PROVIDER_DEFAULTS:
             raise ValueError(f"Unsupported provider: {self.provider}")
@@ -178,10 +260,17 @@ class VLMClient:
             ],
             "temperature": VLM_DEFAULT_PARAMS["temperature"],
             "max_tokens": VLM_DEFAULT_PARAMS["max_tokens"],
-            "response_format": VLM_DEFAULT_PARAMS["response_format"],
+            "response_format": self._response_format(),
         }
+        # Downgrade ladder for endpoints that reject structured outputs:
+        # json_schema -> json_object -> no response_format at all.
         response = await self.client.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
-        if response.status_code == 400 and self.provider in {"ollama", "vllm"}:
+        if response.status_code == 400 and body["response_format"].get("type") == "json_schema":
+            LOG.info("Endpoint rejected json_schema response_format; retrying with json_object")
+            body["response_format"] = {"type": "json_object"}
+            response = await self.client.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
+        if response.status_code == 400 and "response_format" in body:
+            LOG.info("Endpoint rejected json_object response_format; retrying without one")
             body.pop("response_format")
             response = await self.client.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
         response.raise_for_status()

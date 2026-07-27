@@ -1,7 +1,9 @@
 # VLM Prompt Contract (Draft)
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
-> **Status:** Draft — 2026-07-07. Sidecar-internal design artifact. This documents the prompt that will be embedded in the BIOS sidecar/cartographer tool's source code as a string constant/template. It is NOT KVM-core architecture. It is NOT a skill file — the VLM does not read markdown from the filesystem. It is NOT reference material — it is a design artifact that justifies every element of the prompt we will send to the VLM API at call time.
+> **Status:** Draft — 2026-07-07, amended 2026-07-27 for Perception Contract v2. Sidecar-internal design artifact. This documents the prompt that will be embedded in the BIOS sidecar/cartographer tool's source code as a string constant/template. It is NOT KVM-core architecture. It is NOT a skill file — the VLM does not read markdown from the filesystem. It is NOT reference material — it is a design artifact that justifies every element of the prompt we will send to the VLM API at call time.
+>
+> **v2 update (2026-07-27):** the schema below is the v1 baseline. Perception Contract v2 adds `screen_kind`, `layout`, per-entry `selected`/`bbox`/`legible`, `help_text`, `hotkeys`, `modal`, `scroll`, a structured `risk` object, and `confidence` — all optional, so v1 parses still validate. See [`docs/superpowers/specs/2026-07-27-perception-contract-v2.md`](superpowers/specs/2026-07-27-perception-contract-v2.md) for the full design and normalization rules; this document is amended in place below rather than forked, since the transcriber-only principle and the v1 fields are unchanged.
 
 ## Why This Is a Prompt, Not a Skill
 
@@ -106,6 +108,36 @@ The list is intentionally small and explicit. It's not "things we don't care abo
 
 If a keyword appears on a screen that also contains safe settings (e.g., a "Security" tab that has both Password and TPM settings), the driver backs out of the entire screen. The crawler errs on the side of caution — a missing setting in the map is recoverable through targeted follow-up; a triggered destructive action is not.
 
+## v2 Schema Additions (2026-07-27)
+
+The v1 schema above is unchanged and still validates on its own — every v2
+field is optional. v2 was added because downstream code (`normalize.py`) was
+already reading fields the v1 prompt never asked for (`entries[].bbox`, a
+parse `confidence`), so those values were silently fabricated. v2 closes that
+gap and gives the VLM a way to describe modal dialogs, footer hotkey legends,
+help-pane text, scroll position, and grid layouts, none of which v1 could
+express.
+
+| Field | Type | Why it's there |
+|---|---|---|
+| `screen_kind` | `StateKind` enum string | Replaces the title-keyword heuristic for classifying the screen; the heuristic (`parse_state_kind(title)`) remains as a fallback when this is absent or invalid. |
+| `layout` | `"list" \| "grid" \| "tabs_with_list" \| "dialog"` | Tells the driver which cursor model applies (a grid's "selected" concept differs from a list's row index) and, in Phase 2, drives tab-navigation frontier expansion. |
+| `entries[].selected` | boolean | Grid-safe selection flag. An entry counts as selected when `selected` is true OR its index equals `cursor_at` (v1 compatibility) — grids can have a highlighted cell that isn't row 0..N of a flat list. |
+| `entries[].bbox` | `[x0, y0, x1, y1]` px | Pixel bounding box of the entry, for crop verification now and bbox-grounded mouse navigation later (Phase 3). |
+| `entries[].legible` | boolean | Lets the VLM flag a low-confidence read per entry, distinct from overall `confidence`, so the driver can target a crop/retry at just that region (Phase 3). |
+| `help_text` | string | Free text from a help pane/footer description, if visible. Feeds the Semantic Capability Index. |
+| `hotkeys` | `[{key, action}]` | The footer hotkey legend, transcribed verbatim (e.g. `F10: Save`, `Esc: Exit`). This gives the driver vendor-true key semantics instead of assuming standard AMI/Insyde bindings. |
+| `modal` | `{present, title, message, buttons, focused_button}` | Describes an open dialog. When `modal.present` is true, action policy collapses to `safe=["Escape"]` — Enter/F10/F6 are blocked, because a modal's Enter can confirm a save or a destructive action. |
+| `scroll` | `{more_above, more_below}` | Lets the driver know whether the visible entry list is a partial view of a longer menu, replacing a guess with evidence for when to stop row-scanning. |
+| `risk.dangerous`, `risk.reason`, `risk.keywords_seen` | boolean, string, string[] | Semantic risk assessment. This is unioned with — never a replacement for — the literal keyword blocklist above: `risk.dangerous` sets `blocklist_flag`, appends `vlm_semantic` to hazards, and merges `keywords_seen` into the blocklist keywords. The literal list remains the floor. |
+| `confidence` | 0.0–1.0 | Honest parse confidence, replacing the fabricated 0.90/0.92 defaults `normalize.py` used before this field existed. Flows into `selection.confidence` and `ConfidenceMetrics.vlm`; the old defaults apply only when the VLM omits this field. |
+
+The design principle from the top of this document is unchanged: the VLM is
+still a pure transcriber. None of the v2 fields let it navigate, pick a key,
+or relax policy — `risk` in particular only ever makes the system *more*
+restrictive, never less. Full field-by-field normalization rules live in the
+spec: [`docs/superpowers/specs/2026-07-27-perception-contract-v2.md`](superpowers/specs/2026-07-27-perception-contract-v2.md).
+
 ## Calling Convention
 
 ### Parameters
@@ -116,6 +148,17 @@ If a keyword appears on a screen that also contains safe settings (e.g., a "Secu
 | `max_tokens` | 2048 | BIOS screens have at most ~20-30 entries. The JSON schema is compact. 2048 tokens is generous headroom while preventing runaway output. |
 | `response_format` | JSON (if the API supports it) | Some VLM APIs (OpenAI, vLLM with guided decoding) support forced JSON output mode. Use it if available — it guarantees valid JSON. |
 | `NOTHINK mode` | Enabled (if available) | Skips chain-of-thought for faster, more consistent structured output. See `docs/architecture.md`. |
+
+**v2 transport update:** for the `openai` and `openrouter` providers, `response_format`
+is no longer best-effort JSON mode — the client sends strict structured
+outputs, `{"type": "json_schema", "json_schema": {"strict": true, "schema":
+BiosScreenParse.model_json_schema()}}`, so the endpoint enforces the v2 schema
+itself. If the endpoint responds `HTTP 400` (schema not supported), the client
+downgrades one step to `{"type": "json_object"}`, and on a second 400 drops
+`response_format` entirely and relies on the prompt text alone. `ollama`/`vllm`
+start directly at `json_object` — they don't advertise strict schema support.
+The 3-attempt corrective-retry loop described below is unchanged and remains
+the last line of defense regardless of which rung of the ladder succeeded.
 
 ### Retry behavior
 
@@ -130,6 +173,15 @@ This ensures a single unparseable screen doesn't block the entire crawl. Gaps ar
 ## Open Questions (Not Yet Resolved)
 
 1. **Which VLM?** **Resolved.** Provider routing lives in [`src/bios_sidecar/perception/vlm_client.py`](../src/bios_sidecar/perception/vlm_client.py) (`openrouter` / `ollama` / `vllm` / `openai`). Configure via `VLM_PROVIDER`, `VLM_MODEL`, `VLM_BASE_URL`, and `VLM_API_KEY` — see the env var table in [`docs/reference/comet-api.md`](reference/comet-api.md#environment-variables). Missing credentials or unsupported providers fail closed; no fabricated parse is returned.
+   **v2 update (2026-07-27):** `.mcp.json` now pins the `openrouter` provider's
+   default model to `openrouter/free` — OpenRouter's Free Models Router, $0,
+   which auto-selects a vision-capable free model whenever the request
+   contains an image (~20 requests/minute, ~200/day free-tier limits). A real
+   OpenRouter account key is still required even for free models. When
+   `VLM_API_KEY` is unset in the environment, the client now falls back to the
+   Doppler CLI secret `OPENROUTER_API_KEY` (project/config from
+   `doppler.yaml`), cached in-process for the life of the run the same way the
+   Comet admin password is.
 2. **Few-shot examples?** The current prompt is zero-shot. Adding 2-3 BIOS screenshot → JSON examples might improve parse accuracy on the first crawl. Not yet decided.
 3. **Image resolution?** The Comet can capture at various resolutions/qualities. What resolution does the VLM need for reliable parsing? Not yet tested.
 4. **OCR hint?** Should the VLM receive Tesseract OCR output alongside the image as a robustness hint? OCR is already available via `kvm_ocr_screenshot`. Not yet decided.

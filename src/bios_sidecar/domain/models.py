@@ -73,8 +73,9 @@ class ControlEntry:
     role: ControlRole
     selected: bool
     risk: RiskClass
-    bbox: Optional[List[int]] = None  # [x, y, w, h]
+    bbox: Optional[List[int]] = None  # [x0, y0, x1, y1]
     options: Optional[List[str]] = None
+    legible: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -95,6 +96,8 @@ class ModalMetadata:
     type: Optional[str] = None
     message: Optional[str] = None
     options: List[str] = field(default_factory=list)
+    title: Optional[str] = None
+    focused: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -109,6 +112,7 @@ class RiskStatus:
     blocklist_keywords: List[str] = field(default_factory=list)
     hazards: List[str] = field(default_factory=list)
     policy_class: str = "context_gated"
+    reason: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -158,6 +162,10 @@ class BiosState:
     risk: RiskStatus = field(default_factory=lambda: RiskStatus(blocklist_flag=False))
     actions: ActionPolicies = field(default_factory=ActionPolicies)
     confidence: ConfidenceMetrics = field(default_factory=lambda: ConfidenceMetrics(1.0, 1.0, 1.0))
+    layout: str = "list"  # list | grid | tabs_with_list | dialog
+    help_text: Optional[str] = None
+    hotkeys: List[Dict[str, str]] = field(default_factory=list)  # [{"key", "action"}]
+    scroll: Dict[str, bool] = field(default_factory=dict)  # {"more_above", "more_below"}
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -173,6 +181,10 @@ class BiosState:
             "risk": self.risk.to_dict(),
             "actions": self.actions.to_dict(),
             "confidence": self.confidence.to_dict(),
+            "layout": self.layout,
+            "help_text": self.help_text,
+            "hotkeys": self.hotkeys,
+            "scroll": self.scroll,
         }
 
     @classmethod
@@ -190,6 +202,10 @@ class BiosState:
             risk=RiskStatus.from_dict(d["risk"]),
             actions=ActionPolicies.from_dict(d["actions"]),
             confidence=ConfidenceMetrics.from_dict(d["confidence"]),
+            layout=d.get("layout", "list"),
+            help_text=d.get("help_text"),
+            hotkeys=d.get("hotkeys") or [],
+            scroll=d.get("scroll") or {},
         )
 
 @dataclass
