@@ -54,6 +54,12 @@ presently unavailable or intermittent snapshot surface, not proof that HDMI is
 disconnected. Do not represent screenshots, OCR, or metrics as currently
 qualified from this observation alone.
 
+**Official MCP path confirmed:** the exact locked stdio launcher from
+`.mcp.json` registered `kvm_connect` and `comet_metrics`; `kvm_connect` and
+`kvm_disconnect` succeeded without a password passed through the tool call,
+while `comet_metrics` surfaced the same HTTP 500. This confirms the observed
+metrics failure reaches the packaged MCP path, not only a direct client call.
+
 **Not tested:** physical HID effect, virtual-media mount/boot, WOL wake, ATX,
 BIOS, and an independent-client tailnet recovery path. Those remain separate
 disposable-target qualification work.
