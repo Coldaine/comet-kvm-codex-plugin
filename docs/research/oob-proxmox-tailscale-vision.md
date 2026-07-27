@@ -187,7 +187,7 @@ Native API appears to lack route-level RBAC beyond auth-required flags. The side
 
 ### Phase 2 — Physical control
 
-- Install ATX board on fixed Proxmox nodes.  
+- Install the existing ATX board on a fixed Proxmox node.
 - Configure WOL.  
 - Test short press, reset, forced-off **while physically present**.  
 - Document motherboard/BIOS responses.

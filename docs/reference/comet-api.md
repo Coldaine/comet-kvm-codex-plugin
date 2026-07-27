@@ -177,7 +177,7 @@ those fields should be inferred from another.
 | Snapshot OCR (`ocr=true`) | N/A for MCP | Product Text Recognition is browser Tesseract.js; MCP does not use legacy OCR snapshot |
 | WebSocket HID + stream | Yes, read-only | MCP uses `?stream=true`; pong/receiver healthy on 2026-07-27; no physical HID effect was tested |
 | `GET /api/recorder`, `/api/tailscale/status`, `/api/wol/list` | Yes, read-only | Recorder idle, Tailscale running, and saved WOL list empty on 2026-07-27; no recorder, tailnet, or WOL mutation was sent |
-| `GET /api/export/prometheus/metrics` | Failed read | Returned HTTP 500 on the initial and repeat 2026-07-27 calls |
+| `GET /api/export/prometheus/metrics` | Failed read | Returned generic HTTP 500 on the initial and repeat 2026-07-27 calls. The source exporter reads ATX, health/fan, and GPIO state; the RM10 returned an ATX state with LEDs and GPIO HTTP 200, so the server-side cause remains unconfirmed. |
 | `POST /api/atx/power` / `click` | **Not live-tested** | No destructive power tests in smoke |
 | `POST /api/msd/write` + mount lifecycle | **Not live-tested** | Upload not invoked in 2026-07-10 verification |
 | WOL wake, Redfish power, recorder start/stop, Tailscale configuration | **Not live-tested** | Source-derived operations; no mutation was sent |

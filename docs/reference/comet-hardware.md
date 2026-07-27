@@ -43,8 +43,8 @@ inventory.
 
 The 2026-07-27 authenticated read observed a writable `GLKVM` virtual-media
 partition with 28,797,599,744 bytes total and 28,797,403,136 bytes free.
-Tailscale reported running. The ATX API reported disabled, so no compatible
-target is currently wired to the separate ATX add-on board.
+Tailscale reported running. The ATX API reported disabled. The ATX add-on
+board is owned but not yet installed or wired to a compatible target.
 
 This is appliance state from one dated read, not a standing health claim. In
 the same observation window, Prometheus metrics returned HTTP 500 and a later
