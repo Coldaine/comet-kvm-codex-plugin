@@ -89,6 +89,11 @@ def _hosts_match(client, host: str) -> bool:
     return wanted in candidates
 
 
+def _usernames_match(client, username: str) -> bool:
+    """Whether ``client`` was authenticated as the requested username."""
+    return getattr(client, "username", None) == username
+
+
 def _capture_state(client) -> dict:
     """Capture-path diagnostics (503 retry health) for kvm_status."""
     if client is None:
@@ -156,46 +161,63 @@ async def kvm_connect(
     resolved_host = (host or default_host).strip()
     resolved_username = (username or default_username).strip()
 
-    if not force_reconnect:
-        existing = _live_client(r, target)
-        if existing is not None and _hosts_match(existing, resolved_host):
-            return {
-                "connected": True,
-                "host": getattr(existing, "base_url", resolved_host),
-                "target": target,
-                "capabilities": getattr(existing, "capabilities", {}),
-                "reused": True,
-                "message": "reused live session",
-            }
-
-    if password is None:
-        from src.kvm_core.doppler_credentials import DopplerAuthError, resolve_comet_password
-
-        try:
-            password = await asyncio.to_thread(resolve_comet_password, require=True)
-        except DopplerAuthError as exc:
-            raise ValueError(str(exc)) from exc
-    if not password:
-        raise ValueError(
-            "No Comet password available. Pass password explicitly or ensure "
-            "Doppler CLI is logged in and GLCOMET_ADMIN_PASSWORD exists in the configured project."
-        )
-
     async with _operation_fence(r):
-        ok = await r.connect(
-            host=resolved_host,
-            username=resolved_username,
-            password=password,
-            target=target,
-        )
+        # Keep the preflight and connect in the same operation fence. The
+        # runtime repeats this identity check under its connection lock, which
+        # also protects direct runtime callers.
+        if not force_reconnect:
+            existing = _live_client(r, target)
+            if (
+                existing is not None
+                and _hosts_match(existing, resolved_host)
+                and _usernames_match(existing, resolved_username)
+            ):
+                return {
+                    "connected": True,
+                    "host": getattr(existing, "base_url", resolved_host),
+                    "target": target,
+                    "capabilities": getattr(existing, "capabilities", {}),
+                    "reused": True,
+                    "message": "reused live session",
+                }
+
+        if password is None:
+            from src.kvm_core.doppler_credentials import DopplerAuthError, resolve_comet_password
+
+            try:
+                password = await asyncio.to_thread(resolve_comet_password, require=True)
+            except DopplerAuthError as exc:
+                raise ValueError(str(exc)) from exc
+        if not password:
+            raise ValueError(
+                "No Comet password available. Pass password explicitly or ensure "
+                "Doppler CLI is logged in and GLCOMET_ADMIN_PASSWORD exists in the configured project."
+            )
+
+        connect_kwargs = {
+            "host": resolved_host,
+            "username": resolved_username,
+            "password": password,
+            "target": target,
+        }
+        # Keep lightweight legacy runtime doubles compatible when no forced
+        # replacement is requested; the concrete runtime defaults this flag.
+        if force_reconnect:
+            connect_kwargs["force_reconnect"] = True
+        connect_result = await r.connect(**connect_kwargs)
+        if isinstance(connect_result, tuple):
+            ok, reused = connect_result
+        else:
+            # Permit lightweight legacy runtimes in focused tool tests.
+            ok, reused = bool(connect_result), False
         client = _live_client(r, target) or getattr(r, "client", None)
     return {
         "connected": ok,
         "host": getattr(client, "base_url", resolved_host),
         "target": target,
         "capabilities": getattr(client, "capabilities", {}),
-        "reused": False,
-        "message": "ok",
+        "reused": reused,
+        "message": "reused live session" if reused else "ok",
     }
 
 

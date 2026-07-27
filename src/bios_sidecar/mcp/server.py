@@ -5,6 +5,7 @@ import logging
 import asyncio
 from typing import Optional
 from src.kvm_core.server import mcp
+from src.kvm_core.tools_core import _operation_fence
 from src.bios_sidecar.controller.runtime import StatefulBiosRuntime
 
 LOG = logging.getLogger("bios_sidecar.mcp")
@@ -73,7 +74,8 @@ async def bios_observe_state() -> dict:
     Observe, capture, and fully parse current BIOS. Updates navigation syncer.
     """
     r = get_runtime()
-    state = await r.observe_state()
+    async with _operation_fence(r.kvm):
+        state = await r.observe_state()
     return state.to_dict()
 
 @mcp.tool()
@@ -82,7 +84,8 @@ async def bios_crawl_step() -> dict:
     Execute ONE safe crawling transition step to discover submenus & settings.
     """
     r = get_runtime()
-    state, edge, rec = await r.crawl_step()
+    async with _operation_fence(r.kvm):
+        state, edge, rec = await r.crawl_step()
     return {
         "state": state.to_dict(),
         "created_edge": edge.to_dict() if edge else None,
@@ -96,7 +99,8 @@ async def bios_crawl_region(max_depth: int = 8) -> dict:
     and cycle detection. Explores the current BIOS region exhaustively.
     """
     r = get_runtime()
-    final_state, edges, status = await r.crawl_region(max_depth)
+    async with _operation_fence(r.kvm):
+        final_state, edges, status = await r.crawl_region(max_depth)
     return {
         "status": status,
         "edges_discovered_count": len(edges),
@@ -110,7 +114,8 @@ async def bios_navigate_to(target_node_id: str) -> dict:
     Deterministic path execution. Uses stored graph routes to navigates to an indexed node.
     """
     r = get_runtime()
-    ok, final, msg = await r.navigate_to(target_node_id)
+    async with _operation_fence(r.kvm):
+        ok, final, msg = await r.navigate_to(target_node_id)
     return {
         "success": ok,
         "final_state": final.to_dict() if final else None,
@@ -132,7 +137,8 @@ async def bios_apply_setting_change(capability_id: str, desired_value: str) -> d
     Executes a mutation. Verifies old value, switches value, captures post confirmations.
     """
     r = get_runtime()
-    ok, final, msg = await r.apply_setting_change(capability_id, desired_value)
+    async with _operation_fence(r.kvm):
+        ok, final, msg = await r.apply_setting_change(capability_id, desired_value)
     return {
         "success": ok,
         "state": final.to_dict() if final else None,
@@ -149,7 +155,8 @@ async def bios_save_and_reboot() -> dict:
     Aborts without confirm if neither signal is present.
     """
     r = get_runtime()
-    ok, final, msg = await r.save_and_reboot()
+    async with _operation_fence(r.kvm):
+        ok, final, msg = await r.save_and_reboot()
     return {
         "success": ok,
         "state": final.to_dict() if final else None,
@@ -160,7 +167,8 @@ async def bios_save_and_reboot() -> dict:
 async def bios_abort_and_recover() -> dict:
     """Releases active key holds, Consecutive Escape presses to back-out of modals."""
     r = get_runtime()
-    res = await r.abort_and_recover()
+    async with _operation_fence(r.kvm):
+        res = await r.abort_and_recover()
     return {"status": res}
 
 @mcp.tool()

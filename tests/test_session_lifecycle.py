@@ -305,6 +305,40 @@ def test_unknown_named_target_fails_closed(tmp_path, monkeypatch):
     )
 
 
+def test_implicit_ensure_uses_the_selected_named_target(tmp_path, monkeypatch):
+    """Targetless device tools must honour an explicitly selected named target."""
+    install_fakes(monkeypatch)
+    runtime = fresh_runtime(tmp_path)
+
+    async def scenario():
+        await runtime.connect(host=DEFAULT_HOST, password="x", target="default")
+        await runtime.connect(host="10.1.2.3", password="x", target="lab")
+        runtime.select_target("lab")
+        return await runtime.ensure_connected()
+
+    client = run(scenario())
+
+    assert client is runtime.targets["lab"].client
+    assert client.target_id == "lab"
+    assert runtime.targets["default"].client is not client
+
+
+def test_selected_disconnected_named_target_never_falls_back_to_default(tmp_path, monkeypatch):
+    """A selected named target must fail closed rather than redirecting HID to default."""
+    install_fakes(monkeypatch)
+    runtime = fresh_runtime(tmp_path)
+    runtime.targets["lab"] = TargetRuntime(
+        "lab", ConnectableScriptedClient(host="10.1.2.3", target_id="lab", connected=False)
+    )
+    runtime.selected_target = "lab"
+
+    with pytest.raises(RuntimeError, match="lab"):
+        run(runtime.ensure_connected())
+
+    assert "default" not in runtime.targets
+    assert ConnectableScriptedClient.connect_total == 0
+
+
 # ---------------------------------------------------------------------------
 # disconnect semantics
 # ---------------------------------------------------------------------------
@@ -377,6 +411,78 @@ def test_shutdown_releases_direct_compatibility_client(tmp_path, monkeypatch):
 
     assert direct.release_calls == 1
     assert direct.disconnect_calls == 1
+
+
+# ---------------------------------------------------------------------------
+# explicit connect — atomic idempotence
+# ---------------------------------------------------------------------------
+
+
+def test_connect_reuses_matching_host_and_username(tmp_path, monkeypatch):
+    install_fakes(monkeypatch)
+    runtime = fresh_runtime(tmp_path)
+
+    async def scenario():
+        first = await runtime.connect(
+            host=DEFAULT_HOST, username="operator", password="x", target="lab"
+        )
+        second = await runtime.connect(
+            host=f"https://{DEFAULT_HOST}/", username="operator", password="x", target="lab"
+        )
+        return first, second
+
+    first, second = run(scenario())
+
+    assert first == (True, False)
+    assert second == (True, True)
+    assert ConnectableScriptedClient.connect_total == 1
+
+
+def test_connect_replaces_same_host_when_username_changes(tmp_path, monkeypatch):
+    install_fakes(monkeypatch)
+    runtime = fresh_runtime(tmp_path)
+
+    async def scenario():
+        await runtime.connect(host=DEFAULT_HOST, username="admin", password="x", target="lab")
+        original = runtime.targets["lab"].client
+        result = await runtime.connect(
+            host=DEFAULT_HOST, username="operator", password="x", target="lab"
+        )
+        return original, result, runtime.targets["lab"].client
+
+    original, result, replacement = run(scenario())
+
+    assert result == (True, False)
+    assert replacement is not original
+    assert original.disconnect_calls == 1
+    assert replacement.username == "operator"
+
+
+def test_concurrent_matching_connects_share_one_session(tmp_path, monkeypatch):
+    install_fakes(monkeypatch)
+    runtime = fresh_runtime(tmp_path)
+
+    async def scenario():
+        gate = asyncio.Event()
+        ConnectableScriptedClient.gate = gate
+        first = asyncio.create_task(
+            runtime.connect(host=DEFAULT_HOST, username="admin", password="x", target="lab")
+        )
+        second = asyncio.create_task(
+            runtime.connect(host=DEFAULT_HOST, username="admin", password="x", target="lab")
+        )
+        for _ in range(5):
+            await asyncio.sleep(0)
+        gate.set()
+        return await asyncio.wait_for(asyncio.gather(first, second), timeout=5)
+
+    try:
+        results = run(scenario())
+    finally:
+        ConnectableScriptedClient.gate = None
+
+    assert results == [(True, False), (True, True)]
+    assert ConnectableScriptedClient.connect_total == 1
 
 
 # ---------------------------------------------------------------------------

@@ -100,7 +100,15 @@ class ManagedRuntimeStub:
             "await KVMRuntime.ensure_connected()"
         )
 
-    async def connect(self, host, username="admin", password="", target="default", select=True):
+    async def connect(
+        self,
+        host,
+        username="admin",
+        password="",
+        target="default",
+        select=True,
+        force_reconnect=False,
+    ):
         self.connect_attempts.append(
             {"host": host, "username": username, "password": password, "target": target}
         )
@@ -208,6 +216,25 @@ def test_connect_matching_live_session_returns_reused_true_without_doppler(monke
     assert stub.connect_attempts == [], (
         "a matching live session must not be reconnected"
     )
+
+
+def test_connect_same_host_different_username_replaces_session(monkeypatch):
+    """Host-only matching must not silently retain another user's session."""
+    client = ConnectableScriptedClient(
+        host=DEFAULT_HOST, username="admin", connected=True
+    )
+    stub = ManagedRuntimeStub(client)
+
+    with patch(TOOLS_RUNTIME_PATH, return_value=stub):
+        result = run(
+            kvm_tools.kvm_connect(
+                host=DEFAULT_HOST, username="operator", password="explicit-secret"
+            )
+        )
+
+    assert result["reused"] is False
+    assert len(stub.connect_attempts) == 1
+    assert stub.connect_attempts[0]["username"] == "operator"
 
 
 def test_force_reconnect_replaces_live_session(monkeypatch):

@@ -130,6 +130,10 @@ class StatefulBiosRuntime:
         self.run_id: str = "run_unassigned"
         self.device_id: str = "device_unassigned"
         self.current_state_rec: Optional[BiosState] = None
+        # A BIOS operation must keep using the exact transport it ensured. The
+        # KVM runtime's public ``client`` attribute is a mutable selected-target
+        # alias and may change between capture and HID steps.
+        self._attached_client = None
         self._attached_client_id: Optional[int] = None
 
         self.state = RuntimeState.DISCONNECTED
@@ -137,7 +141,7 @@ class StatefulBiosRuntime:
     # ── Delegated transport (owned by KVM core) ─────────────────────
     @property
     def client(self):
-        return self.kvm.client
+        return self._attached_client if self._attached_client is not None else self.kvm.client
 
     @property
     def capture_mgr(self):
@@ -167,8 +171,9 @@ class StatefulBiosRuntime:
         """Initialize BIOS-sidecar state around an existing KVM core session."""
         # The managed lifecycle owns the transport: connect the default target on
         # demand instead of making the agent call kvm_connect first.
-        await self.kvm.ensure_connected()
-        client_id = id(self.client)
+        client = await self.kvm.ensure_connected()
+        self._attached_client = client
+        client_id = id(client)
         if self._attached_client_id == client_id and self.state not in (
             RuntimeState.UNCONFIGURED,
             RuntimeState.DISCONNECTED,
@@ -177,7 +182,7 @@ class StatefulBiosRuntime:
         if self.state in (RuntimeState.UNCONFIGURED, RuntimeState.DISCONNECTED):
             self._guard_transition("attach_to_kvm")
 
-        host = self.client.host
+        host = client.host
         self.run_id = f"run_{datetime.datetime.now().strftime('%Y_%m_%d_%H%M%S')}"
         self.device_id = f"comet_node_{host.replace('.', '_')}"
 
@@ -203,6 +208,7 @@ class StatefulBiosRuntime:
         """Clear BIOS-sidecar state without disconnecting the KVM core session."""
         self.state = RuntimeState.DISCONNECTED
         self.current_state_rec = None
+        self._attached_client = None
         self._attached_client_id = None
         LOG.info("BIOS runtime detached from KVM. State=DISCONNECTED.")
 
