@@ -7,6 +7,11 @@
 
 Banner for agents: this is how we *might* deploy Comet as an out-of-band control plane beside Proxmox and Tailscale. It encodes operational experience and recommendations, not firmware facts.
 
+The current product framing is in `docs/NORTH_STAR.md`: universal Comet
+operations are the primary path and BIOS work is an optional specialist lane.
+Do not promote the exploratory autonomy or approval ideas below into the MCP's
+current behavior without a decision and implementation change.
+
 ---
 
 ## 1. Control-plane framing
@@ -44,7 +49,7 @@ Three control layers:
 
 1. **Tailnet identity** — who may reach the Comet host/ports  
 2. **GLKVM authentication** — application token / login (`Token` header preferred)  
-3. **BIOS sidecar / orchestrator** — stateful, policy-gated operations  
+3. **BIOS sidecar / orchestrator** — stateful BIOS ops with blocklists and visual verification (not an approval-token / policy-engine gate; see `docs/decisions.md` D11)
 
 Tailscale encrypts transport; it does **not** replace GLKVM auth.
 
@@ -114,7 +119,7 @@ Contract details: [`glkvm-api-surface.md`](glkvm-api-surface.md) MSD + ATX secti
 
 ## 6. External watchdog / screen classification
 
-Firmware OCR plus `/api/streamer/snapshot` + HID enables an **external** watchdog (must not run on the cluster it monitors):
+Host MCP OCR (`kvm_ocr_*` over `/api/streamer/snapshot`) plus HID enables an **external** watchdog (must not run on the cluster it monitors):
 
 1. Detect Proxmox unresponsive.  
 2. Capture Comet screenshot.  
@@ -127,9 +132,13 @@ Deploy on a small management host, independent NAS, router-class appliance, or e
 
 ---
 
-## 7. Agent permission model
+## 7. Research deployment authority model
 
-Preserve the repo architecture: `bios.*` stateful primary interface; `comet.raw.*` / low-level transport for debug; sidecar owns retries, timing, verification, audit. Do not hand raw HID freely to a general-purpose agent without policy.
+For an explicit firmware task, preserve the repo architecture: `bios.*` is the
+stateful interface and low-level transport is for debugging. For ordinary
+console, media, power, recovery, and appliance work, the universal `kvm_*` and
+`comet_*` interfaces remain primary. This section is deployment research, not a
+hidden policy engine or an override of the driver skills.
 
 ### Autonomous (broad recovery authority)
 
@@ -238,7 +247,7 @@ These are open design questions for a later `decisions.md` entry — not decided
 | Today | Future OOB (this vision) |
 |-------|---------------------------|
 | `kvm_core` transport + screenshot/OCR + HID | Same, with correct ATX/MSD/WS contracts (see audit snapshot) |
-| `bios_sidecar` cartography / policy-gated BIOS | Phase 4 agentic recovery consumer |
+| `bios_sidecar` cartography / visually verified BIOS | Phase 4 agentic recovery consumer |
 | Docs: reference API + hardware | Track A facts already separated |
 | NORTH_STAR / architecture / VLM contract | Unchanged by this note — relationship only |
 
@@ -250,4 +259,4 @@ What would need a later **`decisions.md` promotion** before becoming authority:
 - Virtual-media provisioning as a first-class product goal  
 - Watchdog hosting model  
 
-Until then: BIOS sidecar architecture stays in [`docs/architecture.md`](../architecture.md) / [`docs/kvm-core.md`](../kvm-core.md) / skills — summarize relationship here; do not fork a second architecture. VLM / cartography / board adapters stay in NORTH_STAR and related contracts.
+Until then: BIOS sidecar architecture stays in [`docs/architecture.md`](../architecture.md) / [`docs/kvm-core.md`](../kvm-core.md) / skills — summarize relationship here; do not fork a second architecture. VLM / cartography design stays in `docs/architecture.md` and `docs/vlm-prompt-contract.md`; board adapters and MSI procedure stay in the BIOS skill.

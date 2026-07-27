@@ -11,7 +11,6 @@ except ModuleNotFoundError:
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOCKED_LAUNCHER = "uv run --locked --python 3.13 python ./glkvm_mcp.py"
 LAUNCHER_DOCS = [
-    REPO_ROOT / "AGENTS.md",
     REPO_ROOT / "README.md",
     REPO_ROOT / "docs" / "architecture.md",
     REPO_ROOT / "docs" / "decisions.md",

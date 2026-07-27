@@ -26,7 +26,8 @@ experiment.
 
 Change one variable, save only after verifying the staged value, boot the
 intended workload environment, and compare against the recorded baseline before
-planning another change.
+planning another change. Prefer Windows-side HWiNFO checks for thermal,
+voltage, power, throttling, and WHEA before continuing a sweep.
 
 Stop immediately on:
 
