@@ -13,6 +13,9 @@ description: >
 
 # Comet BIOS Triage
 
+This is an optional specialist lane. It does not define ordinary Comet
+operation and should be entered only for an explicit firmware outcome.
+
 Use semantic `bios_*` tools as the firmware control layer. Use the
 `comet-kvm-operations` skill for target selection, generic screenshots, raw
 keyboard or mouse input, power, media, boot observation, and recovery outside

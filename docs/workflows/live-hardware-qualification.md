@@ -1,6 +1,9 @@
 # Disposable-node live qualification runbook
 
-> **Purpose:** Prove the corrected Comet protocol and BIOS sidecar against disposable hardware before trusting ATX, MSD, mutation, or save/reboot on a valuable node.
+> **Purpose:** Qualify a Comet capability on disposable hardware before relying
+> on that capability for a valuable node. Core console/media work and the BIOS
+> specialist lane have separate evidence; BIOS qualification does not block
+> ordinary Comet operation.
 > **Status:** Manual lane — not part of default CI.
 > **Prerequisite:** Comet reachable (LAN or Tailscale), Doppler `GLCOMET_ADMIN_PASSWORD`, ATX board installed for power tests.
 > **Source baseline:** Generated handler inventory in [`docs/reference/glkvm-api/`](../reference/glkvm-api/README.md), pinned to `gl-inet/glkvm@9bd8ad11ba03d220401b0b6a4208bbfd84ed6107`. The live unit may differ; record its discovered version and capabilities.
@@ -58,7 +61,7 @@ succeeded or failed. Update
 only from retained evidence: `handler_present` is not `discovered`, and
 `discovered` is not `exercised` or physically qualified.
 
-## Lane B — Reversible HID / media (disposable target powered on)
+## Core lane — reversible HID / media (disposable target powered on)
 
 1. `kvm_hold_key("F2", 1500)` during POST — confirm hold lasts ~1.5s (watchdog must not cut at 250ms).
 2. Upload a small test file / tiny ISO via `comet_media_upload`.
@@ -69,12 +72,16 @@ only from retained evidence: `handler_present` is not `discovered`, and
 
 **Pass:** long hold enters setup; media mount/unmount cycle completes; no WS stall from unconsumed events (`kvm_status` shows recent `last_pong_at`).
 
-## Lane C — Destructive ATX / BIOS / install (disposable only)
+## Specialist lane — ATX / BIOS / install (disposable only)
+
+Use the board-specific BIOS skill reference only when the requested outcome is
+firmware work. HWiNFO-backed validation belongs to that specialist procedure,
+not to this shared qualification runbook.
 
 1. Document baseline ATX LED state via `comet_power_state`.
 2. Soft path: `comet_atx_click("power")` then observe screenshot transition.
 3. Reset: `comet_atx_power("reset_hard", wait=true)` (alias `reset` allowed).
-4. BIOS: enter setup → `bios_observe_state` → change one non-blocklisted setting → verify live selection/value (not stale graph clone).
+4. Firmware-only: enter setup → `bios_observe_state` → change one non-blocklisted setting → verify live selection/value (not stale graph clone).
 5. `bios_save_and_reboot` — require evidence fields: modal confirm, reboot_observed, final_phase.
 6. Optional rebuild: mount Proxmox automated ISO → boot virtual media → answer.toml install → verify Proxmox API → unmount.
 

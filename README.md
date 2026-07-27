@@ -6,7 +6,7 @@
 | **Forked from** | [`kennypeh85/glkvm-mcp`](https://github.com/kennypeh85/glkvm-mcp) (upstream MCP server) |
 | **Relationship** | Selective fork — occasionally review upstream for bug fixes, but this repo diverges strongly and is its own project |
 
-This repository develops and ships a **Comet KVM MCP server** for physical-machine operation and triage, packaged for Codex as a plugin. The MCP server is the product: keyboard/mouse, screenshots, OCR, power, virtual media, recovery and appliance diagnostics, plus BIOS-aware tools (loaded by default; disable with `COMET_DISABLE_BIOS_SIDECAR=1`). The Codex plugin installs that server with separate general-operations and BIOS driver skills. Not VM orchestration or general-purpose remote desktop.
+This repository develops and ships a **Comet KVM MCP server** for physical-machine operation and recovery, packaged for Codex as a plugin. Its primary path is console/HID, screenshots and OCR, power/WOL where available, virtual media, appliance diagnostics, and private remote access. BIOS-aware tools remain available as a separate specialist lane; they are not a prerequisite for ordinary Comet work. Not VM orchestration or general-purpose remote desktop.
 
 **Primary distribution target: Codex.** The MCP server itself is usable from any MCP client; Codex packaging is first. See [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) for goals.
 
@@ -31,11 +31,11 @@ These live in the repo for development and local agent work. They are **not** Co
 
 | Repo surface | Role |
 |---|---|
-| `AGENTS.md` | Developer-agent guidance when working *in* this repo |
+| `AGENTS.md` | Thin router into `docs/` for developer agents working *in* this repo |
 | `docs/` | Project authority and design docs |
 | `scripts/`, `tests/`, `extras/` | Local tooling, tests, preserved upstream helpers |
 
-`AGENTS.md` is project guidance (Codex loads it from the repo). Skills are workflows. MCP is tools. The plugin packages skills + MCP — not `AGENTS.md`.
+`AGENTS.md` is a thin router into `docs/` (Codex loads it from the repo). Skills are workflows. MCP is tools. The plugin packages skills + MCP — not `AGENTS.md`.
 
 ### Repo layout
 
@@ -51,7 +51,7 @@ comet-kvm-codex-plugin/
 ├── skills/                  # Bundled driver skills (plugin payload)
 │   ├── comet-kvm-operations/
 │   └── comet-bios-triage/
-├── AGENTS.md                # Repo developer guidance (not plugin payload)
+├── AGENTS.md                # Thin router into docs/ (not plugin payload)
 ├── docs/                    # Design / authority docs (not plugin payload)
 ├── scripts/                 # Local tooling (preflight, run ledger)
 ├── extras/                  # Upstream helpers (calibration, click helper, userscript)
@@ -77,22 +77,25 @@ comet-kvm-codex-plugin/
 
 ## Current Scope
 
-This is **one integrated spike** with two layers maturing in parallel: the universal KVM MCP server (transport, OCR, plugin packaging, session/auth) and the BIOS sidecar (cartography, navigation, mutation). The live-hardware proof point on MSI Z690 is **Planned** — code exists but has not yet been validated end-to-end against a real board.
+The **core** is the universal KVM MCP server: transport, session/auth, HID,
+screenshots/OCR, media, appliance control, and plugin packaging. That is the
+normal route for a Comet task.
 
-**First spike — BIOS cartography:** A tool that near-exhaustively crawls the non-blocklisted zones of a target board's BIOS — a Python DFS driver for navigation, a VLM for per-screen structured perception, cycle detection via perceptual hashing, and explicit blocklisting for destructive screens. Maps are persisted as labeled, reusable artifacts.
-
-**Immediate workflow — MSI Z690 tuning:** Drive BIOS changes one setting at a time against stored maps, then validate in Windows via HWiNFO.
+The **firmware specialist lane** is the BIOS sidecar: cartography, navigation,
+mutation, and optional HWiNFO-backed validation for a named machine. It is
+entered only for an explicit firmware request and does not gate the core
+product. Board-specific procedure lives in `skills/comet-bios-triage/`.
 
 See:
-- [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — project goals
+- [`docs/NORTH_STAR.md`](docs/NORTH_STAR.md) — durable goals and anti-goals
+- [`docs/architecture.md`](docs/architecture.md) — system shape, maturity, cartography spike
 - [`docs/kvm-core.md`](docs/kvm-core.md) — KVM MCP server architecture, tool surface, and KVM/BIOS sidecar boundary
-- [`docs/architecture.md`](docs/architecture.md) — repo layout, sidecar shape, and known architecture gaps
 - [`docs/decisions.md`](docs/decisions.md) — implementation decisions
 - [`docs/vlm-prompt-contract.md`](docs/vlm-prompt-contract.md) — VLM prompt draft + justification
 - [`docs/reference/comet-hardware.md`](docs/reference/comet-hardware.md) — verified Comet hardware/platform facts
 - [`docs/reference/comet-api.md`](docs/reference/comet-api.md) — verified Comet API/software surface
 - [`docs/reference/glkvm-api/`](docs/reference/glkvm-api/README.md) — pinned 200-route source corpus and project coverage map
-
+- [`docs/workflows/live-hardware-qualification.md`](docs/workflows/live-hardware-qualification.md) — disposable-node / MSI proof runbook
 ---
 
 ## Installation
@@ -234,7 +237,7 @@ complete tool table live in [`docs/reference/comet-api.md`](docs/reference/comet
 | URI | Description |
 |-----|-------------|
 | `bios://state/current` | Latest normalized BIOS state (JSON) |
-| `bios://screen/current` | Current screenshot bytes (known limitation: see R1c) |
+| `bios://screen/current` | Current screenshot bytes (MCP resource returns raw bytes; prefer `kvm_screenshot` / `kvm_screenshot_to_file` for agent-facing capture) |
 | `bios://graph/current` | Navigation graph summary (nodes + edges) |
 | `bios://capabilities/current` | Discovered settings capability index |
 

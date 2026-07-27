@@ -21,6 +21,10 @@ Use `bios_crawl_step` for a single inspectable cartography transition. Use
 `bios_crawl_region(max_depth=...)` only for a bounded region and review its
 block or failure result before continuing.
 
+Do not crawl firmware-flash, secure-erase, RAID, boot-order, or password
+screens. Keep each map tied to the observed board and firmware revision; do not
+assume it applies to a similar board.
+
 Use `bios_navigate_to(target_node_id=...)` only when the requested destination
 exists in the stored graph. After navigation, call `bios_observe_state` and
 confirm the expected screen and selected control before proposing a change.
