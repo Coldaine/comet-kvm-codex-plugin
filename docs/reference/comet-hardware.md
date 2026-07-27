@@ -2,7 +2,7 @@
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
 > **Status:** Verified from public datasheets, GL.iNet docs, and GitHub issues.
-> **Compiled:** 2026-07-07 · **Revised:** 2026-07-15 (RM1 vs Pro facts)
+> **Compiled:** 2026-07-07 · **Revised:** 2026-07-27 (deployed GL-RM10 and live media state)
 > **Purpose:** Hardware facts for map storage, packaging, and model differences. No network-ops or Tailscale topology advice (see [`docs/research/oob-proxmox-tailscale-vision.md`](../research/oob-proxmox-tailscale-vision.md) if needed).
 
 ## Device Family
@@ -15,7 +15,7 @@ GL.iNet sells three Comet KVM variants, all running a PiKVM-fork Linux firmware 
 | Comet PoE | GL-RM1PE | Quad-core ARM Cortex-A7 | 1GB DDR3 | 32GB eMMC | Gigabit Ethernet (PoE) | Power-over-Ethernet, larger storage |
 | Comet Pro | GL-RM10 | Quad-core ARM Cortex-A53 | 1GB DDR3L | 32GB eMMC | Wi-Fi 6 + Ethernet | Touchscreen, Wi-Fi, 4K@30fps capture class |
 
-**This project’s documented LAN target is the base Comet (GL-RM1)** at `192.168.0.126` unless otherwise noted. The same `/api` surface applies across the family; optional hardware (ATX board, Fingerbot, Wi-Fi, touchscreen) and storage size differ by SKU. Prefer `GET /api/system/capability` and `/api/upgrade/version` to learn the connected unit.
+**This project’s deployed LAN target is the Comet Pro (GL-RM10)** at `192.168.0.126`. The same `/api` surface applies across the family; optional hardware (ATX board, Fingerbot, Wi-Fi, touchscreen) and storage size differ by SKU. Prefer `GET /api/system/capability` and `/api/upgrade/version` to learn the connected unit.
 
 ### RM1 vs RM10 (facts only)
 
@@ -23,7 +23,7 @@ GL.iNet sells three Comet KVM variants, all running a PiKVM-fork Linux firmware 
 |------|----------------|---------------------|
 | SoC class | Cortex-A7 | Cortex-A53 |
 | eMMC | 8GB | 32GB |
-| Usable media storage (order of magnitude) | ~5–6GB free on `/userdata/media` in a documented root `df` (see below) | Reviewers commonly report roughly mid-20s GB usable for ISOs after system overhead — confirm with `df` / `GET /api/msd` on the unit |
+| Usable media storage (order of magnitude) | ~5–6GB free on `/userdata/media` in a documented root `df` (see below) | Live `GET /api/msd`, 2026-07-27: writable `GLKVM` media partition, 28,797,599,744 bytes total and 28,797,403,136 bytes free |
 | Wireless | Ethernet primary (no Wi-Fi 6 SKU claim on base) | Wi-Fi 6 + Ethernet |
 | Local UI | No built-in touchscreen | Touchscreen (setup, status, lock) |
 | HDMI capture class | 1080p-class product positioning | Product materials cite 4K@30fps-class capture |
@@ -69,9 +69,9 @@ Product package and overview materials list Ethernet, HDMI cables, USB-A↔C and
 > - Product pages / GL.iNet KVM docs for access modes
 > - CVE-2026-32291 (CVE.report): `cve.report/CVE-2026-32291` — firmware version context for UART issue (fixed in 1.8.2)
 
-## On-Device Storage Layout (Verified)
+## Base-model On-Device Storage Layout (Historical Evidence)
 
-This is the critical section for the map-store design decision. A real root shell session on the Comet (GL-RM1, 8GB) was documented in a GitHub issue, confirming the filesystem layout:
+This is historical evidence from a base Comet (GL-RM1, 8GB), not a shell read from the deployed GL-RM10. A real root shell session on that base model was documented in a GitHub issue, confirming the filesystem layout:
 
 ```
 [root@glkvm:/]# df

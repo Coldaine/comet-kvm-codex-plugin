@@ -14,9 +14,9 @@ BIOS cartography is a specialized subset of the `comet-bios-triage` skill, not a
 
 ## D4 — Map store runtime location: on-Comet preferred, pending verification
 
-BIOS maps should persist on the Comet device itself, co-located with the hardware they describe. The Comet (GL-RM1) has 8GB eMMC with ~5.3GB free at `/userdata/media`, confirmed via root shell evidence in gl-inet/glkvm#14. A BIOS map is ~30-40MB, so the device has two orders of magnitude more storage than needed.
+BIOS maps should persist on the Comet device itself, co-located with the hardware they describe. The deployed Comet Pro (GL-RM10) reports a writable `GLKVM` media partition through `GET /api/msd`: 28,797,599,744 bytes total and 28,797,403,136 bytes free (live read, 2026-07-27). A BIOS map is ~30-40MB, so the appliance has far more space than a single board map requires. The older base-model GL-RM1 root-shell evidence remains useful family context, not the deployed-unit capacity record.
 
-**Probe result (2026-07-07):** The Comet at `192.168.0.126` is reachable via HTTP (200 OK, PiKVM-fork nginx) and SSH (port 22 open, accepts publickey+password auth). However, SSH credentials are needed to verify `/userdata/media` writability and free space on this specific device. The device is architecturally suitable but storage writability is **unverified without credentials**.
+**Probe result (2026-07-27):** The Comet Pro at `192.168.0.126` is reachable through its authenticated API. `GET /api/msd` reports the internal media storage as writable with the capacity above. This verifies the device-reported virtual-media store, not a map write/read cycle or a particular map-storage path; those remain live-qualification work.
 
 **Fallback:** If on-Comet storage proves impractical, maps persist in the host-side plugin data directory. The VLM interpretation layer always runs on the host (the Comet has no GPU) regardless of where maps are stored.
 
