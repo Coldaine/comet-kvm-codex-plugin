@@ -87,6 +87,73 @@ class ScriptedCometClient:
         return {"released": []}
 
 
+class ConnectableScriptedClient(ScriptedCometClient):
+    """Scripted Comet with a real connect/disconnect lifecycle.
+
+    Stands in for ``CometClient`` when specifying ``KVMRuntime.ensure_connected``:
+    the constructor mirrors ``CometClient.__init__`` so it can be dropped in via
+    ``monkeypatch.setattr(src.kvm_core.runtime, "CometClient", ...)``.
+    """
+
+    # Class-level counters make "exactly one connect" assertions trivial across
+    # instances that ensure_connected builds internally.
+    connect_total = 0
+    instances: list["ConnectableScriptedClient"] = []
+    gate: Optional[asyncio.Event] = None
+
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        username: str = "admin",
+        password: str = "",
+        verify_ssl: bool = False,
+        target_id: str = "default",
+        *,
+        screenshot: Optional[bytes] = None,
+        connected: bool = False,
+        connect_gate: Optional[asyncio.Event] = None,
+    ) -> None:
+        super().__init__(host=host, screenshot=screenshot, connected=connected)
+        self.username = username
+        self.password = password
+        self.verify_ssl = verify_ssl
+        self.target_id = target_id
+        self.connect_gate = connect_gate
+        self.connect_calls = 0
+        self.disconnect_calls = 0
+        # Surface enough of the CometClient attribute surface for kvm_status.
+        self.capabilities: dict[str, Any] = {}
+        self.held: dict[str, Any] = {}
+        self.server_state: dict[str, Any] = {}
+        self.last_server_event_at: Optional[float] = None
+        self.last_pong_at: Optional[float] = None
+        ConnectableScriptedClient.instances.append(self)
+
+    async def connect(self) -> bool:
+        self.connect_calls += 1
+        ConnectableScriptedClient.connect_total += 1
+        gate = self.connect_gate or ConnectableScriptedClient.gate
+        if gate is not None:
+            await gate.wait()
+        self._connected = True
+        self.capabilities = {
+            "target_id": self.target_id,
+            "host": self.base_url,
+            "features": {},
+        }
+        return True
+
+    async def disconnect(self) -> None:
+        self.disconnect_calls += 1
+        self._connected = False
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.connect_total = 0
+        cls.instances = []
+        cls.gate = None
+
+
 def make_bios_state(
     *,
     state_id: str = "state_test",

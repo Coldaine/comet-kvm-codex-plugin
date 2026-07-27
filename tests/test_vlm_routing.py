@@ -148,6 +148,64 @@ def test_mock_vlm_on_live_comet_fails_closed(monkeypatch):
         run(client.close())
 
 
+def test_mock_vlm_tolerates_cold_runtime_without_autoconnect(monkeypatch):
+    """Managed lifecycle: the mock guard must not force a connect just to look."""
+
+    class ColdKVM:
+        client = None
+
+        def __init__(self) -> None:
+            self.ensure_calls = 0
+
+        async def ensure_connected(self, target=None):
+            self.ensure_calls += 1
+            raise AssertionError(
+                "the VLM live-refusal guard must never trigger a connection"
+            )
+
+    kvm = ColdKVM()
+
+    import src.kvm_core.runtime
+    monkeypatch.setattr(src.kvm_core.runtime, "get_kvm_runtime", lambda: kvm)
+
+    client = VLMClient(provider="mock")
+    try:
+        result = run(client.parse_screenshot(b"image"))
+        assert result["screen_title"]
+        assert kvm.ensure_calls == 0
+    finally:
+        run(client.close())
+
+
+def test_vlm_guard_reads_only_client_attribute(monkeypatch):
+    """The guard may read `kvm.client` and nothing else off the runtime."""
+
+    class FakeClient:
+        host = "127.0.0.1"
+        base_url = "https://127.0.0.1"
+
+        def is_connected(self):
+            return True
+
+    class OnlyClientKVM:
+        client = FakeClient()
+
+        def __getattr__(self, name):
+            raise AssertionError(
+                f"the VLM guard must read only kvm.client; it touched {name!r}"
+            )
+
+    import src.kvm_core.runtime
+    monkeypatch.setattr(src.kvm_core.runtime, "get_kvm_runtime", lambda: OnlyClientKVM())
+
+    client = VLMClient(provider="mock")
+    try:
+        result = run(client.parse_screenshot(b"image"))
+        assert result["screen_title"]
+    finally:
+        run(client.close())
+
+
 def test_vlm_provider_failure_returns_unparseable_state():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="Internal Server Error")
