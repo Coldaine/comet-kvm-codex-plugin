@@ -124,18 +124,26 @@ class SmokeTest(unittest.TestCase):
         schema = connect.inputSchema
         required = set(schema.get("required", []))
         self.assertEqual(
-            required, {"host"},
-            msg=f"kvm_connect should require only a host, got {required}",
+            required, set(),
+            msg=f"kvm_connect is an optional override and must require nothing, got {required}",
         )
-        password_schema = schema.get("properties", {}).get("password", {})
+        properties = schema.get("properties", {})
+        password_schema = properties.get("password", {})
         self.assertIsNone(
             password_schema.get("default"),
             msg="kvm_connect should expose no non-null password default in its schema",
         )
-        username_default = schema.get("properties", {}).get("username", {}).get("default")
-        self.assertEqual(
-            username_default, "admin",
-            msg=f"kvm_connect username should default to 'admin', got {username_default!r}",
+        username_default = properties.get("username", {}).get("default")
+        self.assertIsNone(
+            username_default,
+            msg=(
+                "kvm_connect username must default to null so the resolved default "
+                f"username is used, got {username_default!r}"
+            ),
+        )
+        self.assertIn(
+            "force_reconnect", properties,
+            msg="kvm_connect must expose force_reconnect to replace a live session",
         )
 
     def test_kvm_connect_explicit_empty_password_is_rejected(self):
@@ -152,15 +160,36 @@ class SmokeTest(unittest.TestCase):
             base_url = "https://192.0.2.1"
             capabilities = {"features": {}}
 
+            def is_connected(self):
+                return True
+
+        class FakeTarget:
+            def __init__(self, client):
+                self.client = client
+
         class FakeRuntime:
-            client = FakeClient()
+            """Cold managed runtime: no live session until connect() runs."""
+
+            def __init__(self):
+                self.client = None
+                self.targets = {}
+                self.selected_target = "default"
+                self.received = None
 
             async def connect(self, host, username, password, target="default", select=True):
                 self.received = (host, username, password, target)
+                self.client = FakeClient()
+                self.targets[target] = FakeTarget(self.client)
                 return True
+
+            async def ensure_connected(self, target=None):
+                return self.client
 
             def get_client(self, target=None):
                 return self.client
+
+            def is_connected(self, target=None):
+                return self.client is not None
 
         runtime = FakeRuntime()
         with patch.object(doppler_credentials, "resolve_comet_password", return_value="doppler-secret"):
