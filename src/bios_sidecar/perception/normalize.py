@@ -95,10 +95,14 @@ def normalize_bios_state(
     menu_path = vlm_data.get("menu_path") or []
     top_module = menu_path[0] if menu_path else (adapter.identify_module(title) if adapter else "SETTINGS")
     # v2: the VLM classifies the screen directly; the title heuristic is the fallback.
+    # The heuristic is computed unconditionally so risk can union both (below):
+    # VLM input only ever restricts, so it must never be able to hide a
+    # destructive screen the title alone would have flagged.
+    heuristic_kind = parse_state_kind(title)
     try:
         screen_kind = StateKind(vlm_data.get("screen_kind") or "")
     except ValueError:
-        screen_kind = parse_state_kind(title)
+        screen_kind = heuristic_kind
 
     location = LocationMetadata(
         screen_kind=screen_kind,
@@ -185,7 +189,10 @@ def normalize_bios_state(
                 blocklist_keywords.append(ctrl.label)
 
     hazards = []
-    if screen_kind in (StateKind.FLASH_UTILITY, StateKind.SECURE_ERASE, StateKind.PASSWORD_PROMPT):
+    # Union, not substitution: a wrong-but-valid VLM screen_kind (e.g. "setting_list"
+    # on a screen titled "Secure Erase") must not suppress the title heuristic's hazard.
+    destructive_kinds = (StateKind.FLASH_UTILITY, StateKind.SECURE_ERASE, StateKind.PASSWORD_PROMPT)
+    if screen_kind in destructive_kinds or heuristic_kind in destructive_kinds:
         hazards.append("destructive_screen")
         blocklist_flag = True
 

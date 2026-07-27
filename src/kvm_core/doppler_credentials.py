@@ -200,6 +200,10 @@ def resolve_vlm_api_key(*, require: bool = False) -> Optional[str]:
     first); this is the Doppler fallback, so require defaults to False and a
     missing secret simply yields None.
 
+    With require=False this never raises: a missing/unauthenticated Doppler CLI
+    is indistinguishable from a missing secret for an optional fallback, so both
+    yield None. With require=True the DopplerAuthError propagates.
+
     The resolved value is cached in-process, so repeated perception calls never
     re-probe the CLI.
     """
@@ -208,14 +212,26 @@ def resolve_vlm_api_key(*, require: bool = False) -> Optional[str]:
         return _vlm_key_cache
 
     project, config = doppler_project_config()
-    assert_doppler_authenticated(project, config)
+    try:
+        assert_doppler_authenticated(project, config)
 
-    for name in _VLM_KEY_SECRET_NAMES:
-        value = _doppler_get_plain(name, project, config)
-        if value:
-            LOG.debug("Resolved VLM API key from Doppler secret %s (%s/%s)", name, project, config)
-            _vlm_key_cache = value
-            return value
+        for name in _VLM_KEY_SECRET_NAMES:
+            value = _doppler_get_plain(name, project, config)
+            if value:
+                LOG.debug(
+                    "Resolved VLM API key from Doppler secret %s (%s/%s)", name, project, config
+                )
+                _vlm_key_cache = value
+                return value
+    except DopplerAuthError:
+        if require:
+            raise
+        LOG.debug(
+            "Doppler CLI unavailable/unauthenticated for %s/%s; no VLM API key resolved",
+            project,
+            config,
+        )
+        return None
     if require:
         raise DopplerAuthError(
             f"Doppler project {project}/{config} has no OPENROUTER_API_KEY "

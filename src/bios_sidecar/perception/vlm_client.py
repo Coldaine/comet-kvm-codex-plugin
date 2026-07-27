@@ -29,6 +29,51 @@ _PROVIDER_DEFAULTS = {
 # Providers whose endpoints accept OpenAI strict structured outputs.
 _JSON_SCHEMA_PROVIDERS = frozenset({"openrouter", "openai"})
 
+# OpenAI strict structured outputs impose two rules Pydantic's schema does not
+# satisfy on its own: every object must set additionalProperties=false, and every
+# declared property must be listed in `required` (optionality is expressed by a
+# nullable type, which the v2 model already does). Violating either is a hard 400.
+_SCHEMA_MAP_KEYS = ("$defs", "definitions", "properties", "patternProperties")
+_SCHEMA_LIST_KEYS = ("anyOf", "oneOf", "allOf", "prefixItems")
+_SCHEMA_NODE_KEYS = ("items", "contains", "not", "if", "then", "else")
+
+
+def _strictify_json_schema(node: Any) -> Any:
+    """Recursively rewrite a JSON schema for OpenAI strict mode (mutates in place)."""
+    if isinstance(node, list):
+        return [_strictify_json_schema(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    for key in _SCHEMA_MAP_KEYS:
+        child = node.get(key)
+        if isinstance(child, dict):
+            for name, sub in child.items():
+                child[name] = _strictify_json_schema(sub)
+    for key in _SCHEMA_LIST_KEYS:
+        child = node.get(key)
+        if isinstance(child, list):
+            node[key] = _strictify_json_schema(child)
+    for key in _SCHEMA_NODE_KEYS:
+        child = node.get(key)
+        if isinstance(child, dict):
+            node[key] = _strictify_json_schema(child)
+    properties = node.get("properties")
+    if isinstance(properties, dict):
+        node["additionalProperties"] = False
+        node["required"] = list(properties)
+    return node
+
+
+_strict_parse_schema_cache: Optional[dict[str, Any]] = None
+
+
+def strict_bios_screen_parse_schema() -> dict[str, Any]:
+    """The BiosScreenParse JSON schema, strict-mode compliant. Computed once."""
+    global _strict_parse_schema_cache
+    if _strict_parse_schema_cache is None:
+        _strict_parse_schema_cache = _strictify_json_schema(BiosScreenParse.model_json_schema())
+    return _strict_parse_schema_cache
+
 
 class VLMClient:
     """Small OpenAI-compatible vision client.
@@ -64,8 +109,15 @@ class VLMClient:
             raise ValueError(f"Unsupported provider: {self.provider}")
         if self._requires_key() and not self.api_key:
             from src.kvm_core import doppler_credentials
+            from src.kvm_core.doppler_credentials import DopplerAuthError
 
-            self.api_key = doppler_credentials.resolve_vlm_api_key(require=False)
+            # Defense in depth: the optional Doppler fallback must never turn a
+            # missing-key configuration error into a Doppler auth error.
+            try:
+                self.api_key = doppler_credentials.resolve_vlm_api_key(require=False)
+            except DopplerAuthError:
+                LOG.debug("Doppler VLM key fallback unavailable; continuing without a key")
+                self.api_key = None
         if self._requires_key() and not self.api_key:
             raise RuntimeError(
                 f"VLM_API_KEY is required for provider: {self.provider} "
@@ -176,14 +228,12 @@ class VLMClient:
 
     def _response_format(self) -> dict[str, Any]:
         if self.provider in _JSON_SCHEMA_PROVIDERS:
-            from src.bios_sidecar.perception.models import BiosScreenParse
-
             return {
                 "type": "json_schema",
                 "json_schema": {
                     "name": "bios_screen_parse",
                     "strict": True,
-                    "schema": BiosScreenParse.model_json_schema(),
+                    "schema": strict_bios_screen_parse_schema(),
                 },
             }
         return dict(VLM_DEFAULT_PARAMS["response_format"])

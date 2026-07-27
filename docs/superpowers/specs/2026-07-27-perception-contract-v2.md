@@ -43,6 +43,10 @@ is unioned with it, never substituted for it.
 
 - `screen_kind`: use the VLM value when it is a valid `StateKind`; otherwise
   fall back to `parse_state_kind(title)`.
+- Destructive-screen hazard: computed from the *union* of the chosen
+  `screen_kind` and the title heuristic `parse_state_kind(title)`, so a
+  wrong-but-valid VLM kind can never suppress a `flash_utility` /
+  `secure_erase` / `password_prompt` hazard the title alone would have raised.
 - Selection: an entry is selected when its `selected` flag is true OR its index
   equals `cursor_at` (v1 compatibility).
 - Risk union: `risk.dangerous` sets `blocklist_flag`, appends `vlm_semantic`

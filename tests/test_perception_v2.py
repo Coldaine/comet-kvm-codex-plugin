@@ -227,6 +227,31 @@ def test_normalize_semantic_risk_cannot_unblock():
     assert state.risk.blocklist_flag is True
 
 
+def test_normalize_destructive_hazard_unions_vlm_kind_and_title_heuristic():
+    # A wrong-but-valid VLM screen_kind must not relax the title heuristic's
+    # destructive-screen hazard: risk is the union of both classifications.
+    data = _v2_parse_dict()
+    data["screen_title"] = "Secure Erase"
+    data["screen_kind"] = "setting_list"
+    data["risk"] = {"dangerous": False, "reason": None, "keywords_seen": []}
+    state = _normalize(data)
+    assert state.location.screen_kind == StateKind.SETTING_LIST  # VLM value kept
+    assert state.risk.blocklist_flag is True
+    assert "destructive_screen" in state.risk.hazards
+    assert "Enter" in state.actions.blocked
+    assert state.actions.safe == ["Escape"]
+
+
+def test_normalize_destructive_vlm_kind_still_flags_benign_title():
+    # The union works the other way too: VLM may restrict beyond the heuristic.
+    data = _v2_parse_dict()
+    data["screen_title"] = "Advanced"
+    data["screen_kind"] = "flash_utility"
+    state = _normalize(data)
+    assert "destructive_screen" in state.risk.hazards
+    assert state.risk.blocklist_flag is True
+
+
 # --- normalize: confidence and screen-level extras -------------------------
 
 
@@ -399,5 +424,69 @@ def test_vlm_key_doppler_cache_and_clear(monkeypatch):
     assert dc.resolve_vlm_api_key(require=True) == "sk-or-cached"
     assert reads["n"] == first  # cached — no second CLI probe
     dc._clear_vlm_key_cache()
+
+
+def test_optional_vlm_key_returns_none_when_doppler_unavailable(monkeypatch):
+    """require=False must never raise — CI has no Doppler CLI at all."""
+    from src.kvm_core import doppler_credentials as dc
+    from src.kvm_core.doppler_credentials import DopplerAuthError
+
+    dc._clear_vlm_key_cache()
+
+    def no_cli(*args, **kwargs):
+        raise DopplerAuthError("Doppler CLI not found on PATH.")
+
+    monkeypatch.setattr(dc, "assert_doppler_authenticated", no_cli)
+    monkeypatch.setattr(
+        dc,
+        "_doppler_get_plain",
+        lambda *a, **k: pytest.fail("must not read secrets after a failed auth probe"),
+    )
+
+    assert dc.resolve_vlm_api_key(require=False) is None
+
+    # require=True keeps failing loudly.
+    with pytest.raises(DopplerAuthError):
+        dc.resolve_vlm_api_key(require=True)
+
+    dc._clear_vlm_key_cache()
+
+
+def test_strict_json_schema_is_openai_strict_compliant():
+    """OpenAI strict mode: every object needs additionalProperties=false and a
+    complete `required` list, or the request is a guaranteed 400."""
+    from src.bios_sidecar.perception.vlm_client import strict_bios_screen_parse_schema
+
+    client = VLMClient(provider="openrouter", api_key="k", model="m")
+    response_format = client._response_format()
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+    schema = response_format["json_schema"]["schema"]
+
+    objects_checked = 0
+
+    def walk(node):
+        nonlocal objects_checked
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, dict):
+            return
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            objects_checked += 1
+            assert node.get("additionalProperties") is False, node
+            assert sorted(node.get("required") or []) == sorted(properties), node
+        for value in node.values():
+            walk(value)
+
+    walk(schema)
+    # root BiosScreenParse + BiosEntry/HotkeyBinding/ModalParse/ScrollInfo/RiskParse
+    assert objects_checked >= 6
+
+    # Computed once and reused.
+    assert strict_bios_screen_parse_schema() is schema
+    assert client._response_format()["json_schema"]["schema"] is schema
 
 

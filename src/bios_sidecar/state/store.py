@@ -25,111 +25,113 @@ class SQLiteStore:
 
     def _create_tables(self):
         with self._lock:
-         cursor = self.conn.cursor()
+            cursor = self.conn.cursor()
 
-        # 1. Runs table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS runs (
-                run_id TEXT PRIMARY KEY,
-                device_id TEXT,
-                started_at TEXT,
-                status TEXT
-            )
-        """)
+            # 1. Runs table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS runs (
+                    run_id TEXT PRIMARY KEY,
+                    device_id TEXT,
+                    started_at TEXT,
+                    status TEXT
+                )
+            """)
 
-        # 2. States table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS states (
-                state_id TEXT PRIMARY KEY,
-                run_id TEXT,
-                device_id TEXT,
-                screen_title TEXT,
-                menu_path TEXT,
-                screen_kind TEXT,
-                selection_label TEXT,
-                selection_val TEXT,
-                controls TEXT,
-                blocklist_flag INTEGER,
-                blocklist_keywords TEXT,
-                actions TEXT,
-                frame_screenshot_id TEXT,
-                frame_sha256 TEXT,
-                frame_phash TEXT,
-                frame_resolution TEXT,
-                frame_captured_at TEXT,
-                confidence TEXT,
-                extras TEXT
-            )
-        """)
+            # 2. States table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS states (
+                    state_id TEXT PRIMARY KEY,
+                    run_id TEXT,
+                    device_id TEXT,
+                    screen_title TEXT,
+                    menu_path TEXT,
+                    screen_kind TEXT,
+                    selection_label TEXT,
+                    selection_val TEXT,
+                    controls TEXT,
+                    blocklist_flag INTEGER,
+                    blocklist_keywords TEXT,
+                    actions TEXT,
+                    frame_screenshot_id TEXT,
+                    frame_sha256 TEXT,
+                    frame_phash TEXT,
+                    frame_resolution TEXT,
+                    frame_captured_at TEXT,
+                    confidence TEXT,
+                    extras TEXT
+                )
+            """)
 
-        # Perception Contract v2 screen-level extras (layout/help_text/hotkeys/
-        # scroll/modal) live in a single JSON column. Map databases created
-        # before v2 predate the column, so add it idempotently.
-        state_columns = {r["name"] for r in cursor.execute("PRAGMA table_info(states)").fetchall()}
-        if "extras" not in state_columns:
-            cursor.execute("ALTER TABLE states ADD COLUMN extras TEXT")
+            # Perception Contract v2 screen-level extras (layout/help_text/hotkeys/
+            # scroll/modal) live in a single JSON column. Map databases created
+            # before v2 predate the column, so add it idempotently.
+            state_columns = {
+                r["name"] for r in cursor.execute("PRAGMA table_info(states)").fetchall()
+            }
+            if "extras" not in state_columns:
+                cursor.execute("ALTER TABLE states ADD COLUMN extras TEXT")
 
-        # 3. Nodes table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS nodes (
-                node_id TEXT PRIMARY KEY,
-                visual_hash TEXT,
-                ocr_hash TEXT,
-                semantic_hash TEXT,
-                volatile_regions TEXT,
-                representative_state_id TEXT
-            )
-        """)
+            # 3. Nodes table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS nodes (
+                    node_id TEXT PRIMARY KEY,
+                    visual_hash TEXT,
+                    ocr_hash TEXT,
+                    semantic_hash TEXT,
+                    volatile_regions TEXT,
+                    representative_state_id TEXT
+                )
+            """)
 
-        # 4. Edges table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS edges (
-                edge_id TEXT PRIMARY KEY,
-                from_node TEXT,
-                action_type TEXT,
-                action_key TEXT,
-                policy_decision TEXT,
-                policy_profile TEXT,
-                to_node TEXT,
-                transition_type TEXT,
-                before_screenshot TEXT,
-                after_screenshot TEXT,
-                before_state TEXT,
-                after_state TEXT
-            )
-        """)
+            # 4. Edges table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS edges (
+                    edge_id TEXT PRIMARY KEY,
+                    from_node TEXT,
+                    action_type TEXT,
+                    action_key TEXT,
+                    policy_decision TEXT,
+                    policy_profile TEXT,
+                    to_node TEXT,
+                    transition_type TEXT,
+                    before_screenshot TEXT,
+                    after_screenshot TEXT,
+                    before_state TEXT,
+                    after_state TEXT
+                )
+            """)
 
-        # 5. Capabilities table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS capabilities (
-                capability_id TEXT PRIMARY KEY,
-                canonical_name TEXT,
-                aliases TEXT,
-                vendor TEXT,
-                board_family TEXT,
-                paths TEXT,
-                risk TEXT,
-                mutation_policy TEXT,
-                validation TEXT
-            )
-        """)
+            # 5. Capabilities table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS capabilities (
+                    capability_id TEXT PRIMARY KEY,
+                    canonical_name TEXT,
+                    aliases TEXT,
+                    vendor TEXT,
+                    board_family TEXT,
+                    paths TEXT,
+                    risk TEXT,
+                    mutation_policy TEXT,
+                    validation TEXT
+                )
+            """)
 
-        # 6. Trace events table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS trace_events (
-                event_id TEXT PRIMARY KEY,
-                run_id TEXT,
-                timestamp TEXT,
-                event_type TEXT,
-                state_before TEXT,
-                requested_action TEXT,
-                policy_decision TEXT,
-                state_after TEXT,
-                artifacts TEXT
-            )
-        """)
+            # 6. Trace events table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS trace_events (
+                    event_id TEXT PRIMARY KEY,
+                    run_id TEXT,
+                    timestamp TEXT,
+                    event_type TEXT,
+                    state_before TEXT,
+                    requested_action TEXT,
+                    policy_decision TEXT,
+                    state_after TEXT,
+                    artifacts TEXT
+                )
+            """)
 
-        self.conn.commit()
+            self.conn.commit()
 
     def close(self):
         with self._lock:
@@ -148,33 +150,33 @@ class SQLiteStore:
     # --- BiosState persistence ---
     def save_bios_state(self, state: BiosState):
         with self._lock:
-         cursor = self.conn.cursor()
-         d = state.to_dict()
-         extras = json.dumps({
-            "layout": d["layout"],
-            "help_text": d["help_text"],
-            "hotkeys": d["hotkeys"],
-            "scroll": d["scroll"],
-            "modal": d["modal"],
-         })
-         cursor.execute("""
-            INSERT OR REPLACE INTO states (
-                state_id, run_id, device_id, screen_title, menu_path, screen_kind,
-                selection_label, selection_val, controls, blocklist_flag, blocklist_keywords,
-                actions, frame_screenshot_id, frame_sha256, frame_phash, frame_resolution,
-                frame_captured_at, confidence, extras
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            d["state_id"], d["run_id"], d["device_id"], d["location"]["screen_title"],
-            json.dumps(d["location"]["breadcrumb"]), d["location"]["screen_kind"],
-            d["selection"]["label"], d["selection"]["value"], json.dumps(d["controls"]),
-            1 if d["risk"]["blocklist_flag"] else 0, json.dumps(d["risk"]["blocklist_keywords"]),
-            json.dumps(d["actions"]), d["frame"]["screenshot_id"], d["frame"]["sha256"],
-            d["frame"]["perceptual_hash"], json.dumps(d["frame"]["resolution"]),
-            d["frame"]["captured_at"], json.dumps(d["confidence"]), extras
-        ))
-        self.conn.commit()
-        self._state_cache[state.state_id] = state
+            cursor = self.conn.cursor()
+            d = state.to_dict()
+            extras = json.dumps({
+                "layout": d["layout"],
+                "help_text": d["help_text"],
+                "hotkeys": d["hotkeys"],
+                "scroll": d["scroll"],
+                "modal": d["modal"],
+            })
+            cursor.execute("""
+                INSERT OR REPLACE INTO states (
+                    state_id, run_id, device_id, screen_title, menu_path, screen_kind,
+                    selection_label, selection_val, controls, blocklist_flag, blocklist_keywords,
+                    actions, frame_screenshot_id, frame_sha256, frame_phash, frame_resolution,
+                    frame_captured_at, confidence, extras
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                d["state_id"], d["run_id"], d["device_id"], d["location"]["screen_title"],
+                json.dumps(d["location"]["breadcrumb"]), d["location"]["screen_kind"],
+                d["selection"]["label"], d["selection"]["value"], json.dumps(d["controls"]),
+                1 if d["risk"]["blocklist_flag"] else 0, json.dumps(d["risk"]["blocklist_keywords"]),
+                json.dumps(d["actions"]), d["frame"]["screenshot_id"], d["frame"]["sha256"],
+                d["frame"]["perceptual_hash"], json.dumps(d["frame"]["resolution"]),
+                d["frame"]["captured_at"], json.dumps(d["confidence"]), extras
+            ))
+            self.conn.commit()
+            self._state_cache[state.state_id] = state
 
     def get_bios_state(self, state_id: str) -> Optional[BiosState]:
         """Load a previously saved BiosState by id (used to reuse graph-matched representatives)."""
