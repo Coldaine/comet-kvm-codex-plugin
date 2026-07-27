@@ -5,7 +5,7 @@
 > It moves between machines; it is not an N5 component or a permanently assigned
 > host accessory.
 >
-> **Live snapshot:** 2026-07-27. No credential, LAN address, tailnet name, or
+> **Live snapshot:** 2026-07-27. No credentials, LAN address, tailnet name, or
 > captured console content is recorded here.
 
 ## What is deployed now
