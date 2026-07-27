@@ -46,9 +46,10 @@ Or manually via MCP / curl:
 7. `comet_recorder_state`
 8. `comet_tailscale_status`
 9. `comet_metrics`
-10. `kvm_disconnect` — optional and non-sticky; the next device operation on
-    this target reconnects automatically. Call it to free the session/streamer
-    when the lab node is idle.
+10. `kvm_disconnect(target="pve-lab")` — optional cleanup that frees this
+    named session/streamer when the lab node is idle. Named targets are not
+    auto-managed: reconnect explicitly with `kvm_connect(..., target="pve-lab")`
+    before using the lab target again.
 
 The inherited `/api/streamer/ocr` state is discovery evidence only. GL.iNet's
 product Text Recognition runs browser-side Tesseract.js, while `kvm_ocr_*` uses

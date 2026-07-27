@@ -56,7 +56,7 @@ AI agent
 glkvm_mcp.py (composition entry point)
   ├── src/kvm_core
   │     ├── FastMCP server + universal tools
-  │     ├── KVMRuntime (one physical session)
+  │     ├── KVMRuntime (one physical session per target)
   │     ├── CometClient (HTTPS + WebSocket)
   │     ├── CaptureManager
   │     └── OCRManager (Pillow + pytesseract)
@@ -109,7 +109,7 @@ work belong under `.claude/skills/comet-bios-triage/`.
 ## Architectural Invariants
 
 - The KVM core never depends on BIOS semantics; this prevents universal transport from becoming firmware-specific.
-- One MCP process owns one physical Comet session; this prevents conflicting HID state and duplicate watchdog/pinger loops.
+- One MCP process owns its physical Comet sessions, one per connected target; this prevents conflicting HID state and duplicate watchdog/pinger loops within each target session.
 - Commands, OCR text, credentials, screenshots, and live traces are not written to diagnostic logs; this limits accidental sensitive-data retention.
 - MCP tool results are the primary agent data path; logs, progress events, and resources cannot silently replace explicit output.
 - Exact SSH, if added, verifies host keys and uses credentials distinct from the Comet admin password; this prevents KVM appliance trust from becoming target-host trust.

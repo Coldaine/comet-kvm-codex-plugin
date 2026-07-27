@@ -15,12 +15,12 @@ async def comet_media_upload(local_path: str, image_name: str = "", target: str 
 
     Legacy callers may pass image_name empty to use the local basename.
     """
+    path = Path(local_path)
+    if not path.is_file():
+        err = FileNotFoundError(local_path)
+        raise ValueError(f"Failed to read local file {local_path}: {err}") from err
     async with _operation_fence():
         client = await _managed_client(target)
-        path = Path(local_path)
-        if not path.is_file():
-            err = FileNotFoundError(local_path)
-            raise ValueError(f"Failed to read local file {local_path}: {err}") from err
         try:
             return await client.msd_upload_file(local_path, image_name or None)
         except FileNotFoundError as e:

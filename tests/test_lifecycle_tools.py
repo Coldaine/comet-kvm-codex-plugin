@@ -170,6 +170,21 @@ def test_kvm_connect_schema_requires_no_arguments():
     )
 
 
+def test_media_upload_rejects_missing_local_path_before_managed_connect(tmp_path):
+    """A local input error must not wake the default Comet session."""
+    missing_path = tmp_path / "missing.iso"
+    stub = ManagedRuntimeStub(
+        connected=False,
+        ensure_error=AssertionError("missing local media must not connect to Comet"),
+    )
+
+    with patch(TOOLS_RUNTIME_PATH, return_value=stub):
+        with pytest.raises(ValueError, match="Failed to read local file"):
+            run(kvm_tools.comet_media_upload(str(missing_path), "missing.iso"))
+
+    assert stub.ensure_calls == []
+
+
 def test_connect_matching_live_session_returns_reused_true_without_doppler(monkeypatch):
     client = ConnectableScriptedClient(host=DEFAULT_HOST, connected=True)
     stub = ManagedRuntimeStub(client)

@@ -33,8 +33,9 @@ When multiple sessions exist:
   which machine the user means before acting.
 
 Selected-target tools such as screenshots, OCR, HID input, and `bios_*` do not
-take a target in the current schema. Select once, then call them with only
-their documented arguments.
+take a target in the current schema. Select once before using tools that do
+not expose `target`; call target-aware tools with `target=...` when you need
+to override the current selection.
 
 Named targets are not auto-managed the way the default is: a cold named
 target fails closed. Connect it explicitly with
@@ -48,10 +49,11 @@ the cached profile is missing.
 ## Disconnect semantics
 
 `kvm_disconnect` closes the session now and releases the device streamer. It
-is non-sticky: the next device operation on that target reconnects
-automatically. Use it when you are done observing a target or need to free
-the appliance for another session — not as end-of-task ceremony. Preserve
-other sessions unless the user asked to close them.
+is non-sticky for the default target: the next device operation reconnects
+that target automatically. A named target must be connected explicitly again
+with `kvm_connect(host=..., target=...)`. Use it when you are done observing a
+target or need to free the appliance for another session — not as end-of-task
+ceremony. Preserve other sessions unless the user asked to close them.
 
 ## Recovery
 
