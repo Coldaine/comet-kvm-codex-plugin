@@ -44,6 +44,13 @@ Handler presence must not be promoted to physical capability or live
 qualification. The connected unit remains authoritative for its model,
 firmware, wiring, and enabled subsystems.
 
+For the 2026-07-27 GL-RM10 read, `read_only` means an authenticated GET
+returned successfully; it does not prove a physical effect. `mixed_read_only`
+records both successful and failed reads of the snapshot endpoint, and
+`http_500` records that metrics was called but the appliance returned HTTP 500.
+Their corresponding qualification states remain deliberately weaker than
+physical qualification.
+
 ## OCR surfaces
 
 Keep these three surfaces distinct:
