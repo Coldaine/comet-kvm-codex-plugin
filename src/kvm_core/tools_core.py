@@ -312,10 +312,22 @@ async def kvm_ocr_screenshot(search_text: str = "", preview: bool = False, psm: 
 
     Use psm=6 for a full-screen terminal or other single text block.
     """
+    _require_tesseract()
     client = await _managed_client()
     r = get_kvm_runtime()
     img_bytes = await client.get_screenshot(preview=preview)
     return await asyncio.to_thread(r.ocr_mgr.run_ocr, img_bytes, search_text, psm)
+
+
+def _require_tesseract() -> None:
+    """OCR tools check host Tesseract before connecting or capturing."""
+    status = get_kvm_runtime().ocr_mgr.get_status()
+    if not status.get("available"):
+        raise RuntimeError(
+            "Tesseract OCR is not available on the MCP host; no connection or "
+            "capture was attempted. Install Tesseract or set TESSERACT_PATH "
+            "(see kvm_ocr_status)."
+        )
 
 
 def _ocr_crop(left: int, top: int, right: int, bottom: int) -> tuple[int, int, int, int] | None:
@@ -360,10 +372,11 @@ async def kvm_ocr_text(
     not a device API. This MCP path captures the frame directly. Crop coordinates
     are pixels; leave all four at -1 for the full frame.
     """
-    client = await _managed_client()
-    r = get_kvm_runtime()
+    _require_tesseract()
     crop = _ocr_crop(left, top, right, bottom)
     validate_psm(psm)
+    client = await _managed_client()
+    r = get_kvm_runtime()
     image_bytes = await client.get_screenshot(preview=False)
     host = await asyncio.to_thread(r.ocr_mgr.run_text_ocr, image_bytes, psm, languages, crop)
     if "error" in host:
@@ -378,6 +391,7 @@ async def kvm_ocr_text(
 @mcp.tool(name="kvm_ocr_click", annotations={"readOnlyHint": False, "destructiveHint": True})
 async def kvm_ocr_click(text: str, button: str = "left", count: int = 1, search_area: str = "") -> dict:
     """Find text coordinates on screen and mouse click."""
+    _require_tesseract()
     client = await _managed_client()
     r = get_kvm_runtime()
     img_bytes = await client.get_screenshot(preview=False)

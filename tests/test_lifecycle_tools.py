@@ -363,6 +363,20 @@ def test_mutation_not_replayed_after_midcall_failure():
     )
 
 
+def test_ocr_tools_precheck_tesseract_before_connect(tmp_path, monkeypatch):
+    """OCR tools must fail on missing Tesseract without dialling the appliance."""
+    runtime = KVMRuntime(screenshot_cache=str(tmp_path / "shots"))
+    monkeypatch.setattr(runtime.ocr_mgr, "get_status", lambda: {"available": False})
+
+    with installed_kvm_runtime(runtime):
+        with patch(TOOLS_RUNTIME_PATH, return_value=runtime):
+            with pytest.raises(RuntimeError, match="Tesseract"):
+                run(kvm_tools.kvm_ocr_text())
+
+    assert runtime.targets == {}, "missing Tesseract must not trigger a connect"
+    assert ConnectableScriptedClient.connect_total == 0
+
+
 def test_atx_disabled_power_state_carries_warning():
     """A live finding: ATX ``enabled: false`` reports ``power: "off"`` on a
     running host. ``comet_power_state`` must flag that the field is not
