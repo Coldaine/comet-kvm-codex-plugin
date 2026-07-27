@@ -1,7 +1,8 @@
 # Comet KVM Hardware & Platform Reference
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
-> **Status:** Verified from public datasheets, GL.iNet docs, and GitHub issues.
+> **Status:** Verified from public datasheets, GL.iNet docs, and GitHub issues;
+> the deployed GL-RM10 media state also comes from an authenticated runtime probe.
 > **Compiled:** 2026-07-07 · **Revised:** 2026-07-27 (deployed GL-RM10 and live media state)
 > **Purpose:** Hardware facts for map storage, packaging, and model differences. No network-ops or Tailscale topology advice (see [`docs/research/oob-proxmox-tailscale-vision.md`](../research/oob-proxmox-tailscale-vision.md) if needed).
 

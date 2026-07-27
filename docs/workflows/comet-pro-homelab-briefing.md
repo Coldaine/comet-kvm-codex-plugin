@@ -87,7 +87,7 @@ an outage—not a process requirement.
 ## Things to revisit later
 
 - Two-factor login and a different TLS trust model could be worthwhile, but the
-  current MCP login is password based. Add support for the appliance's two-step
+  current MCP login is password-based. Add support for the appliance's two-step
   flow and chosen certificate model first.
 - Wi-Fi is useful for relocation; test its route in the failure scenario where
   you expect it to help.
