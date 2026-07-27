@@ -2,7 +2,7 @@
 
 > **Repo:** `Coldaine/comet-kvm-codex-plugin` (fork of `kennypeh85/glkvm-mcp`)
 > **Status:** Project-facing summary of upstream contracts this MCP cares about, plus what tools this repo exposes. Curated upstream detail: [`docs/research/glkvm-api-surface.md`](../research/glkvm-api-surface.md). Complete pinned corpus: [`docs/reference/glkvm-api/`](glkvm-api/README.md).
-> **Compiled:** 2026-07-07 · **Revised:** 2026-07-16 (auth/discovery/ATX/MSD/OCR/verification)
+> **Compiled:** 2026-07-07 · **Revised:** 2026-07-27 (auth/discovery/ATX/MSD/OCR/verification)
 > **Purpose:** Auth, discovery, important request shapes, live-probe status, and MCP tool tables. Not ops advice (see [`docs/research/oob-proxmox-tailscale-vision.md`](../research/oob-proxmox-tailscale-vision.md)). Not a client-bug tracker (see [`docs/research/glkvm-client-audit-2026-07-15.md`](../research/glkvm-client-audit-2026-07-15.md)).
 
 ## Architecture Overview
@@ -48,7 +48,7 @@ Form body: user=admin&passwd=<password>&expire=0
 
 > **Source:** pinned [`auth.py`](https://github.com/gl-inet/glkvm/blob/9bd8ad11ba03d220401b0b6a4208bbfd84ed6107/kvmd/apps/kvmd/api/auth.py); `src/kvm_core/comet/client.py` (`CometClient.connect` / `disconnect`). Confidence: **High**.
 
-**Agent traps (observed):** Prefer this MCP or `curl -k` over driving the web UI — Chrome's self-signed-cert interstitial is not automation-attachable (`Cannot attach to this target`; `screenshot`/`read_page` fail with `Frame … showing error page`; `thisisunsafe` needs a focused page and cannot run when attach fails). Guessed login paths (`/api/login`, `/api/auth`, `/api/session`, `/api/user/login`, `/api/v1/login`, `/rpc`, `/cgi-bin/api`, `/api/system`) return **404**; the real route is `POST /api/auth/login` above. Pre-auth, `/api/hid`, `/api/streamer`, and `/api/info` return **401** (they exist). For video, open `WSS /api/ws?stream=true` before snapshots — `stream=false` leaves `streamer` null and snapshot returns 503 (this MCP client uses `stream=true`).
+**Agent traps (observed):** Prefer this MCP or `curl -k` over driving the web UI — Chrome's self-signed-cert interstitial is not automation-attachable (`Cannot attach to this target`; `screenshot`/`read_page` fail with `Frame … showing error page`; `thisisunsafe` needs a focused page and cannot run when attach fails). Guessed login paths (`/api/login`, `/api/auth`, `/api/session`, `/api/user/login`, `/api/v1/login`, `/rpc`, `/cgi-bin/api`, `/api/system`) return **404**; the real route is `POST /api/auth/login` above. Pre-auth, `/api/hid`, `/api/streamer`, and `/api/info` return **401** (they exist). For video, open `WSS /api/ws?stream=true` before snapshots — `stream=false` leaves `streamer` null and can produce snapshot HTTP 503. `stream=true` is necessary in the observed mode, not a guarantee: the RM10 later returned HTTP 503 after earlier successful JPEG reads on 2026-07-27.
 
 ### Discovery
 
@@ -67,7 +67,7 @@ MCP today exposes `GET /api/info` via `comet_sysinfo` / `comet_capabilities`. Co
 
 ### Keyboard/Mouse WebSocket: `WSS /api/ws`
 
-- Typical query: `stream=true` (keeps the HDMI streamer process alive so HTTP `/api/streamer/snapshot` works; binary frames are drained on the socket). `stream=false` is HID-only and leaves `result.streamer` null → snapshot HTTP 503 on Comet/RM10.
+- Typical query: `stream=true` (requests a live HDMI streamer; binary frames are drained on the socket). `stream=false` is HID-only and leaves `result.streamer` null → snapshot HTTP 503 on Comet/RM10. A `stream=true` session is not itself a successful-frame guarantee; later RM10 snapshot reads also returned HTTP 503.
 - Auth: cookie / `Token` header; query `auth_token` also accepted by firmware (prefer header/cookie — this client uses header/cookie)
 - Keyboard events: keydown, keyup (with `finish=true` flag)
 - Mouse events: button press/release, absolute move (int16 coordinates), wheel scroll
@@ -91,7 +91,9 @@ Snapshot JPEGs are used by `kvm_screenshot`, `kvm_screenshot_to_file`, and
 the host-backed `kvm_ocr_*` tools. **Streamer lifecycle (RM10):** kvmd only keeps
 `result.streamer` non-null while at least one WebSocket client is connected with
 `stream=true`. With `stream=false`, snapshot returns HTTP 503 even when HDMI
-in/out LEDs show a live signal. This client connects with `stream=true`.
+in/out LEDs show a live signal. This client connects with `stream=true`, but a
+later 2026-07-27 read still received HTTP 503 after earlier successful JPEGs;
+do not treat the connection mode as a full capture qualification.
 
 The PiKVM fork still contains server-side OCR parameters, but GL.iNet firmware
 1.9's product UI Text Recognition code crops its canvas and runs bundled
@@ -155,7 +157,9 @@ WOL, Redfish (narrow power facade), recorder, Prometheus export, Tailscale confi
 
 ## Verification status
 
-What this project has actually exercised against the LAN Comet (`192.168.0.126`). Destructive ATX actions and MSD uploads were **not** invoked in read-only probes.
+What this project has actually exercised against the deployed GL-RM10. The
+2026-07-27 evidence was authenticated and read-only. Destructive ATX actions
+and MSD uploads were **not** invoked.
 
 The durable per-endpoint record is
 [`project-endpoint-coverage.csv`](glkvm-api/project-endpoint-coverage.csv). It
@@ -165,16 +169,18 @@ those fields should be inferred from another.
 
 | Surface | Live tested? | When / notes |
 |---------|--------------|--------------|
-| `POST /api/auth/login` | Yes | Authenticated sessions 2026-07-07 / 2026-07-10 |
-| `GET /api/info` | Yes | HTTP 200 authenticated 2026-07-10 |
-| `GET /api/streamer/snapshot` | Yes | JPEG after `stream=true` connect; HTTP 503 if streamer null (2026-07-16) |
+| `POST /api/auth/login` | Yes, read-only | Authenticated session succeeded 2026-07-27 |
+| `GET /api/info`, `/api/upgrade/version`, `/api/system/capability` | Yes, read-only | Successful capability discovery and metadata reads 2026-07-27 |
+| `GET /api/hid`, `/api/atx`, `/api/msd`, `/api/streamer` | Yes, read-only | Successful subsystem reads 2026-07-27; HID was not sent and ATX/media were not changed |
+| `GET /api/streamer/snapshot` | Mixed | Successful JPEGs in the live smoke; a later read returned HTTP 503 on 2026-07-27 |
 | `GET /api/streamer/ocr` | Yes | HTTP 200; `enabled: false` on unit (legacy server OCR; MCP uses host Tesseract) |
 | Snapshot OCR (`ocr=true`) | N/A for MCP | Product Text Recognition is browser Tesseract.js; MCP does not use legacy OCR snapshot |
-| WebSocket HID + stream | Yes | MCP uses `?stream=true`; pong/receiver healthy; binary frames drained |
-| `GET /api/atx` | Existence only | Not action-tested |
+| WebSocket HID + stream | Yes, read-only | MCP uses `?stream=true`; pong/receiver healthy on 2026-07-27; no physical HID effect was tested |
+| `GET /api/recorder`, `/api/tailscale/status`, `/api/wol/list` | Yes, read-only | Recorder idle, Tailscale running, and saved WOL list empty on 2026-07-27; no recorder, tailnet, or WOL mutation was sent |
+| `GET /api/export/prometheus/metrics` | Failed read | Returned HTTP 500 on the initial and repeat 2026-07-27 calls |
 | `POST /api/atx/power` / `click` | **Not live-tested** | No destructive power tests in smoke |
 | `POST /api/msd/write` + mount lifecycle | **Not live-tested** | Upload not invoked in 2026-07-10 verification |
-| WOL / Redfish / Tailscale / recorder / metrics | **Not live-tested** | Documented from source inventory only |
+| WOL wake, Redfish power, recorder start/stop, Tailscale configuration | **Not live-tested** | Source-derived operations; no mutation was sent |
 | Offline CI | Yes | stdio MCP list-tools smoke, executable loopback HTTP/WebSocket contracts, and real Tesseract OCR (see CI) |
 
 Manual live smoke: `.github/workflows/live-smoke.yml` (Doppler + self-hosted
