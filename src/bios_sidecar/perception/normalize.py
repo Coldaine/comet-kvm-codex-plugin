@@ -178,34 +178,59 @@ def normalize_bios_state(
     )
 
     # 6. Risk Status
-    blocklist_flag = vlm_data.get("blocklist_flag", False)
-    blocklist_keywords = vlm_data.get("blocklist_keywords") or []
+    # Scoped blocking: dangerous keywords visible in ambient chrome (e.g. the
+    # persistent M-FLASH sidebar tile on every Click BIOS 5 screen) must not
+    # block the whole screen, or the crawler can never descend anywhere. The
+    # screen is blocked only when the danger is where we ARE (destructive
+    # screen kind, or a keyword in the title/breadcrumb/modal) or what we
+    # would ACTUATE next (the focused control). Dangerous controls elsewhere
+    # on screen keep their per-control BLOCKED risk, which gates Enter on
+    # them individually.
+    blocklist_keywords = list(vlm_data.get("blocklist_keywords") or [])
 
-    # Analyze screen elements for implicit blocklist
+    selected_blocked = False
     for ctrl in controls:
         if ctrl.risk == RiskClass.BLOCKED:
-            blocklist_flag = True
             if ctrl.label not in blocklist_keywords:
                 blocklist_keywords.append(ctrl.label)
+            if ctrl.selected:
+                selected_blocked = True
 
     hazards = []
     # Union, not substitution: a wrong-but-valid VLM screen_kind (e.g. "setting_list"
     # on a screen titled "Secure Erase") must not suppress the title heuristic's hazard.
     destructive_kinds = (StateKind.FLASH_UTILITY, StateKind.SECURE_ERASE, StateKind.PASSWORD_PROMPT)
-    if screen_kind in destructive_kinds or heuristic_kind in destructive_kinds:
+    screen_destructive = screen_kind in destructive_kinds or heuristic_kind in destructive_kinds
+    if screen_destructive:
         hazards.append("destructive_screen")
-        blocklist_flag = True
 
-    # v2 semantic risk only ever restricts: it can raise the flag, never clear it.
+    # VLM semantic risk still only ever restricts, but its keywords must name
+    # where we are or what is focused — not ambient text elsewhere in the frame.
     risk_reason = None
+    vlm_scoped_hit = False
     vlm_risk = vlm_data.get("risk") or {}
+    vlm_modal_raw = vlm_data.get("modal") or {}
     if vlm_risk.get("dangerous"):
-        blocklist_flag = True
         hazards.append("vlm_semantic")
         risk_reason = vlm_risk.get("reason")
+        scope_text = " ".join(
+            str(part)
+            for part in (
+                title,
+                *menu_path,
+                selection_label,
+                vlm_modal_raw.get("title"),
+                vlm_modal_raw.get("message"),
+            )
+            if part
+        ).lower()
         for kw in vlm_risk.get("keywords_seen") or []:
             if kw not in blocklist_keywords:
                 blocklist_keywords.append(kw)
+            if kw.lower() in scope_text:
+                vlm_scoped_hit = True
+
+    blocklist_flag = screen_destructive or selected_blocked or vlm_scoped_hit
 
     risk = RiskStatus(
         blocklist_flag=blocklist_flag,
@@ -233,9 +258,14 @@ def normalize_bios_state(
     approval_required = ["F10"]
     blocked_actions = ["F6"] # defaults is unsafe in crawl
 
-    if blocklist_flag or modal.present:
+    if screen_destructive or vlm_scoped_hit or modal.present:
         # Emergency exit; a modal's Enter can confirm a save dialog.
         safe = ["Escape"]
+        context_gated = []
+        approval_required = []
+        blocked_actions = ["Enter", "F10", "F6"]
+    elif selected_blocked:
+        # Sitting ON a dangerous tile: allow moving off it, never into it.
         context_gated = []
         approval_required = []
         blocked_actions = ["Enter", "F10", "F6"]
