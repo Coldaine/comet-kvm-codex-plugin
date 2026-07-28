@@ -30,7 +30,7 @@
 | M2_4 Gen Mode | [Auto] |
 | M2_5 Gen Mode | [Auto] |
 | PCI_E1 Gen Mode | [Auto] |
-| PCI_E1 Gen Mode | [Auto] |
+| PCI_E2 Gen Mode | [Auto] |
 | CPU PCIe Lanes Configuration | [Auto] |
 | PCI Latency Timer | [32 PCI Bus Clocks] |
 | Above 4G memory/Crypto Currency mining | [Enabled] |
@@ -178,7 +178,7 @@
 | System Mode | User |
 | Secure Boot | [Disabled] |
 | Secure Boot Mode | [Standard] |
-| Secure Boot Preset | [Hardware/OS Comp...] |
+| Secure Boot Preset | [Hardware/OS Compatibility] |
 
 ### Sub-menu
 
@@ -186,15 +186,19 @@
 
 ---
 
-## Boot Priority (Visual Overview)
+## Boot Priority bar (Settings\Boot header)
 
-The Boot Priority bar shows the following order:
-1. Hard Disk (Storage device)
-2. Optical Drive (CD/DVD)
-3. USB Device
-4. USB Device
-5. USB Device
-6. USB Device
+Same order as **FIXED BOOT ORDER Priorities** above (icons in the Settings\Boot header bar, from IMG_5882):
+
+1. UEFI Network
+2. UEFI Hard Disk
+3. UEFI CD/DVD
+4. UEFI USB Hard Disk
+5. UEFI USB CD/DVD
+6. UEFI USB Key
+7. UEFI USB Floppy
+
+Other corpus photos may show a shorter icon strip when Network is not emphasized; treat the Settings\Boot fixed-priority table as authoritative.
 
 ---
 
