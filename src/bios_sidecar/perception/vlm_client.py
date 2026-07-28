@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
 import os
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any, Optional
 
 import httpx
@@ -19,15 +23,35 @@ LOG = logging.getLogger("bios_sidecar.perception.vlm")
 _KEY_REQUIRED_PROVIDERS = frozenset({"openrouter", "openai"})
 # openrouter/free is OpenRouter's Free Models Router: $0, auto-picks a free
 # model, and image content in the request filters it to vision-capable ones.
+# Live-measured 2026-07-28: the router's model pick is a lottery — good picks
+# parse in ~3s, bad picks (both free gemma-4 variants) take 100s+ and emit
+# schema-violating output that burns all three validation retries.
+#
+# "codex" is not an HTTP endpoint: it shells out to the local Codex CLI
+# (`codex exec`) as a tiny scripted sub-agent, so parses ride the user's
+# ChatGPT subscription (default model/effort come from ~/.codex/config.toml,
+# e.g. gpt-5.6-sol on the fast service tier). No API key involved.
+#
+# "aperture" is the user's Tailscale Aperture AI gateway: OpenAI-format
+# chat-completions, authenticated by tailnet identity — also no API key.
+# Vision-capable models are addressed as "<provider>/<model>" gateway FQNs.
 _PROVIDER_DEFAULTS = {
     "openai": ("https://api.openai.com/v1", "gpt-4o"),
     "openrouter": ("https://openrouter.ai/api/v1", "openrouter/free"),
     "ollama": ("http://localhost:11434/v1", "llama3.2-vision"),
     "vllm": ("http://localhost:8000/v1", "qwen2.5-vl"),
+    "codex": ("", ""),
+    "aperture": (
+        "http://aperture-gateway.tyrannosaurus-magellanic.ts.net/v1",
+        "gemini-oai/gemini-3.5-flash",
+    ),
     "mock": ("", "mock"),
 }
 # Providers whose endpoints accept OpenAI strict structured outputs.
-_JSON_SCHEMA_PROVIDERS = frozenset({"openrouter", "openai"})
+# (aperture fronts OpenAI-compatible upstreams; the downgrade ladder in
+# _call_api handles any model that rejects json_schema.)
+_JSON_SCHEMA_PROVIDERS = frozenset({"openrouter", "openai", "aperture"})
+_CODEX_TIMEOUT_SECONDS = 300.0
 
 # OpenAI strict structured outputs impose two rules Pydantic's schema does not
 # satisfy on its own: every object must set additionalProperties=false, and every
@@ -103,7 +127,7 @@ class VLMClient:
         if not self.provider:
             raise RuntimeError(
                 "VLM_PROVIDER is required for BIOS perception; configure "
-                "openai, openrouter, ollama, or vllm"
+                "codex, aperture, openai, openrouter, ollama, or vllm"
             )
         if self.provider not in _PROVIDER_DEFAULTS:
             raise ValueError(f"Unsupported provider: {self.provider}")
@@ -132,6 +156,10 @@ class VLMClient:
 
     def _resolved_model(self) -> str:
         model = self.model or self._default_model()
+        if self.provider == "codex":
+            # Empty is valid: `codex exec` then inherits the model and
+            # reasoning effort from the user's ~/.codex/config.toml.
+            return model or ""
         if not model:
             raise ValueError(f"VLM_MODEL is required for provider: {self.provider}")
         # Strip a LiteLLM-style provider prefix ("ollama/llama3.2-vision" ->
@@ -180,7 +208,7 @@ class VLMClient:
                     raise RuntimeError(
                         "VLM_PROVIDER=mock with a live Comet connection — refusing to run "
                         "bios_* tools on fabricated VLM output. Set VLM_PROVIDER to a real provider "
-                        "(openrouter/ollama/vllm/openai) or disconnect before using mock mode."
+                        "(codex/aperture/openrouter/ollama/vllm/openai) or disconnect before using mock mode."
                     )
             return self._parse_mock(image_bytes)
 
@@ -241,6 +269,8 @@ class VLMClient:
     async def _call_api(self, system_prompt: str, user_prompt: str, image_b64: str) -> dict[str, Any]:
         if self.provider not in _PROVIDER_DEFAULTS:
             raise ValueError(f"Unsupported provider: {self.provider}")
+        if self.provider == "codex":
+            return await self._call_codex(system_prompt, user_prompt, image_b64)
 
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -276,6 +306,79 @@ class VLMClient:
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         return self._extract_json(content)
+
+    async def _call_codex(self, system_prompt: str, user_prompt: str, image_b64: str) -> dict[str, Any]:
+        """Run the local Codex CLI as a scripted sub-agent for one parse.
+
+        The screenshot and the strict parse schema go in as files;
+        `--output-schema` makes the CLI enforce the schema on the final
+        message, which lands in the `-o` output file. Auth is the user's
+        ChatGPT login — no API key ever touches this process.
+        """
+        codex = shutil.which("codex")
+        if not codex:
+            raise RuntimeError(
+                "VLM_PROVIDER=codex requires the Codex CLI on PATH "
+                "(and a completed `codex login`)"
+            )
+        workdir = Path(tempfile.mkdtemp(prefix="bios_vlm_codex_"))
+        try:
+            image_path = workdir / "screen.jpg"
+            image_path.write_bytes(base64.b64decode(image_b64))
+            schema_path = workdir / "schema.json"
+            schema_path.write_text(json.dumps(strict_bios_screen_parse_schema()), encoding="utf-8")
+            out_path = workdir / "parse.json"
+
+            cmd = [
+                codex, "exec",
+                "--ephemeral",
+                "--skip-git-repo-check",
+                "-s", "read-only",
+                "-C", str(workdir),
+                "--output-schema", str(schema_path),
+                "-o", str(out_path),
+                "-i", str(image_path),
+            ]
+            model = self._resolved_model()
+            if model:
+                cmd += ["-m", model]
+            # The prompt goes via stdin: `-i` is variadic, so a trailing
+            # positional would be swallowed as another image path.
+            prompt = f"{system_prompt}\n\n{user_prompt}"
+
+            stdout, stderr, returncode = await self._run_codex(cmd, prompt)
+            if returncode != 0:
+                tail = (stderr or stdout or "")[-400:]
+                raise RuntimeError(f"codex exec failed (rc={returncode}): {tail}")
+            if not out_path.exists():
+                raise RuntimeError("codex exec produced no output file")
+            return self._extract_json(out_path.read_text(encoding="utf-8"))
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+    @staticmethod
+    async def _run_codex(cmd: list[str], stdin_text: str) -> tuple[str, str, int]:
+        """Execute the Codex CLI; isolated for test monkeypatching."""
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout_b, stderr_b = await asyncio.wait_for(
+                proc.communicate(input=stdin_text.encode("utf-8")),
+                timeout=_CODEX_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise RuntimeError(f"codex exec timed out after {_CODEX_TIMEOUT_SECONDS:.0f}s")
+        return (
+            stdout_b.decode("utf-8", errors="replace"),
+            stderr_b.decode("utf-8", errors="replace"),
+            proc.returncode or 0,
+        )
 
     @staticmethod
     def _extract_json(content: str) -> dict[str, Any]:

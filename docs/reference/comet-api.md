@@ -373,9 +373,9 @@ Device tools auto-connect the default target on demand, so most sessions never c
 | `COMET_HOST` | no | no | `192.168.0.126` | LAN IP of the Comet (live tests / scripts) |
 | `COMET_USERNAME` | no | no | `admin` | Comet login username |
 | `COMET_DISABLE_BIOS_SIDECAR` | no | no | unset | Set to `1` to skip loading `bios_sidecar` |
-| `VLM_API_KEY` | **yes** | for VLM | — | OpenAI-compatible API key; falls back to Doppler secret `OPENROUTER_API_KEY` when unset |
-| `VLM_PROVIDER` | no | **yes for BIOS perception** | — | `openrouter` \| `ollama` \| `vllm` \| `openai`; missing/unsupported values fail closed |
-| `VLM_MODEL` | no | no | provider default; openrouter → `openrouter/free` (Free Models Router) | Model string for the OpenAI-compatible endpoint |
+| `VLM_API_KEY` | **yes** | for `openrouter`/`openai` only | — | OpenAI-compatible API key; falls back to Doppler secret `OPENROUTER_API_KEY` when unset. `codex` and `aperture` need no key |
+| `VLM_PROVIDER` | no | **yes for BIOS perception** | — | `codex` \| `aperture` \| `openrouter` \| `ollama` \| `vllm` \| `openai`; missing/unsupported values fail closed. `codex` shells out to the local Codex CLI (`codex exec`, ChatGPT-subscription auth); `aperture` targets the tailnet Aperture gateway (tailnet-identity auth) |
+| `VLM_MODEL` | no | no | provider default; codex → inherit `~/.codex/config.toml`; aperture → `gemini-oai/gemini-3.5-flash`; openrouter → `openrouter/free` (Free Models Router) | Model string for the OpenAI-compatible endpoint (or `codex exec -m`) |
 | `VLM_BASE_URL` | no | no | provider default | Override API endpoint |
 
 Doppler secret name: **`GLCOMET_ADMIN_PASSWORD`** (legacy alias `COMET_PASSWORD` only if you add it later).

@@ -11,8 +11,7 @@
         "./glkvm_mcp.py"
       ],
       "env": {
-        "VLM_PROVIDER": "openrouter",
-        "VLM_MODEL": "openrouter/free"
+        "VLM_PROVIDER": "codex"
       }
     }
   }

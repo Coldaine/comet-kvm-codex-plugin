@@ -172,8 +172,8 @@ This ensures a single unparseable screen doesn't block the entire crawl. Gaps ar
 
 ## Open Questions (Not Yet Resolved)
 
-1. **Which VLM?** **Resolved.** Provider routing lives in [`src/bios_sidecar/perception/vlm_client.py`](../src/bios_sidecar/perception/vlm_client.py) (`openrouter` / `ollama` / `vllm` / `openai`). Configure via `VLM_PROVIDER`, `VLM_MODEL`, `VLM_BASE_URL`, and `VLM_API_KEY` — see the env var table in [`docs/reference/comet-api.md`](reference/comet-api.md#environment-variables). Missing credentials or unsupported providers fail closed; no fabricated parse is returned.
-   **v2 update (2026-07-27):** `.mcp.json` now pins the `openrouter` provider's
+1. **Which VLM?** **Resolved.** Provider routing lives in [`src/bios_sidecar/perception/vlm_client.py`](../src/bios_sidecar/perception/vlm_client.py) (`codex` / `aperture` / `openrouter` / `ollama` / `vllm` / `openai`). Configure via `VLM_PROVIDER`, `VLM_MODEL`, `VLM_BASE_URL`, and `VLM_API_KEY` — see the env var table in [`docs/reference/comet-api.md`](reference/comet-api.md#environment-variables). Missing credentials or unsupported providers fail closed; no fabricated parse is returned.
+   **v2 update (2026-07-27):** `.mcp.json` pinned the `openrouter` provider's
    default model to `openrouter/free` — OpenRouter's Free Models Router, $0,
    which auto-selects a vision-capable free model whenever the request
    contains an image (~20 requests/minute, ~200/day free-tier limits). A real
@@ -182,6 +182,18 @@ This ensures a single unparseable screen doesn't block the entire crawl. Gaps ar
    Doppler CLI secret `OPENROUTER_API_KEY` (project/config from
    `doppler.yaml`), cached in-process for the life of the run the same way the
    Comet admin password is.
+   **v3 update (2026-07-28):** live testing showed the Free Models Router is a
+   latency/quality lottery (good picks parse in ~3 s; both free `gemma-4`
+   variants take 100 s+ and emit schema-violating output that burns all three
+   validation retries). `.mcp.json` now defaults to `VLM_PROVIDER=codex`: the
+   client shells out to the local Codex CLI as a tiny scripted sub-agent
+   (`codex exec --ephemeral -s read-only --output-schema … -i <frame>`, prompt
+   via stdin), so parses ride the user's ChatGPT subscription with the model
+   and reasoning effort from `~/.codex/config.toml` — measured 20.7 s for a
+   complete, correct 10-entry parse of a live Click BIOS 5 screen, no API key.
+   The `aperture` provider (tailnet Aperture gateway, tailnet-identity auth,
+   default `gemini-oai/gemini-3.5-flash`) is the keyless HTTP alternative and
+   the landing zone for additional vision models added to the gateway.
 2. **Few-shot examples?** The current prompt is zero-shot. Adding 2-3 BIOS screenshot → JSON examples might improve parse accuracy on the first crawl. Not yet decided.
 3. **Image resolution?** The Comet can capture at various resolutions/qualities. What resolution does the VLM need for reliable parsing? Not yet tested.
 4. **OCR hint?** Should the VLM receive Tesseract OCR output alongside the image as a robustness hint? OCR is already available via `kvm_ocr_screenshot`. Not yet decided.
