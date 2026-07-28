@@ -187,13 +187,34 @@ This ensures a single unparseable screen doesn't block the entire crawl. Gaps ar
    variants take 100 s+ and emit schema-violating output that burns all three
    validation retries). `.mcp.json` now defaults to `VLM_PROVIDER=codex`: the
    client shells out to the local Codex CLI as a tiny scripted sub-agent
-   (`codex exec --ephemeral -s read-only --output-schema … -i <frame>`, prompt
-   via stdin), so parses ride the user's ChatGPT subscription with the model
-   and reasoning effort from `~/.codex/config.toml` — measured 20.7 s for a
-   complete, correct 10-entry parse of a live Click BIOS 5 screen, no API key.
+   (`codex exec --ephemeral --ignore-user-config -s read-only --output-schema …
+   -i <frame>`, prompt via stdin), so parses ride the user's ChatGPT
+   subscription — measured 25.0 s for a complete, correct 10-entry parse of a
+   live Click BIOS 5 screen, no API key.
    The `aperture` provider (tailnet Aperture gateway, tailnet-identity auth,
    default `gemini-oai/gemini-3.5-flash`) is the keyless HTTP alternative and
    the landing zone for additional vision models added to the gateway.
+
+   **Two transports, one contract.** `codex` only works where the CLI and a
+   ChatGPT login exist — i.e. the operator's workstation. Everything else (CI,
+   headless runs, another machine, a future hosted deployment) uses an HTTP
+   provider, `aperture` by default. This is *not* two perception paths: the
+   prompt, the strict schema, `BiosScreenParse` validation, the three-attempt
+   retry and the "Unparseable Screen" fallback are shared code, and the only
+   provider-specific part is how one (system prompt, user prompt, frame) tuple
+   becomes one JSON object. Selecting a lane is a single env var, so a screen
+   parsed over the CLI and the same screen parsed over the gateway are
+   interchangeable downstream. Fixtures and CI keep using `mock`.
+
+   The sub-agent is invoked **hermetically**: `--ignore-user-config` keeps the
+   operator's `~/.codex/config.toml` out of a transcriber that has no business
+   inheriting it (their `notify` program would be spawned once per parse, and
+   their plugins/MCP clients would load per parse), while auth still resolves
+   from `$CODEX_HOME`. Model and reasoning effort are therefore pinned by this
+   repo (`VLM_MODEL`, `VLM_CODEX_EFFORT`) instead of drifting whenever the
+   operator edits their personal Codex config, and `OPENAI_API_KEY` /
+   `OPENAI_BASE_URL` are stripped from the child environment so an ambient key
+   cannot silently reroute parses onto metered API billing.
 2. **Few-shot examples?** The current prompt is zero-shot. Adding 2-3 BIOS screenshot → JSON examples might improve parse accuracy on the first crawl. Not yet decided.
 3. **Image resolution?** The Comet can capture at various resolutions/qualities. What resolution does the VLM need for reliable parsing? Not yet tested.
 4. **OCR hint?** Should the VLM receive Tesseract OCR output alongside the image as a robustness hint? OCR is already available via `kvm_ocr_screenshot`. Not yet decided.

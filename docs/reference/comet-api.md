@@ -375,8 +375,17 @@ Device tools auto-connect the default target on demand, so most sessions never c
 | `COMET_DISABLE_BIOS_SIDECAR` | no | no | unset | Set to `1` to skip loading `bios_sidecar` |
 | `VLM_API_KEY` | **yes** | for `openrouter`/`openai` only | — | OpenAI-compatible API key; falls back to Doppler secret `OPENROUTER_API_KEY` when unset. `codex` and `aperture` need no key |
 | `VLM_PROVIDER` | no | **yes for BIOS perception** | — | `codex` \| `aperture` \| `openrouter` \| `ollama` \| `vllm` \| `openai`; missing/unsupported values fail closed. `codex` shells out to the local Codex CLI (`codex exec`, ChatGPT-subscription auth); `aperture` targets the tailnet Aperture gateway (tailnet-identity auth) |
-| `VLM_MODEL` | no | no | provider default; codex → inherit `~/.codex/config.toml`; aperture → `gemini-oai/gemini-3.5-flash`; openrouter → `openrouter/free` (Free Models Router) | Model string for the OpenAI-compatible endpoint (or `codex exec -m`) |
+| `VLM_MODEL` | no | no | provider default; codex → `gpt-5.6-sol`; aperture → `gemini-oai/gemini-3.5-flash`; openrouter → `openrouter/free` (Free Models Router) | Model string for the OpenAI-compatible endpoint (or `codex exec -m`) |
+| `VLM_CODEX_EFFORT` | no | no | `medium` | Reasoning effort for the `codex` sub-agent (`codex exec -c model_reasoning_effort=...`) |
 | `VLM_BASE_URL` | no | no | provider default | Override API endpoint |
+
+The `codex` sub-agent runs **hermetically** (`--ephemeral --ignore-user-config -s read-only` in a
+throwaway working directory): the operator's `~/.codex/config.toml` is deliberately not loaded, so a
+personal `notify` hook cannot be spawned once per screen parse and personal plugins/MCP clients do not
+load per parse. Auth is unaffected — it resolves from `$CODEX_HOME/auth.json` (`auth_mode: chatgpt`),
+never from an API key. `OPENAI_API_KEY`/`OPENAI_BASE_URL` are stripped from the child environment so an
+ambient key can never silently move parses onto metered API billing. Because the config is ignored, the
+model and reasoning effort are pinned by this repo (table above).
 
 Doppler secret name: **`GLCOMET_ADMIN_PASSWORD`** (legacy alias `COMET_PASSWORD` only if you add it later).
 

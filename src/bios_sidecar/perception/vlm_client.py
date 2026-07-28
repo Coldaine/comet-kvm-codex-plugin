@@ -29,18 +29,26 @@ _KEY_REQUIRED_PROVIDERS = frozenset({"openrouter", "openai"})
 #
 # "codex" is not an HTTP endpoint: it shells out to the local Codex CLI
 # (`codex exec`) as a tiny scripted sub-agent, so parses ride the user's
-# ChatGPT subscription (default model/effort come from ~/.codex/config.toml,
-# e.g. gpt-5.6-sol on the fast service tier). No API key involved.
+# ChatGPT subscription (auth_mode=chatgpt in $CODEX_HOME/auth.json). No API
+# key involved. The sub-agent runs HERMETICALLY: --ignore-user-config keeps
+# the user's ~/.codex/config.toml out of the transcriber (their notify hook
+# would otherwise spawn a program per parse, and their plugins/MCP clients
+# would load per parse), while auth still resolves from CODEX_HOME.
 #
 # "aperture" is the user's Tailscale Aperture AI gateway: OpenAI-format
 # chat-completions, authenticated by tailnet identity — also no API key.
 # Vision-capable models are addressed as "<provider>/<model>" gateway FQNs.
+#
+# Because the config is ignored, the model and reasoning effort must be pinned
+# here; VLM_MODEL / VLM_CODEX_EFFORT override them.
+_CODEX_DEFAULT_MODEL = "gpt-5.6-sol"
+_CODEX_DEFAULT_EFFORT = "medium"
 _PROVIDER_DEFAULTS = {
     "openai": ("https://api.openai.com/v1", "gpt-4o"),
     "openrouter": ("https://openrouter.ai/api/v1", "openrouter/free"),
     "ollama": ("http://localhost:11434/v1", "llama3.2-vision"),
     "vllm": ("http://localhost:8000/v1", "qwen2.5-vl"),
-    "codex": ("", ""),
+    "codex": ("", _CODEX_DEFAULT_MODEL),
     "aperture": (
         "http://aperture-gateway.tyrannosaurus-magellanic.ts.net/v1",
         "gemini-oai/gemini-3.5-flash",
@@ -52,6 +60,11 @@ _PROVIDER_DEFAULTS = {
 # _call_api handles any model that rejects json_schema.)
 _JSON_SCHEMA_PROVIDERS = frozenset({"openrouter", "openai", "aperture"})
 _CODEX_TIMEOUT_SECONDS = 300.0
+# An API key in the ambient environment must never silently redirect codex
+# billing away from the user's ChatGPT login. Scrubbed from the child env
+# rather than allowlisting: the CLI needs the rest of the OS environment
+# (PATH, SystemRoot, APPDATA, ...) to start at all.
+_CODEX_SCRUBBED_ENV = ("OPENAI_API_KEY", "OPENAI_BASE_URL")
 
 # OpenAI strict structured outputs impose two rules Pydantic's schema does not
 # satisfy on its own: every object must set additionalProperties=false, and every
@@ -157,9 +170,9 @@ class VLMClient:
     def _resolved_model(self) -> str:
         model = self.model or self._default_model()
         if self.provider == "codex":
-            # Empty is valid: `codex exec` then inherits the model and
-            # reasoning effort from the user's ~/.codex/config.toml.
-            return model or ""
+            # Always explicit: the sub-agent ignores the user's config, so
+            # nothing else would pin the model.
+            return model or _CODEX_DEFAULT_MODEL
         if not model:
             raise ValueError(f"VLM_MODEL is required for provider: {self.provider}")
         # Strip a LiteLLM-style provider prefix ("ollama/llama3.2-vision" ->
@@ -329,24 +342,28 @@ class VLMClient:
             schema_path.write_text(json.dumps(strict_bios_screen_parse_schema()), encoding="utf-8")
             out_path = workdir / "parse.json"
 
+            effort = os.environ.get("VLM_CODEX_EFFORT") or _CODEX_DEFAULT_EFFORT
             cmd = [
                 codex, "exec",
                 "--ephemeral",
                 "--skip-git-repo-check",
+                # Hermetic: no user config means no notify hook, no plugins,
+                # no MCP clients, no memories — just a transcriber. Auth is
+                # unaffected (it resolves from CODEX_HOME, not config.toml).
+                "--ignore-user-config",
                 "-s", "read-only",
                 "-C", str(workdir),
                 "--output-schema", str(schema_path),
                 "-o", str(out_path),
+                "-m", self._resolved_model(),
+                "-c", f'model_reasoning_effort="{effort}"',
                 "-i", str(image_path),
             ]
-            model = self._resolved_model()
-            if model:
-                cmd += ["-m", model]
             # The prompt goes via stdin: `-i` is variadic, so a trailing
             # positional would be swallowed as another image path.
             prompt = f"{system_prompt}\n\n{user_prompt}"
 
-            stdout, stderr, returncode = await self._run_codex(cmd, prompt)
+            stdout, stderr, returncode = await self._run_codex(cmd, prompt, self._codex_env())
             if returncode != 0:
                 tail = (stderr or stdout or "")[-400:]
                 raise RuntimeError(f"codex exec failed (rc={returncode}): {tail}")
@@ -357,13 +374,24 @@ class VLMClient:
             shutil.rmtree(workdir, ignore_errors=True)
 
     @staticmethod
-    async def _run_codex(cmd: list[str], stdin_text: str) -> tuple[str, str, int]:
+    def _codex_env() -> dict[str, str]:
+        """Child environment with credential vars that could reroute billing removed."""
+        env = dict(os.environ)
+        for name in _CODEX_SCRUBBED_ENV:
+            env.pop(name, None)
+        return env
+
+    @staticmethod
+    async def _run_codex(
+        cmd: list[str], stdin_text: str, env: dict[str, str]
+    ) -> tuple[str, str, int]:
         """Execute the Codex CLI; isolated for test monkeypatching."""
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
         try:
             stdout_b, stderr_b = await asyncio.wait_for(
