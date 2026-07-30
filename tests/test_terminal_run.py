@@ -113,7 +113,7 @@ def test_terminal_run_returns_observed_exit_marker_and_transcript(tmp_path, mark
     runtime = _runtime(client, ocr, tmp_path)
 
     with installed_kvm_runtime(runtime):
-        result = asyncio.run(kvm_tools.kvm_terminal_run("printf hello; exit 7", timeout_seconds=1, poll_interval_seconds=0))
+        result = asyncio.run(kvm_tools.kvm_terminal_run("printf hello; exit 7", timeout_seconds=1, poll_interval_seconds=0.1))
 
     assert result["status"] == "completed"
     assert result["exit_code"] == 7
@@ -169,6 +169,26 @@ def test_terminal_run_rejects_multiline_commands_before_typing(tmp_path) -> None
     assert client.sent_combos == []
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"timeout_seconds": 301}, "timeout_seconds must be <= 300"),
+        ({"poll_interval_seconds": 0}, "poll_interval_seconds must be >= 0.1"),
+        ({"poll_interval_seconds": 0.05}, "poll_interval_seconds must be >= 0.1"),
+    ],
+)
+def test_terminal_run_rejects_unbounded_observation_settings(tmp_path, kwargs, message) -> None:
+    client = TerminalClient([])
+    ocr = RecordedOCR({})
+    runtime = _runtime(client, ocr, tmp_path)
+
+    with installed_kvm_runtime(runtime):
+        with pytest.raises(ValueError, match=message):
+            asyncio.run(kvm_tools.kvm_terminal_run("true", **kwargs))
+
+    assert client.sent_text == []
+
+
 def test_terminal_run_does_not_submit_when_typed_wrapper_is_unconfirmed(tmp_path, markers) -> None:
     typed = b"typed"
     client = TerminalClient([typed])
@@ -222,13 +242,13 @@ def test_terminal_run_skips_ocr_for_unchanged_frames(tmp_path, markers, monkeypa
     monkeypatch.setattr("src.kvm_core.terminal.asyncio.sleep", record_sleep)
 
     with installed_kvm_runtime(runtime):
-        result = asyncio.run(kvm_tools.kvm_terminal_run("printf line", timeout_seconds=1, poll_interval_seconds=0))
+        result = asyncio.run(kvm_tools.kvm_terminal_run("printf line", timeout_seconds=1, poll_interval_seconds=0.1))
 
     assert result["status"] == "completed"
     assert result["unchanged_frames_skipped"] == 1
     assert ocr.calls == [typed, output, complete]
     assert result["transcript"] == f"{markers.start}\nline one\n{markers.end}:0"
-    assert scheduled_delays == [0, 0]
+    assert scheduled_delays == [0.1, 0.1]
 
 
 def test_terminal_run_timeout_releases_hid_without_interrupting_remote_command(tmp_path, markers) -> None:
@@ -244,7 +264,7 @@ def test_terminal_run_timeout_releases_hid_without_interrupting_remote_command(t
     runtime = _runtime(client, ocr, tmp_path)
 
     with installed_kvm_runtime(runtime):
-        result = asyncio.run(kvm_tools.kvm_terminal_run("sleep 999", timeout_seconds=0, poll_interval_seconds=0))
+        result = asyncio.run(kvm_tools.kvm_terminal_run("sleep 999", timeout_seconds=0, poll_interval_seconds=0.1))
 
     assert result["status"] == "timeout"
     assert result["completion_observed"] is False
@@ -267,7 +287,7 @@ def test_terminal_run_preserves_completed_result_when_hid_release_fails(tmp_path
     runtime = _runtime(client, ocr, tmp_path)
 
     with installed_kvm_runtime(runtime):
-        result = asyncio.run(kvm_tools.kvm_terminal_run("true", timeout_seconds=1, poll_interval_seconds=0))
+        result = asyncio.run(kvm_tools.kvm_terminal_run("true", timeout_seconds=1, poll_interval_seconds=0.1))
 
     assert result["status"] == "completed"
     assert result["uncertainty"]["hid_release_failed"] is True
@@ -300,7 +320,7 @@ def test_terminal_run_holds_operation_fence_until_observation_finishes(tmp_path,
         )
         runtime = _runtime(client, ocr, tmp_path)
         with installed_kvm_runtime(runtime):
-            terminal = asyncio.create_task(kvm_tools.kvm_terminal_run("true", timeout_seconds=1, poll_interval_seconds=0))
+            terminal = asyncio.create_task(kvm_tools.kvm_terminal_run("true", timeout_seconds=1, poll_interval_seconds=0.1))
             await client.poll_started.wait()
             send_key = asyncio.create_task(kvm_tools.kvm_send_keys("F5"))
             await asyncio.sleep(0)

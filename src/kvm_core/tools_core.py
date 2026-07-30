@@ -19,6 +19,8 @@ ATX_DISABLED_WARNING = (
     "ATX subsystem disabled (enabled=false): the power field does not reflect "
     "the real machine state; classify from the console instead."
 )
+MAX_TERMINAL_TIMEOUT_SECONDS = 300
+MIN_TERMINAL_POLL_INTERVAL_SECONDS = 0.1
 
 
 async def _managed_client(target: str | None = None):
@@ -261,8 +263,14 @@ async def kvm_terminal_run(
         raise ValueError("command must be a single line; newline input can submit Enter before OCR confirmation")
     if timeout_seconds < 0:
         raise ValueError("timeout_seconds must be non-negative")
+    if timeout_seconds > MAX_TERMINAL_TIMEOUT_SECONDS:
+        raise ValueError(f"timeout_seconds must be <= {MAX_TERMINAL_TIMEOUT_SECONDS}")
     if poll_interval_seconds < 0:
         raise ValueError("poll_interval_seconds must be non-negative")
+    if poll_interval_seconds < MIN_TERMINAL_POLL_INTERVAL_SECONDS:
+        raise ValueError(
+            f"poll_interval_seconds must be >= {MIN_TERMINAL_POLL_INTERVAL_SECONDS}"
+        )
     _require_tesseract()
     runtime = get_kvm_runtime()
     async with _operation_fence(runtime):

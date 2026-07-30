@@ -158,7 +158,7 @@ This is appropriate for BIOS, recovery, network-down hosts, and other pixel-only
 
 ### Bounded POSIX command observer
 
-`kvm_terminal_run(command, timeout_seconds?, poll_interval_seconds?)` is one bounded call for a POSIX-visible shell. It creates unique start/end/typed markers, types an isolated `sh -c` wrapper, and OCR-confirms the shell plus all three markers before it presses Enter. If Comet HID reports skipped characters or OCR confirmation fails, it returns `status: "not_submitted"` and does not submit the command.
+`kvm_terminal_run(command, timeout_seconds?, poll_interval_seconds?)` is one bounded call for a POSIX-visible shell. It creates unique start/end/typed markers, types an isolated `sh -c` wrapper, and OCR-confirms the shell plus all three markers before it presses Enter. The timeout is capped at 300 seconds and the poll interval must be at least 0.1 seconds, keeping the operation fence bounded. If Comet HID reports skipped characters or OCR confirmation fails, it returns `status: "not_submitted"` and does not submit the command.
 
 After submission it polls screenshots only for that call, skips OCR for identical frames, and merges only exact text overlap. Its result has `status` (`completed` or `timeout` after submission), a best-effort visible `transcript`, marker evidence, poll/duration counts, and explicit uncertainty/truncation flags. `exit_code` is populated only when the exact end marker and numeric code are visibly OCR-observed. On timeout it releases HID state without sending Ctrl+C, so the result explicitly warns that the remote command may still be running.
 
