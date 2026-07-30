@@ -18,7 +18,7 @@ import json
 
 import pytest
 
-from src.bios_sidecar.domain.enums import StateKind
+from src.bios_sidecar.domain.enums import RiskClass, StateKind
 from src.bios_sidecar.perception.models import BiosScreenParse
 from src.bios_sidecar.perception.normalize import normalize_bios_state
 from src.bios_sidecar.perception.vlm_client import VLMClient
@@ -203,7 +203,10 @@ def test_normalize_modal_metadata_and_restricted_actions():
 # --- normalize: risk union -------------------------------------------------
 
 
-def test_normalize_semantic_risk_unions_blocklist():
+def test_normalize_semantic_risk_ambient_keywords_do_not_block():
+    # Click BIOS 5 shows the M-FLASH tile in the persistent sidebar of every
+    # screen. Ambient keyword sightings are recorded but must not block the
+    # screen, or the crawler can never descend anywhere.
     data = _v2_parse_dict()
     data["risk"] = {
         "dangerous": True,
@@ -211,20 +214,50 @@ def test_normalize_semantic_risk_unions_blocklist():
         "keywords_seen": ["M-Flash"],
     }
     state = _normalize(data)
-    assert state.risk.blocklist_flag is True
+    assert state.risk.blocklist_flag is False
     assert state.risk.reason == "firmware flash utility visible"
     assert "M-Flash" in state.risk.blocklist_keywords
     assert "vlm_semantic" in state.risk.hazards
-    assert state.actions.safe == ["Escape"]
+    assert "Enter" in state.actions.context_gated
 
 
-def test_normalize_semantic_risk_cannot_unblock():
-    # VLM saying "not dangerous" must not override the keyword floor.
+def test_normalize_semantic_risk_scoped_keyword_blocks():
+    # A dangerous keyword naming where we ARE (breadcrumb) still blocks.
     data = _v2_parse_dict()
-    data["entries"][0]["label"] = "Secure Erase"
+    data["menu_path"] = ["Settings", "Boot Order Configuration"]
+    data["risk"] = {
+        "dangerous": True,
+        "reason": "boot order screen",
+        "keywords_seen": ["Boot Order"],
+    }
+    state = _normalize(data)
+    assert state.risk.blocklist_flag is True
+    assert state.actions.safe == ["Escape"]
+    assert "Enter" in state.actions.blocked
+
+
+def test_normalize_selected_blocked_control_blocks_enter_keeps_arrows():
+    # VLM saying "not dangerous" must not override the keyword floor on the
+    # focused control — but arrows stay safe so the cursor can move OFF it.
+    data = _v2_parse_dict()
+    data["entries"][1]["label"] = "Secure Erase"  # entry 1 is the selected one
     data["risk"] = {"dangerous": False, "reason": None, "keywords_seen": []}
     state = _normalize(data)
     assert state.risk.blocklist_flag is True
+    assert "Enter" in state.actions.blocked
+    assert "ArrowDown" in state.actions.safe
+
+
+def test_normalize_nonselected_blocked_control_does_not_block_screen():
+    # The dangerous tile elsewhere on screen keeps its per-control BLOCKED
+    # risk, but the screen itself stays crawlable.
+    data = _v2_parse_dict()
+    data["entries"][0]["label"] = "M-FLASH"  # entry 0 is NOT selected
+    state = _normalize(data)
+    assert state.controls[0].risk == RiskClass.BLOCKED
+    assert state.risk.blocklist_flag is False
+    assert "M-FLASH" in state.risk.blocklist_keywords
+    assert "Enter" in state.actions.context_gated
 
 
 def test_normalize_destructive_hazard_unions_vlm_kind_and_title_heuristic():

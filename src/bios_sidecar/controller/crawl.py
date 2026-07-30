@@ -4,12 +4,16 @@ import logging
 from typing import List, Set, Optional, Tuple
 from dataclasses import dataclass
 from src.bios_sidecar.domain.models import BiosState, GraphEdge, EdgeAction, EdgeEvidence
-from src.bios_sidecar.domain.enums import ControlRole
+from src.bios_sidecar.domain.enums import ControlRole, RiskClass, StateKind
 from src.bios_sidecar.controller.observe import StateObserver
 from src.bios_sidecar.controller.settle import ScreenSettler
 from src.kvm_core.comet.client import CometClient
 
 LOG = logging.getLogger("bios_sidecar.controller.crawl")
+
+# Escape on a root screen opens the "Quit without saving?" dialog instead of
+# navigating up — never use it as a fallback there.
+_ROOT_SCREEN_KINDS = {StateKind.EZ_MODE, StateKind.ADVANCED_HOME}
 
 # Cursor movement on the same page must not be treated as a graph cycle.
 _SAME_PAGE_ACTIONS = {
@@ -209,12 +213,14 @@ class BiosCrawler:
         candidates: List[CrawlEdge] = []
         allowed_actions = self._allowed_crawl_actions(state)
 
-        # 1. Enter on selected submenu (highest priority)
+        # 1. Enter on selected submenu (highest priority) — never into a
+        # control that is itself blocklisted (e.g. the M-FLASH tile).
         for ctrl in state.controls:
             if (
                 "Enter" in allowed_actions
                 and ctrl.selected
                 and ctrl.role == ControlRole.SUBMENU
+                and ctrl.risk != RiskClass.BLOCKED
             ):
                 candidates.append(CrawlEdge("Enter", self._depth + 1, f"Enter {ctrl.label}"))
 
@@ -371,20 +377,29 @@ class BiosCrawler:
                 "Enter" in allowed_actions
                 and ctrl.selected
                 and ctrl.role == ControlRole.SUBMENU
+                and ctrl.risk != RiskClass.BLOCKED
             ):
                 return "Enter"
 
         if "ArrowDown" in allowed_actions and current_state.controls:
             return "ArrowDown"
 
-        return "Escape" if "Escape" in allowed_actions else None
+        if (
+            "Escape" in allowed_actions
+            and current_state.location.screen_kind not in _ROOT_SCREEN_KINDS
+        ):
+            return "Escape"
+        return None
 
     @staticmethod
     def _allowed_crawl_actions(state: BiosState) -> Set[str]:
         """Restrict the crawler to the normalized action set for the screen."""
+        allowed = set(state.actions.safe) | set(state.actions.context_gated)
         if state.risk.blocklist_flag:
-            return {"Escape"}
-        return set(state.actions.safe) | set(state.actions.context_gated)
+            # Normalization already excludes Enter on blocked screens; keep a
+            # defensive second gate here so a stale/foreign state can't slip one in.
+            allowed.discard("Enter")
+        return allowed
 
     # Helpers
 
