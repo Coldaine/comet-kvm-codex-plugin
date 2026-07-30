@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import tomllib
 from pathlib import Path
 
 import glkvm_mcp
@@ -57,6 +58,14 @@ def test_plugin_and_readme_advertise_both_skill_routes() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     for skill_name in EXPECTED_SKILLS:
         assert f"{skill_name}/" in readme
+
+
+def test_plugin_manifest_version_matches_authoritative_package_version() -> None:
+    """Publishing must not install metadata for a stale plugin release."""
+    manifest = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    package = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert manifest["version"] == package["project"]["version"]
 
 
 def test_skill_frontmatter_is_minimal_and_matches_directory() -> None:
