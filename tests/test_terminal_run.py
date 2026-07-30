@@ -30,6 +30,7 @@ class TerminalClient:
         self.sent_text: list[str] = []
         self.sent_combos: list[str] = []
         self.release_calls = 0
+        self.release_error: Exception | None = None
         self.base_url = "https://127.0.0.1"
         self.typing_result: dict = {"skipped": []}
 
@@ -49,6 +50,8 @@ class TerminalClient:
 
     async def release_all(self) -> dict:
         self.release_calls += 1
+        if self.release_error is not None:
+            raise self.release_error
         return {"released": []}
 
 
@@ -153,6 +156,19 @@ def test_terminal_run_does_not_submit_when_hid_skips_command_characters(tmp_path
     assert client.release_calls == 1
 
 
+def test_terminal_run_rejects_multiline_commands_before_typing(tmp_path) -> None:
+    client = TerminalClient([])
+    ocr = RecordedOCR({})
+    runtime = _runtime(client, ocr, tmp_path)
+
+    with installed_kvm_runtime(runtime):
+        with pytest.raises(ValueError, match="single line"):
+            asyncio.run(kvm_tools.kvm_terminal_run("echo first\necho second"))
+
+    assert client.sent_text == []
+    assert client.sent_combos == []
+
+
 def test_terminal_run_does_not_submit_when_typed_wrapper_is_unconfirmed(tmp_path, markers) -> None:
     typed = b"typed"
     client = TerminalClient([typed])
@@ -183,7 +199,7 @@ def test_terminal_run_reports_ocr_failure_without_submitting(tmp_path, markers) 
     assert client.sent_combos == []
 
 
-def test_terminal_run_skips_ocr_for_unchanged_frames(tmp_path, markers) -> None:
+def test_terminal_run_skips_ocr_for_unchanged_frames(tmp_path, markers, monkeypatch) -> None:
     typed = b"typed"
     output = b"output"
     complete = b"complete"
@@ -196,6 +212,14 @@ def test_terminal_run_skips_ocr_for_unchanged_frames(tmp_path, markers) -> None:
         }
     )
     runtime = _runtime(client, ocr, tmp_path)
+    scheduled_delays: list[float] = []
+    original_sleep = asyncio.sleep
+
+    async def record_sleep(delay: float) -> None:
+        scheduled_delays.append(delay)
+        await original_sleep(0)
+
+    monkeypatch.setattr("src.kvm_core.terminal.asyncio.sleep", record_sleep)
 
     with installed_kvm_runtime(runtime):
         result = asyncio.run(kvm_tools.kvm_terminal_run("printf line", timeout_seconds=1, poll_interval_seconds=0))
@@ -204,6 +228,7 @@ def test_terminal_run_skips_ocr_for_unchanged_frames(tmp_path, markers) -> None:
     assert result["unchanged_frames_skipped"] == 1
     assert ocr.calls == [typed, output, complete]
     assert result["transcript"] == f"{markers.start}\nline one\n{markers.end}:0"
+    assert scheduled_delays == [0, 0]
 
 
 def test_terminal_run_timeout_releases_hid_without_interrupting_remote_command(tmp_path, markers) -> None:
@@ -225,6 +250,27 @@ def test_terminal_run_timeout_releases_hid_without_interrupting_remote_command(t
     assert result["completion_observed"] is False
     assert result["uncertainty"]["remote_command_may_still_be_running"] is True
     assert client.sent_combos == ["Enter"]
+    assert client.release_calls == 1
+
+
+def test_terminal_run_preserves_completed_result_when_hid_release_fails(tmp_path, markers) -> None:
+    typed = b"typed"
+    complete = b"complete"
+    client = TerminalClient([typed, complete])
+    client.release_error = RuntimeError("websocket disconnected")
+    ocr = RecordedOCR(
+        {
+            typed: {"text": f"sh -c {markers.start} {markers.end} {markers.typed}", "lines": []},
+            complete: {"text": f"{markers.end}:0", "lines": []},
+        }
+    )
+    runtime = _runtime(client, ocr, tmp_path)
+
+    with installed_kvm_runtime(runtime):
+        result = asyncio.run(kvm_tools.kvm_terminal_run("true", timeout_seconds=1, poll_interval_seconds=0))
+
+    assert result["status"] == "completed"
+    assert result["uncertainty"]["hid_release_failed"] is True
     assert client.release_calls == 1
 
 

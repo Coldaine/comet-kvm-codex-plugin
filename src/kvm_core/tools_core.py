@@ -257,6 +257,8 @@ async def kvm_terminal_run(
     """
     if not command.strip():
         raise ValueError("command must not be empty")
+    if "\n" in command or "\r" in command:
+        raise ValueError("command must be a single line; newline input can submit Enter before OCR confirmation")
     if timeout_seconds < 0:
         raise ValueError("timeout_seconds must be non-negative")
     if poll_interval_seconds < 0:

@@ -147,6 +147,7 @@ def _result(
             "ocr_failure": ocr_failure,
             "transcript_may_be_truncated": transcript_truncated,
             "typing_incomplete": typing_skipped_characters > 0,
+            "hid_release_failed": False,
         },
     }
 
@@ -172,13 +173,19 @@ async def run_posix_terminal_command(
     exit_code: int | None = None
     ocr_failure = False
     seen_frame_hashes: set[bytes] = set()
+    result: dict | None = None
+
+    def finish(**kwargs) -> dict:
+        nonlocal result
+        result = _result(**kwargs)
+        return result
 
     try:
         typing_result = await client.send_text(wrapper)
         skipped = typing_result.get("skipped", []) if isinstance(typing_result, dict) else []
         skipped_count = len(skipped) if isinstance(skipped, list) else 0
         if skipped_count:
-            return _result(
+            return finish(
                 status="not_submitted",
                 transcript="",
                 markers=markers,
@@ -204,7 +211,7 @@ async def run_posix_terminal_command(
             and typed_wrapper_confirmed(typed_text, markers)
         )
         if not typed_confirmed:
-            return _result(
+            return finish(
                 status="not_submitted",
                 transcript="",
                 markers=markers,
@@ -230,8 +237,7 @@ async def run_posix_terminal_command(
                 frame_hash = hashlib.sha256(frame).digest()
                 if frame_hash in seen_frame_hashes:
                     unchanged_frames_skipped += 1
-                    if poll_interval_seconds:
-                        await asyncio.sleep(poll_interval_seconds)
+                    await asyncio.sleep(poll_interval_seconds)
                     continue
                 seen_frame_hashes.add(frame_hash)
                 visible_text, ocr_error = await _ocr_frame(ocr_manager, frame)
@@ -245,7 +251,7 @@ async def run_posix_terminal_command(
                 end_observed = end_observed or markers.end in visible_text
                 exit_code = extract_exit_code(visible_text, markers.end)
                 if exit_code is not None:
-                    return _result(
+                    return finish(
                         status="completed",
                         transcript=transcript,
                         markers=markers,
@@ -260,10 +266,9 @@ async def run_posix_terminal_command(
                         ocr_failure=ocr_failure,
                         typing_skipped_characters=0,
                     )
-            if poll_interval_seconds:
-                await asyncio.sleep(poll_interval_seconds)
+            await asyncio.sleep(poll_interval_seconds)
 
-        return _result(
+        return finish(
             status="timeout",
             transcript=transcript,
             markers=markers,
@@ -281,4 +286,8 @@ async def run_posix_terminal_command(
     finally:
         # This releases the Comet HID state only; it does not send Ctrl+C or
         # make any claim about whether a timed-out remote command was stopped.
-        await client.release_all()
+        try:
+            await client.release_all()
+        except Exception:  # noqa: BLE001 - cleanup must not erase command evidence
+            if result is not None:
+                result["uncertainty"]["hid_release_failed"] = True
